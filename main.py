@@ -237,13 +237,23 @@ def email_pdf(gmail, pdf_path, data):
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     gmail, drive = _services()
-    window = os.environ.get("SEARCH_WINDOW", "newer_than:2d")
+    # SAFETY: a blank/unset SEARCH_WINDOW must NOT mean "scan everything".
+    window = os.environ.get("SEARCH_WINDOW") or "newer_than:1d"
+    # SAFETY: hard cap on PDFs per run so a fresh log can't blast the whole inbox.
+    try:
+        max_per_run = int(os.environ.get("MAX_PER_RUN") or "15")
+    except ValueError:
+        max_per_run = 15
     log = load_log()
     done_ids = processed_ids(log)
     created, skipped, flagged = [], [], []
 
     for portal in extractors.PORTALS:
+        if len(created) >= max_per_run:
+            break
         for mid in search_messages(gmail, portal, window):
+            if len(created) >= max_per_run:
+                break
             if mid in done_ids:
                 skipped.append(mid)
                 continue
