@@ -303,7 +303,21 @@ def main():
                                 "reason": f"error: {e}", "trace": traceback.format_exc()[-500:]})
 
     save_log(log)
-    print(json.dumps({"created": created, "skipped": len(skipped), "flagged": flagged}, indent=2))
+    # PUBLIC-SAFE LOG: print COUNTS only — never PNRs, passenger names, Drive
+    # links, message ids, subjects, or tracebacks (Action logs are world-readable
+    # on a public repo). Per-portal tallies + generic flag reasons are enough to
+    # monitor; the actual confirmations are delivered privately by email.
+    by_portal = {}
+    for c in created:
+        by_portal[c["portal"]] = by_portal.get(c["portal"], 0) + 1
+    summary = {
+        "created_total": len(created),
+        "created_by_portal": by_portal,
+        "skipped": len(skipped),
+        "flagged_total": len(flagged),
+        "flagged_reasons": sorted({(f.get("reason") or "").split(":")[0] for f in flagged}),
+    }
+    print(json.dumps(summary, indent=2))
 
 
 if __name__ == "__main__":
