@@ -8,6 +8,9 @@ on:
 permissions:
   contents: write
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 concurrency:
   group: pivot-poll
   cancel-in-progress: false
@@ -36,6 +39,7 @@ jobs:
         env:
           GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
           IMPERSONATE_USER: ${{ secrets.IMPERSONATE_USER }}
+          SENDER_USER: ${{ secrets.SENDER_USER }}
           DRIVE_OUTPUT_FOLDER: ${{ secrets.DRIVE_OUTPUT_FOLDER }}
           AKBAR_FOLDER_NAME: ${{ secrets.AKBAR_FOLDER_NAME }}
           NOTIFY_TO: ${{ secrets.NOTIFY_TO }}
