@@ -32,6 +32,9 @@ import traceback
 from email.message import EmailMessage
 from datetime import datetime, timezone
 
+import google.auth
+from google.auth import iam
+from google.auth.transport.requests import Request
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
@@ -50,11 +53,37 @@ OUT_DIR = os.path.join(PROJECT_DIR, "out")
 
 
 # ── auth ──────────────────────────────────────────────────────────────────
-def _services():
-    info = json.loads(os.environ["GOOGLE_SA_JSON"])
+# Two supported modes (both impersonate cs@ via domain-wide delegation):
+#   1. KEYLESS (Workload Identity Federation) — preferred. No downloadable key.
+#      GitHub Actions gets ADC via google-github-actions/auth; we then mint a
+#      DWD token for cs@ using the IAM Credentials API (signBlob), so the service
+#      account never needs an exported JSON key. Requires env SERVICE_ACCOUNT_EMAIL
+#      and the SA holding roles/iam.serviceAccountTokenCreator on itself.
+#   2. KEY (fallback) — set env GOOGLE_SA_JSON to the full service-account JSON.
+def _delegated_creds():
     subject = os.environ["IMPERSONATE_USER"]
-    creds = service_account.Credentials.from_service_account_info(
-        info, scopes=SCOPES, subject=subject)
+    sa_email = os.environ["SERVICE_ACCOUNT_EMAIL"]
+    # Source identity from Application Default Credentials (WIF in CI).
+    source_creds, _ = google.auth.default(
+        scopes=["https://www.googleapis.com/auth/cloud-platform"])
+    # Sign via IAM Credentials API (no private key) and apply DWD subject=cs@.
+    signer = iam.Signer(Request(), source_creds, sa_email)
+    return service_account.Credentials(
+        signer=signer,
+        service_account_email=sa_email,
+        token_uri="https://oauth2.googleapis.com/token",
+        scopes=SCOPES,
+        subject=subject,
+    )
+
+
+def _services():
+    if os.environ.get("GOOGLE_SA_JSON"):                       # fallback: exported key
+        info = json.loads(os.environ["GOOGLE_SA_JSON"])
+        creds = service_account.Credentials.from_service_account_info(
+            info, scopes=SCOPES, subject=os.environ["IMPERSONATE_USER"])
+    else:                                                       # preferred: keyless WIF
+        creds = _delegated_creds()
     return build("gmail", "v1", credentials=creds, cache_discovery=False), \
         build("drive", "v3", credentials=creds, cache_discovery=False)
 
