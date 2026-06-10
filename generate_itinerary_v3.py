@@ -110,7 +110,6 @@ def _flight_card(seg: dict, standalone: bool = False) -> str:
           <div class="conn-dot"></div>
           <div class="conn-line">
             <div class="conn-center">
-              <div class="conn-plane">&#x2708;</div>
               <div class="conn-flight-no">{flight_no}</div>
               <div class="conn-airline">{airline}</div>
             </div>
@@ -151,7 +150,7 @@ def _layover_bar(layover: dict) -> str:
     return f"""
     <div class="layover-bar">
       <div class="lay-line"></div>
-      <div class="lay-badge"><span class="lay-icon">&#x23F1;</span> LAYOVER &nbsp;{airport} &middot; {duration}</div>
+      <div class="lay-badge">LAYOVER &nbsp;{airport} &middot; {duration}</div>
       <div class="lay-line"></div>
     </div>"""
 
@@ -232,14 +231,10 @@ def build_html(data: dict, project_dir: str = None) -> str:
     booking_ref  = data.get("booking_ref") or ""
     crs_ref      = data.get("crs_ref") or ""
     booked_on    = data.get("booked_on", "N/A")
-    # Journey type label: normalise to exactly ONE-WAY / RETURN / MULTI-CITY.
+    # Journey type label: exactly ONE-WAY or ROUND TRIP (no RETURN / MULTI-CITY /
+    # CONNECTING wording — locked rule).
     _jt = (data.get("journey_type") or "ONE-WAY").upper()
-    if "RETURN" in _jt or "ROUND" in _jt:
-        journey_type = "RETURN"
-    elif "MULTI" in _jt or "CONNECT" in _jt:
-        journey_type = "MULTI-CITY"
-    else:
-        journey_type = "ONE-WAY"
+    journey_type = "ROUND TRIP" if ("RETURN" in _jt or "ROUND" in _jt) else "ONE-WAY"
     passengers   = data.get("passengers", [])
     seg_groups   = data.get("segments", [])
 
@@ -311,12 +306,14 @@ body {{
   margin: 0 auto;
   background: #fff;
   box-shadow: 0 4px 40px rgba(0,0,0,0.10);
+  display: flex;
+  flex-direction: column;
 }}
 
 /* ── Header ── */
 .header {{
   background: linear-gradient(135deg, #071220 0%, #0b1f38 45%, #112d4e 100%);
-  padding: 26px 28px 24px;
+  padding: 14px 28px 12px;
   display: flex;
   align-items: center;
   border-bottom: 2px solid #c9a84c;
@@ -413,6 +410,8 @@ body {{
   color: #ffffff;
   letter-spacing: 3px;
   line-height: 1;
+  font-variant-numeric: lining-nums;
+  font-feature-settings: "lnum" 1;
 }}
 .pnr-label {{
   font-family: 'Cormorant Garamond', serif;
@@ -428,7 +427,7 @@ body {{
 /* ── Ref Strip — navy gradient, centred, ALL CAPS values ── */
 .ref-strip {{
   background: linear-gradient(135deg, #071220 0%, #0b1f38 45%, #112d4e 100%);
-  padding: 16px 28px;
+  padding: 10px 28px;
   display: flex;
   gap: 0;
   border-bottom: 2px solid rgba(201,168,76,0.35);
@@ -457,19 +456,22 @@ body {{
   color: #ffffff;
   letter-spacing: 1px;
   text-transform: uppercase;
+  font-variant-numeric: lining-nums;
+  font-feature-settings: "lnum" 1;
 }}
 
 /* ── Content ── */
 .content {{
-  padding: 22px 28px;
+  padding: 14px 28px 8px;
   background: #fff;
+  flex: 1 0 auto;     /* grow to fill the page so the footer is pinned to the bottom */
 }}
-.section {{ margin-bottom: 22px; }}
+.section {{ margin-bottom: 14px; }}
 .section-hdr {{
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }}
 .section-icon {{
   width: 14px;
@@ -497,7 +499,7 @@ body {{
   gap: 0;
   border: 1px solid #e2e5ea;
   border-radius: 8px;
-  padding: 16px 20px;
+  padding: 9px 20px;
   background: #fafbfc;
   margin-bottom: 10px;
   flex-wrap: wrap;
@@ -525,12 +527,19 @@ body {{
   color: #0b1724;
   letter-spacing: 0.5px;
   line-height: 1.2;
+  font-variant-numeric: lining-nums;
+  font-feature-settings: "lnum" 1;
+}}
+/* Long passenger names wrap cleanly within the column instead of overflowing. */
+.pax-name {{
+  overflow-wrap: break-word;
+  word-break: break-word;
 }}
 
 /* ── Segment header ── */
 .seg-header {{
   background: #0b1724;
-  padding: 10px 18px;
+  padding: 7px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -557,8 +566,8 @@ body {{
   border-top: none;
   border-radius: 0 0 7px 7px;
   background: #fff;
-  padding: 20px 22px 16px;
-  margin-bottom: 14px;
+  padding: 6px 20px 5px;
+  margin-bottom: 8px;
   page-break-inside: avoid;
 }}
 /* A flight card that follows a layover stands on its own (full border, all corners rounded). */
@@ -569,7 +578,7 @@ body {{
 .route-row {{
   display: flex;
   align-items: flex-start;
-  margin-bottom: 16px;
+  margin-bottom: 6px;
 }}
 .ap-block {{
   display: flex;
@@ -582,34 +591,34 @@ body {{
 }}
 .iata {{
   font-family: 'Cormorant Garamond', serif;
-  font-size: 54px;
+  font-size: 40px;
   font-weight: 700;
   color: #0b1724;
-  letter-spacing: -2px;
+  letter-spacing: -1.5px;
   line-height: 1;
-  margin-bottom: 3px;
+  margin-bottom: 1px;
 }}
 .ap-city {{
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   color: #0b1724;
-  margin-bottom: 3px;
+  margin-bottom: 1px;
 }}
 .ap-detail {{
-  font-size: 9px;
+  font-size: 8.5px;
   color: #8a9bb0;
-  line-height: 1.5;
-  margin-bottom: 8px;
+  line-height: 1.15;
+  margin-bottom: 1px;
 }}
 .flight-time {{
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 700;
   color: #0b1724;
   letter-spacing: 0.5px;
-  margin-bottom: 2px;
+  margin-bottom: 1px;
 }}
 .flight-date {{
-  font-size: 9.5px;
+  font-size: 9px;
   color: #8a9bb0;
   font-weight: 500;
 }}
@@ -619,8 +628,8 @@ body {{
   flex: 1;
   display: flex;
   align-items: center;
-  padding: 0 4px;
-  margin-top: 16px;
+  padding: 0 6px;
+  margin-top: 11px;        /* drop the line onto the horizontal mid-line of the IATA codes */
 }}
 .conn-dot {{
   width: 8px;
@@ -632,17 +641,20 @@ body {{
 .conn-line {{
   flex: 1;
   position: relative;
-  border-top: 2px dashed #c9a84c;
+  border-top: 1.5px solid #c9a84c;
   display: flex;
   align-items: center;
   justify-content: center;
 }}
 .conn-center {{
   position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translate(-50%, -50%);   /* centre the flight label ON the line */
   background: #fff;
-  padding: 0 10px;
+  padding: 0 12px;
   text-align: center;
-  top: -30px;
+  white-space: nowrap;
 }}
 .conn-plane {{
   font-size: 15px;
@@ -651,15 +663,17 @@ body {{
   margin-bottom: 1px;
 }}
 .conn-flight-no {{
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   color: #0b1724;
   letter-spacing: 0.5px;
+  line-height: 1.1;
 }}
 .conn-airline {{
-  font-size: 9.5px;
+  font-size: 9px;
   color: #8a9bb0;
   font-weight: 400;
+  line-height: 1;
 }}
 
 /* ── Meta row ── */
@@ -668,7 +682,7 @@ body {{
   justify-content: space-around;
   align-items: flex-start;
   border-top: 1px solid #f0f2f5;
-  padding-top: 12px;
+  padding-top: 6px;
   width: 100%;
 }}
 .meta-item {{
@@ -698,10 +712,12 @@ body {{
   align-items: center;
   justify-content: center;
   gap: 14px;
-  margin: 16px 6px;
+  margin: 8px 6px;
   padding: 0;
   background: transparent;
   page-break-inside: avoid;
+  break-after: avoid;
+  page-break-after: avoid;
 }}
 .lay-line {{
   flex: 1;
@@ -732,78 +748,20 @@ body {{
 
 /* ── Footer ── */
 .footer {{
-  background: linear-gradient(135deg, #071220 0%, #0b1f38 45%, #112d4e 100%);
-  border-top: 2px solid #c9a84c;
-  padding: 24px 32px 14px;
-  margin-top: 8px;
-}}
-.footer-inner {{
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  margin-bottom: 14px;
-}}
-.footer-logo-img {{
-  height: 44px;
-  width: auto;
-  object-fit: contain;
-  display: block;
-  filter: brightness(0) invert(1);
-  opacity: 0.90;
-  flex-shrink: 0;
-}}
-.footer-divider {{
-  width: 1px;
-  height: 48px;
-  background: rgba(201,168,76,0.30);
-  flex-shrink: 0;
-}}
-.footer-details {{
-  flex: 1;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-}}
-.footer-co {{
-  font-family: 'Inter', sans-serif;
-  font-size: 12px;
-  font-weight: 700;
-  color: #fff;
-  margin-bottom: 4px;
-  letter-spacing: 0.3px;
-}}
-.footer-addr {{
-  font-size: 8px;
-  color: rgba(255,255,255,0.45);
-  line-height: 1.8;
-}}
-.footer-cr {{
-  font-size: 8px;
-  color: rgba(201,168,76,0.65);
-  margin-top: 3px;
-}}
-.footer-contact {{
-  text-align: right;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}}
-.footer-link {{
-  color: #c9a84c;
-  font-size: 9.5px;
-  font-weight: 600;
-  text-decoration: none;
-  display: block;
-}}
-.footer-tag {{
-  font-size: 7.5px;
-  letter-spacing: 2.5px;
-  text-transform: uppercase;
-  color: rgba(255,255,255,0.15);
+  flex-shrink: 0;            /* never compress; sits at the bottom of the (last) page */
+  page-break-inside: avoid;
+  break-inside: avoid;
   text-align: center;
-  padding-top: 10px;
-  border-top: 1px solid rgba(255,255,255,0.07);
+  padding: 8px 28px 10px;
+  border-top: 1px solid #e7e9ee;
+  margin-top: 4px;
+}}
+.footer-line {{
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #9aa6b4;            /* low-key muted grey */
 }}
 
 @media print {{
@@ -878,25 +836,7 @@ body {{
 
   <!-- Footer -->
   <div class="footer">
-    <div class="footer-inner">
-      {footer_logo_html}
-      <div class="footer-divider"></div>
-      <div class="footer-details">
-        <div>
-          <div class="footer-co">Pivot Travel &amp; Tourism</div>
-          <div class="footer-addr">
-            Suite 20, 2nd Floor, Mobco Building, 2762 Ibn Al Anbari Street<br>
-            Al Amal District, Riyadh, Kingdom of Saudi Arabia
-          </div>
-          <div class="footer-cr">CR No.: 1009162808</div>
-        </div>
-        <div class="footer-contact">
-          <span class="footer-link">sales@pivot-travels.com</span>
-          <span class="footer-link">www.pivot-travels.com</span>
-        </div>
-      </div>
-    </div>
-    <div class="footer-tag">Pivot AI Automated Itinerary</div>
+    <span class="footer-line">PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; {pnr} &nbsp;|&nbsp; WWW.PIVOT-TRAVELS.COM</span>
   </div>
 
 </div>
@@ -920,18 +860,31 @@ def build_pdf(booking_data: dict, out_dir: str, project_dir: str = None) -> str:
 
     pdf_path = out_dir / f"{pnr}.pdf"
 
+    pdf_opts = dict(format="A4", print_background=True,
+                    margin={"top": "0", "bottom": "0", "left": "0", "right": "0"})
     try:
         with sync_playwright() as pw:
             browser = pw.chromium.launch()
             page    = browser.new_page()
             page.emulate_media(media="screen")
             page.goto(f"file://{tmp_html}", wait_until="networkidle")
-            page.pdf(
-                path=str(pdf_path),
-                format="A4",
-                print_background=True,
-                margin={"top": "0", "bottom": "0", "left": "0", "right": "0"},
-            )
+            page.pdf(path=str(pdf_path), **pdf_opts)
+            # Pin the footer to the bottom of the LAST page: count the rendered
+            # pages and, if multi-page, grow the sheet to exactly that many full
+            # pages. The flex column then drops the footer to the bottom; the
+            # cards stay put (the added space lands after the last card). The 4mm
+            # trim keeps the footer clear of the print page boundary.
+            n = 1
+            try:
+                import pdfplumber
+                with pdfplumber.open(str(pdf_path)) as _pdf:
+                    n = len(_pdf.pages)
+            except Exception:
+                n = 1
+            if n > 1:
+                page.evaluate("(mm) => { document.querySelector('.page').style.minHeight = mm + 'mm'; }",
+                              n * 297 - 4)
+                page.pdf(path=str(pdf_path), **pdf_opts)
             page.close()
             browser.close()
     finally:
