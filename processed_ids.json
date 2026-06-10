@@ -1,3 +1,36 @@
 {
-  "processed": []
+  "processed": [
+    {
+      "message_id": "19eac31b4ddb746a",
+      "pnr": "VJG3IZ",
+      "portal": "Alhind",
+      "processed_at": "2026-06-10",
+      "drive_link": "https://drive.google.com/file/d/1PkRlOPpV2U-VS3TaKZGR8edCg3bAPILa/view?usp=drivesdk",
+      "emailed": true
+    },
+    {
+      "message_id": "19eac1acee1161e7",
+      "pnr": "F8YPPZ",
+      "portal": "Alhind",
+      "processed_at": "2026-06-10",
+      "drive_link": "https://drive.google.com/file/d/1Zg-YV5_l-X48ijD7G5hULm8h8RAJURHO/view?usp=drivesdk",
+      "emailed": true
+    },
+    {
+      "message_id": "19eabe6ccc5b89bc",
+      "pnr": "J7PS7F",
+      "portal": "Alhind",
+      "processed_at": "2026-06-10",
+      "drive_link": "https://drive.google.com/file/d/1lMoqgYBvosVF9PJ1uPw2-2yuSFsZ0Kae/view?usp=drivesdk",
+      "emailed": true
+    },
+    {
+      "message_id": "19eabd45d26e605a",
+      "pnr": "TD4L4G",
+      "portal": "Alhind",
+      "processed_at": "2026-06-10",
+      "drive_link": "https://drive.google.com/file/d/1YsSYXCCcaMAdyL9UIMVGk_cLFeULjfOq/view?usp=drivesdk",
+      "emailed": true
+    }
+  ]
 }
