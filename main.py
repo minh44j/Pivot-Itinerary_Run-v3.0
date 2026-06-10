@@ -60,32 +60,35 @@ OUT_DIR = os.path.join(PROJECT_DIR, "out")
 #      account never needs an exported JSON key. Requires env SERVICE_ACCOUNT_EMAIL
 #      and the SA holding roles/iam.serviceAccountTokenCreator on itself.
 #   2. KEY (fallback) — set env GOOGLE_SA_JSON to the full service-account JSON.
-def _delegated_creds():
-    subject = os.environ["IMPERSONATE_USER"]
+def _creds_for(subject, scopes):
+    """Build delegated credentials impersonating `subject` (a domain user)."""
+    if os.environ.get("GOOGLE_SA_JSON"):                       # exported key
+        info = json.loads(os.environ["GOOGLE_SA_JSON"])
+        return service_account.Credentials.from_service_account_info(
+            info, scopes=scopes, subject=subject)
+    # keyless WIF: sign via IAM Credentials API (no private key)
     sa_email = os.environ["SERVICE_ACCOUNT_EMAIL"]
-    # Source identity from Application Default Credentials (WIF in CI).
     source_creds, _ = google.auth.default(
         scopes=["https://www.googleapis.com/auth/cloud-platform"])
-    # Sign via IAM Credentials API (no private key) and apply DWD subject=cs@.
     signer = iam.Signer(Request(), source_creds, sa_email)
     return service_account.Credentials(
-        signer=signer,
-        service_account_email=sa_email,
+        signer=signer, service_account_email=sa_email,
         token_uri="https://oauth2.googleapis.com/token",
-        scopes=SCOPES,
-        subject=subject,
-    )
+        scopes=scopes, subject=subject)
 
 
 def _services():
-    if os.environ.get("GOOGLE_SA_JSON"):                       # fallback: exported key
-        info = json.loads(os.environ["GOOGLE_SA_JSON"])
-        creds = service_account.Credentials.from_service_account_info(
-            info, scopes=SCOPES, subject=os.environ["IMPERSONATE_USER"])
-    else:                                                       # preferred: keyless WIF
-        creds = _delegated_creds()
+    creds = _creds_for(os.environ["IMPERSONATE_USER"], SCOPES)   # reads inbox as cs@
     return build("gmail", "v1", credentials=creds, cache_discovery=False), \
         build("drive", "v3", credentials=creds, cache_discovery=False)
+
+
+def _sender_gmail():
+    """Gmail service that SENDS the confirmation. Defaults to cs@ (IMPERSONATE_USER)
+    unless SENDER_USER is set to another address in the same domain."""
+    sender = os.environ.get("SENDER_USER") or os.environ["IMPERSONATE_USER"]
+    creds = _creds_for(sender, ["https://www.googleapis.com/auth/gmail.send"])
+    return build("gmail", "v1", credentials=creds, cache_discovery=False), sender
 
 
 # ── processed log (message ids only — no passenger PII in the repo) ────────
@@ -214,12 +217,11 @@ def upload_to_drive(drive, pdf_path, date_sub):
 # message is ever touched, replied to, forwarded, or deleted). It additionally
 # holds gmail.send for exactly ONE purpose — emailing the finished PDF back to
 # itself so the confirmation "arrives in gmail inbox" alongside the source email.
-def email_pdf(gmail, pdf_path, data):
-    sender = os.environ["IMPERSONATE_USER"]               # cs@pivot-travels.com
-    to = os.environ.get("NOTIFY_TO") or sender             # defaults to self-email
+def email_pdf(send_gmail, sender, pdf_path, data):
+    to = os.environ.get("NOTIFY_TO") or sender             # default recipient = sender
     m = EmailMessage()
     m["Subject"] = f"Booking Confirmation — {data.get('pnr')} ({data.get('portal')})"
-    m["From"] = sender
+    m["From"] = sender                                     # SENDER_USER or cs@
     m["To"] = to
     pax = ", ".join(p["name"] for p in data.get("passengers", []))
     m.set_content(f"PNR: {data.get('pnr')}\nPortal: {data.get('portal')}\n"
@@ -229,7 +231,7 @@ def email_pdf(gmail, pdf_path, data):
         m.add_attachment(f.read(), maintype="application", subtype="pdf",
                          filename=os.path.basename(pdf_path))
     raw = base64.urlsafe_b64encode(m.as_bytes()).decode("ascii")
-    gmail.users().messages().send(userId="me", body={"raw": raw}).execute()
+    send_gmail.users().messages().send(userId="me", body={"raw": raw}).execute()
     return True
 
 
@@ -237,9 +239,12 @@ def email_pdf(gmail, pdf_path, data):
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     gmail, drive = _services()
+    send_gmail, sender = _sender_gmail()       # confirmation From-address (SENDER_USER or cs@)
     # SAFETY: a blank/unset SEARCH_WINDOW must NOT mean "scan everything".
+    # An empty string is treated as the safe default (last 1 day).
     window = os.environ.get("SEARCH_WINDOW") or "newer_than:1d"
-    # SAFETY: hard cap on PDFs per run so a fresh log can't blast the whole inbox.
+    # SAFETY: hard cap on how many PDFs one run may create, so a fresh log can
+    # never blast the whole inbox. Default 15; override with MAX_PER_RUN.
     try:
         max_per_run = int(os.environ.get("MAX_PER_RUN") or "15")
     except ValueError:
@@ -285,7 +290,7 @@ def main():
                 pdf_path = build_pdf(data, os.path.join(OUT_DIR, date_sub), project_dir=PROJECT_DIR)
 
                 link = upload_to_drive(drive, pdf_path, date_sub)
-                emailed = email_pdf(gmail, pdf_path, data)
+                emailed = email_pdf(send_gmail, sender, pdf_path, data)
 
                 log["processed"].append({
                     "message_id": mid, "pnr": data["pnr"], "portal": data["portal"],
