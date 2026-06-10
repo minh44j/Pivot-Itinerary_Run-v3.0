@@ -192,7 +192,7 @@ def group_segments(flights):
         out, ret = flights[:1], flights[1:]
     return [
         {"type": "OUTBOUND", "flights": out, "layovers": _layovers_for(out)},
-        {"type": "RETURN", "flights": ret, "layovers": _layovers_for(ret)},
+        {"type": "INBOUND", "flights": ret, "layovers": _layovers_for(ret)},
     ]
 
 
