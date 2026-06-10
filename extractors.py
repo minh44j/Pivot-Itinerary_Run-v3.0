@@ -305,7 +305,13 @@ def extract_alhind(html, ctx=None):
         key = _flight_key(flt_cell)
         di, ai, cl = iata_by_flight.get(key, ("", "", default_class))
         # city/airport blocks = cells containing ' - '
-        ap_cells = [c for c in cells if " - " in c and not re.search(r"\d{1,2}:\d{2}", c)]
+        # Airport cells contain ' - ' (e.g. 'Islamabad - Islamabad Intl'). EXCLUDE the
+        # flight-number cell ('PA - 270') which also contains ' - ' — otherwise it gets
+        # read as the origin airport and scrambles the whole itinerary.
+        ap_cells = [c for c in cells
+                    if " - " in c and not re.search(r"\d{1,2}:\d{2}", c)
+                    and c != flt_cell
+                    and not re.fullmatch(r"\s*[A-Z0-9]{1,3}\s*-\s*[A-Z0-9]{2,5}\s*", c)]
         origin = ap_cells[0] if ap_cells else ""
         dest = ap_cells[1] if len(ap_cells) > 1 else ""
         # times + dates: scan whole row in order
@@ -347,8 +353,12 @@ def extract_akbar(pdf_text, ctx=None):
     d["booked_on"] = to_ddmon(mo.group(2)) if mo else to_ddmon(_m(t, r"Date of Booking\s*:?\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4})"))
     d["status"] = "Confirmed" if re.search(r"\bCONFIRMED\b", t, re.I) else ""
     default_class = (_m(t, r"\b(Economy|Business|First|Premium\s*Economy)\b") or "Economy").title()
-    cabin = _m(t, r"Adult\s+(\d+\s*K[gG])") or "Not specified"           # 'Adult 07 Kg'
-    checked = _m(t, r"Adult\s*-\s*(\d+\s*K[gG])") or "Not specified"     # 'Adult - 30 Kg'
+    # Baggage strings vary ('Adult 07 Kg' OR 'Adult 1Pc : 1 BAG UP TO 7 KG').
+    # Capture the raw allowance line; the generator's _norm_bag pulls the kg out.
+    cabin = (_m(t, r"Carry-On\s*:?\s*([^\n]+)")
+             or _m(t, r"Adult\s+(\d+\s*K[gG])") or "Not specified")
+    checked = (_m(t, r"Baggage Allowance\s*:?\s*([^\n]+)")
+               or _m(t, r"Adult\s*-\s*(\d+\s*K[gG])") or "Not specified")
 
     names, seen = [], set()
     for nmo in re.finditer(r"(?m)\b((?:Mr|Mrs|Ms|Mstr|Master|Miss|Dr)\.?\s+[A-Z][A-Z .'\-]+?)\s*$", t):
@@ -356,7 +366,12 @@ def extract_akbar(pdf_text, ctx=None):
         if nm.upper() not in seen:
             seen.add(nm.upper())
             names.append(nm)
-    tickets = re.findall(r"EXKT\s*([0-9]{10,})", t)
+    # Ticket numbers: 'EXKT <num>' OR a plain 10+ digit number in the Traveler
+    # section (Akbar's 'Ticket No.' column). Bound to that section to avoid
+    # picking up fare/footer numbers.
+    trav = t[t.find("Traveler"):] if "Traveler" in t else t
+    trav = trav[:trav.find("Carry-On")] if "Carry-On" in trav else trav
+    tickets = re.findall(r"EXKT\s*([0-9]{10,})", trav) or re.findall(r"\b(\d{10,})\b", trav)
     d["passengers"] = [{"name": n, "ticket_no": tickets[i] if i < len(tickets) else "Not specified",
                         "cabin_bag": cabin, "checked_bag": checked, "seat": ""}
                        for i, n in enumerate(names)] \
