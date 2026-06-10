@@ -462,11 +462,11 @@ body {{
 
 /* ── Content ── */
 .content {{
-  padding: 14px 28px 8px;
+  padding: 10px 28px 6px;
   background: #fff;
   flex: 1 0 auto;     /* grow to fill the page so the footer is pinned to the bottom */
 }}
-.section {{ margin-bottom: 14px; }}
+.section {{ margin-bottom: 10px; }}
 .section-hdr {{
   display: flex;
   align-items: center;
@@ -501,7 +501,7 @@ body {{
   border-radius: 8px;
   padding: 9px 20px;
   background: #fafbfc;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   flex-wrap: wrap;
   page-break-inside: avoid;
 }}
@@ -567,7 +567,7 @@ body {{
   border-radius: 0 0 7px 7px;
   background: #fff;
   padding: 6px 20px 5px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   page-break-inside: avoid;
 }}
 /* A flight card that follows a layover stands on its own (full border, all corners rounded). */
@@ -712,7 +712,7 @@ body {{
   align-items: center;
   justify-content: center;
   gap: 14px;
-  margin: 8px 6px;
+  margin: 6px 6px;
   padding: 0;
   background: transparent;
   page-break-inside: avoid;
@@ -752,9 +752,9 @@ body {{
   page-break-inside: avoid;
   break-inside: avoid;
   text-align: center;
-  padding: 8px 28px 10px;
+  padding: 6px 28px 8px;
   border-top: 1px solid #e7e9ee;
-  margin-top: 4px;
+  margin-top: 2px;
 }}
 .footer-line {{
   font-size: 8px;
