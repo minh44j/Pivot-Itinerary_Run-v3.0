@@ -225,8 +225,42 @@ def _pax_card(pax: dict) -> str:
     </div>"""
 
 
+# ── Terms & Conditions (static, identical on every itinerary) ─────────────────
+def _terms_block() -> str:
+    items = [
+        ("1.", "Ticket Validity &amp; Changes",
+         "Travel is valid only for the date, flight, and class specified. Name changes are not permitted after ticketing. Date or routing changes are subject to carrier fare rules and applicable fees. Refunds are governed by the purchased fare conditions. Unused outbound segments may result in automatic cancellation of onward flights (no-show policy)."),
+        ("2.", "Check-In &amp; Boarding",
+         "Passengers must arrive at the airport with sufficient time to complete check-in and boarding. Check-in deadlines and gate closing times are set by the operating carrier &mdash; confirm prior to travel. Denied boarding due to late arrival is not the liability of Pivot Travel &amp; Tourism. Valid photo ID or passport matching the ticket name is mandatory at all times."),
+        ("3.", "Baggage &mdash; Inclusions",
+         "Cabin and checked baggage allowances are determined by the operating carrier and fare class purchased. Confirm weight limits, piece count, and size restrictions directly with the carrier before travel. Allowances are per passenger and non-transferable."),
+        ("4.", "Baggage &mdash; Exclusions &amp; Restrictions",
+         "Excess baggage charges apply for any baggage exceeding permitted allowances and are payable directly to the carrier at airport rates. Prohibited items include explosives, flammable materials, compressed gases, and all items restricted under IATA Dangerous Goods Regulations. Liquids in cabin baggage are subject to airport security limits. Spare lithium batteries and power banks must be carried in cabin baggage only. Pivot Travel &amp; Tourism and the carrier accept no liability for fragile, valuable, or perishable items in checked baggage."),
+        ("5.", "Travel Documents &amp; Visa",
+         "Passengers are solely responsible for holding valid passports, visas, transit permits, and any health documentation required for all points of travel including transit countries. Pivot Travel &amp; Tourism may provide general guidance only. Denied boarding or deportation due to inadequate documents does not entitle the passenger to a refund."),
+        ("6.", "Flight Disruptions",
+         "In the event of cancellation, significant delay, or denied boarding, passenger rights are governed by the operating carrier's conditions of carriage and applicable GACA regulations. Pivot Travel &amp; Tourism will assist where possible but holds no financial liability for disruptions caused by the carrier, weather, force majeure, or events beyond its control."),
+        ("7.", "Liability &amp; Governing Law",
+         "Pivot Travel &amp; Tourism acts solely as a ticketing agent. Its liability is limited to the agency service fee paid. These terms are governed by the laws of the Kingdom of Saudi Arabia. Disputes are subject to the jurisdiction of the competent courts of Riyadh, KSA, without prejudice to applicable GACA regulations and international conventions."),
+    ]
+    items_html = "\n".join(
+        f'<div class="tc-item"><span class="tc-n"><span class="tc-acc">{n}</span> {h}</span>{body}</div>'
+        for (n, h, body) in items
+    )
+    return f"""
+  <div class="tc">
+    <div class="tc-title">TERMS &amp; CONDITIONS <span class="tc-acc">&mdash;</span> FLIGHT BOOKING CONFIRMATION</div>
+    <div class="tc-issued">Issued by Pivot Travel &amp; Tourism &middot; Suite 20, 2762 Ibn Al Anbari Street, Al Amal District, Riyadh, Kingdom of Saudi Arabia &middot; Clarifications: cs@pivot-travels.com</div>
+    <div class="tc-rule"></div>
+    <div class="tc-cols">
+      {items_html}
+    </div>
+    <div class="tc-close">This document is system-generated and valid without a signature. &nbsp; Pivot Travel &amp; Tourism &middot; cs@pivot-travels.com</div>
+  </div>"""
+
+
 # ── HTML Builder ──────────────────────────────────────────────────────────────
-def build_html(data: dict, project_dir: str = None) -> str:
+def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
     pnr          = data.get("pnr", "N/A")
     booking_ref  = data.get("booking_ref") or ""
     crs_ref      = data.get("crs_ref") or ""
@@ -282,6 +316,95 @@ def build_html(data: dict, project_dir: str = None) -> str:
             if fi < len(layovers):
                 segs_html += _layover_bar(layovers[fi])
 
+    footer_line  = f'PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; {pnr} &nbsp;|&nbsp; WWW.PIVOT-TRAVELS.COM'
+    footer_html  = f'<div class="footer"><span class="footer-line">{footer_line}</span></div>'
+    terms_html   = _terms_block()
+
+    header_html = f"""
+  <div class="header">
+    <div class="header-left">
+      {logo_html}
+      <div>
+        <div class="doc-label">Official Travel Document</div>
+        <div class="doc-title">
+          <span class="doc-title-bold">Booking </span><span class="doc-title-light">Confirmation</span>
+        </div>
+      </div>
+    </div>
+    <div class="header-center"></div>
+    <div class="header-right">
+      <div class="confirmed-pill">
+        <span class="pill-dot"></span>
+        <span class="pill-text">Confirmed</span>
+      </div>
+      <div class="pnr-block">
+        <div class="pnr-value">{pnr}</div>
+        <div class="pnr-label">PNR Reference</div>
+      </div>
+    </div>
+  </div>"""
+
+    ref_html = f"""
+  <div class="ref-strip">
+    {booking_ref_col}
+    {crs_col}
+    <div class="ref-col">
+      <div class="ref-lbl">Booked On</div>
+      <div class="ref-val">{booked_on}</div>
+    </div>
+    <div class="ref-col">
+      <div class="ref-lbl">Journey Type</div>
+      <div class="ref-val">{journey_type}</div>
+    </div>
+  </div>"""
+
+    content_html = f"""
+  <div class="content">
+    <div class="section">
+      <div class="section-hdr">
+        <div class="section-icon"></div>
+        <div class="section-title">Passenger Information</div>
+        <div class="section-rule"></div>
+      </div>
+      {pax_html}
+    </div>
+    <div class="section">
+      <div class="section-hdr">
+        <div class="section-icon"></div>
+        <div class="section-title">Flight Itinerary</div>
+        <div class="section-rule"></div>
+      </div>
+      {segs_html}
+    </div>
+  </div>"""
+
+    if layout == "A":
+        # Itinerary fits one page → page 1 = itinerary + footer; page 2 = T&C + footer.
+        body_html = f"""
+  <div class="sheet sheet-itin">
+    {header_html}{ref_html}{content_html}{footer_html}
+  </div>
+  <div class="sheet sheet-tc">
+    {terms_html}
+    {footer_html}
+  </div>"""
+    elif layout == "measure":
+        # Measurement pass — itinerary + its footer only, natural height.
+        body_html = f"""
+  <div class="page-measure">
+    {header_html}{ref_html}{content_html}{footer_html}
+  </div>"""
+    else:
+        # layout "B" — itinerary spills: no page-1 footer; cards flow, then T&C,
+        # then a single footer pinned to the bottom of the last page.
+        footer_abs = footer_html.replace('class="footer"', 'class="footer footer-abs"')
+        body_html = f"""
+  <div class="page-flow">
+    {header_html}{ref_html}{content_html}
+    {terms_html}
+    {footer_abs}
+  </div>"""
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -292,6 +415,10 @@ def build_html(data: dict, project_dir: str = None) -> str:
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
+/* Full-bleed first page (navy header touches the top edge); every following
+   page gets a top margin so flowing flight cards never butt against the edge. */
+@page {{ size: A4; margin: 12mm 0 0 0; }}
+@page :first {{ margin: 0; }}
 body {{
   font-family: 'Inter', Helvetica, Arial, sans-serif;
   background: #eef0f3;
@@ -464,7 +591,6 @@ body {{
 .content {{
   padding: 10px 28px 6px;
   background: #fff;
-  flex: 1 0 auto;     /* grow to fill the page so the footer is pinned to the bottom */
 }}
 .section {{ margin-bottom: 10px; }}
 .section-hdr {{
@@ -545,6 +671,8 @@ body {{
   align-items: center;
   border-radius: 7px 7px 0 0;
   page-break-inside: avoid;
+  page-break-after: avoid;
+  break-after: avoid;
 }}
 .seg-route {{
   font-size: 10px;
@@ -764,82 +892,106 @@ body {{
   color: #9aa6b4;            /* low-key muted grey */
 }}
 
+/* ── Page sheets (layout wrappers) ── */
+.sheet {{
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}}
+.sheet-itin .content {{ flex: 1 0 auto; }}   /* push the page-1 footer to the bottom */
+.sheet-tc {{
+  min-height: 285mm;                         /* page 2 printable = 297mm - 12mm top margin */
+  justify-content: space-between;            /* T&C at top, footer at the bottom */
+  page-break-before: always;
+  break-before: page;
+}}
+.page-flow {{
+  position: relative;          /* anchor for the absolutely-pinned footer */
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}}
+/* Layout-B footer: out of flow, pinned to the bottom edge of the (grown) sheet so
+   it sits at the bottom of the LAST page without fighting the T&C break rules. */
+.footer-abs {{
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}}
+.page-measure {{ width: 210mm; margin: 0 auto; background: #fff; }}
+
+/* ── Terms & Conditions (static, ~half page) ── */
+.tc {{
+  padding: 16px 28px 8px;
+  page-break-inside: avoid;
+  break-inside: avoid;
+}}
+.tc-title {{
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 17px;
+  font-weight: 700;
+  color: #0b1724;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}}
+.tc-issued {{
+  font-size: 8px;
+  color: #6b7a8d;
+  line-height: 1.45;
+  margin-top: 4px;
+}}
+.tc-rule {{
+  height: 2px;
+  background: linear-gradient(90deg, #c9a84c 0%, rgba(201,168,76,0) 100%);
+  margin: 8px 0 10px;
+}}
+.tc-cols {{
+  column-count: 2;
+  column-gap: 22px;
+}}
+.tc-item {{
+  break-inside: avoid;
+  margin-bottom: 7px;
+  font-size: 7.4px;
+  line-height: 1.45;
+  color: #46525f;
+  text-align: justify;
+}}
+.tc-n {{
+  display: block;
+  font-size: 8px;
+  font-weight: 700;
+  color: #0b1724;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}}
+.tc-acc {{ color: #c9a84c; }}
+.tc-close {{
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid #e7e9ee;
+  font-size: 7px;
+  font-style: italic;
+  color: #6b7a8d;
+  text-align: center;
+}}
+
 @media print {{
   body {{ background: #fff; }}
-  .page {{ box-shadow: none; }}
+  .page, .sheet, .page-flow {{ box-shadow: none; }}
 }}
 </style>
 </head>
 <body>
-<div class="page">
-
-  <!-- Header: LEFT = logo + title  |  RIGHT = pill + PNR -->
-  <div class="header">
-    <div class="header-left">
-      {logo_html}
-      <div>
-        <div class="doc-label">Official Travel Document</div>
-        <div class="doc-title">
-          <span class="doc-title-bold">Booking </span><span class="doc-title-light">Confirmation</span>
-        </div>
-      </div>
-    </div>
-    <div class="header-center"></div>
-    <div class="header-right">
-      <div class="confirmed-pill">
-        <span class="pill-dot"></span>
-        <span class="pill-text">Confirmed</span>
-      </div>
-      <div class="pnr-block">
-        <div class="pnr-value">{pnr}</div>
-        <div class="pnr-label">PNR Reference</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Ref Strip -->
-  <div class="ref-strip">
-    {booking_ref_col}
-    {crs_col}
-    <div class="ref-col">
-      <div class="ref-lbl">Booked On</div>
-      <div class="ref-val">{booked_on}</div>
-    </div>
-    <div class="ref-col">
-      <div class="ref-lbl">Journey Type</div>
-      <div class="ref-val">{journey_type}</div>
-    </div>
-  </div>
-
-  <!-- Content -->
-  <div class="content">
-
-    <div class="section">
-      <div class="section-hdr">
-        <div class="section-icon"></div>
-        <div class="section-title">Passenger Information</div>
-        <div class="section-rule"></div>
-      </div>
-      {pax_html}
-    </div>
-
-    <div class="section">
-      <div class="section-hdr">
-        <div class="section-icon"></div>
-        <div class="section-title">Flight Itinerary</div>
-        <div class="section-rule"></div>
-      </div>
-      {segs_html}
-    </div>
-
-  </div>
-
-  <!-- Footer -->
-  <div class="footer">
-    <span class="footer-line">PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; {pnr} &nbsp;|&nbsp; WWW.PIVOT-TRAVELS.COM</span>
-  </div>
-
-</div>
+{body_html}
 </body>
 </html>"""
 
@@ -851,46 +1003,75 @@ def build_pdf(booking_data: dict, out_dir: str, project_dir: str = None) -> str:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     pnr = booking_data.get("pnr", "UNKNOWN")
-
-    html_content = build_html(booking_data, project_dir=project_dir)
-
-    with tempfile.NamedTemporaryFile(suffix=".html", delete=False, mode="w", encoding="utf-8") as f:
-        f.write(html_content)
-        tmp_html = f.name
-
     pdf_path = out_dir / f"{pnr}.pdf"
 
-    pdf_opts = dict(format="A4", print_background=True,
-                    margin={"top": "0", "bottom": "0", "left": "0", "right": "0"})
-    try:
-        with sync_playwright() as pw:
-            browser = pw.chromium.launch()
-            page    = browser.new_page()
-            page.emulate_media(media="screen")
-            page.goto(f"file://{tmp_html}", wait_until="networkidle")
-            page.pdf(path=str(pdf_path), **pdf_opts)
-            # Pin the footer to the bottom of the LAST page: count the rendered
-            # pages and, if multi-page, grow the sheet to exactly that many full
-            # pages. The flex column then drops the footer to the bottom; the
-            # cards stay put (the added space lands after the last card). The 4mm
-            # trim keeps the footer clear of the print page boundary.
-            n = 1
-            try:
-                import pdfplumber
-                with pdfplumber.open(str(pdf_path)) as _pdf:
-                    n = len(_pdf.pages)
-            except Exception:
-                n = 1
-            if n > 1:
-                page.evaluate("(mm) => { document.querySelector('.page').style.minHeight = mm + 'mm'; }",
-                              n * 297 - 4)
-                page.pdf(path=str(pdf_path), **pdf_opts)
-            page.close()
-            browser.close()
-    finally:
-        os.unlink(tmp_html)
+    # No explicit margin → the CSS @page rules apply (page 1 full-bleed,
+    # pages 2+ get a 12mm top margin).
+    pdf_opts = dict(format="A4", print_background=True)
 
-    print(f"✓ PDF saved: {pdf_path}")
+    def _count(p) -> int:
+        try:
+            import pdfplumber
+            with pdfplumber.open(str(p)) as _pdf:
+                return len(_pdf.pages)
+        except Exception:
+            return 1
+
+    def _write(html: str) -> str:
+        f = tempfile.NamedTemporaryFile(suffix=".html", delete=False, mode="w", encoding="utf-8")
+        f.write(html)
+        f.close()
+        return f.name
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page    = browser.new_page()
+        page.emulate_media(media="screen")
+
+        # ── Pass 1: measure the itinerary (incl. its footer) to choose a layout ──
+        #   itinerary fits 1 page  → layout "A": page1 = itinerary + footer,
+        #                                         page2 = Terms & Conditions + footer.
+        #   itinerary spills        → layout "B": no page-1 footer; cards flow on,
+        #                                         then T&C, then ONE footer pinned
+        #                                         to the bottom of the last page.
+        m_html = _write(build_html(booking_data, project_dir=project_dir, layout="measure"))
+        m_pdf  = str(out_dir / f".{pnr}_measure.pdf")
+        page.goto(f"file://{m_html}", wait_until="networkidle")
+        page.pdf(path=m_pdf, **pdf_opts)
+        os.unlink(m_html)
+        itin_pages = _count(m_pdf)
+        try:
+            os.unlink(m_pdf)
+        except OSError:
+            pass
+        layout = "A" if itin_pages == 1 else "B"
+
+        # ── Pass 2: final render ──
+        f_html = _write(build_html(booking_data, project_dir=project_dir, layout=layout))
+        page.goto(f"file://{f_html}", wait_until="networkidle")
+        page.pdf(path=str(pdf_path), **pdf_opts)
+
+        # Layout B: cards flow on, then the T&C block. The footer is absolutely
+        # positioned (out of flow) so it never adds a page. Count the content
+        # pages, then grow the sheet to exactly that many pages (minus 6mm safety)
+        # so the absolute footer lands at the bottom of the LAST page.
+        if layout == "B":
+            n = _count(pdf_path)
+            # Page 1 is full height (297mm); pages 2+ lose 12mm to the top margin
+            # (285mm printable). Grow the sheet to the bottom of page n (−6mm safe).
+            target = 297 + (n - 1) * 285 - 6
+            page.evaluate(
+                "(mm) => { const e = document.querySelector('.page-flow');"
+                " if (e) e.style.minHeight = mm + 'mm'; }",
+                target,
+            )
+            page.pdf(path=str(pdf_path), **pdf_opts)
+
+        os.unlink(f_html)
+        page.close()
+        browser.close()
+
+    print(f"✓ PDF saved ({layout}): {pdf_path}")
     return str(pdf_path)
 
 
