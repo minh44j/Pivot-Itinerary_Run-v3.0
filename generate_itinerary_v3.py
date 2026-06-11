@@ -69,6 +69,7 @@ def _flight_card(seg: dict, standalone: bool = False) -> str:
     dep_airport  = seg.get("dep_airport", "")
     arr_airport  = seg.get("arr_airport", "")
     dep_terminal = seg.get("terminal", "")
+    arr_terminal = seg.get("arr_terminal", "")
     dep_date     = seg.get("dep_date", "")
     dep_time     = seg.get("dep_time", "")
     arr_date     = seg.get("arr_date", "")
@@ -84,6 +85,10 @@ def _flight_card(seg: dict, standalone: bool = False) -> str:
     elif dep_terminal:
         dep_sub = f"Terminal {dep_terminal}"
     arr_sub = arr_airport or ""
+    if arr_terminal and arr_sub:
+        arr_sub += f" &middot; Terminal {arr_terminal}"
+    elif arr_terminal:
+        arr_sub = f"Terminal {arr_terminal}"
 
     dep_sub_html  = f'<div class="ap-detail">{dep_sub}</div>' if dep_sub else ""
     arr_sub_html  = f'<div class="ap-detail">{arr_sub}</div>' if arr_sub else ""
@@ -306,6 +311,26 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
       </div>""" if show_crs else ""
 
     pax_html  = "\n".join(_pax_card(p) for p in passengers) if passengers else _pax_card({"name": "N/A"})
+
+    # Symmetric airport details: an airport that appears as a DEPARTURE anywhere in
+    # the itinerary (with its name / terminal) is the same physical airport when it
+    # appears as an ARRIVAL on another leg. Build an IATA -> (airport, terminal) map
+    # from every reference, then backfill each segment's arrival (and departure) so
+    # destination airport details render too — not just the departure side.
+    _ap_name, _ap_term = {}, {}
+    for grp in seg_groups:
+        for fl in grp.get("flights", []):
+            di, ai = fl.get("dep_iata", ""), fl.get("arr_iata", "")
+            if fl.get("dep_airport"):  _ap_name.setdefault(di, fl["dep_airport"])
+            if fl.get("terminal"):     _ap_term.setdefault(di, fl["terminal"])
+            if fl.get("arr_airport"):  _ap_name.setdefault(ai, fl["arr_airport"])
+            if fl.get("arr_terminal"): _ap_term.setdefault(ai, fl["arr_terminal"])
+    for grp in seg_groups:
+        for fl in grp.get("flights", []):
+            di, ai = fl.get("dep_iata", ""), fl.get("arr_iata", "")
+            if not fl.get("arr_airport")  and _ap_name.get(ai): fl["arr_airport"]  = _ap_name[ai]
+            if not fl.get("arr_terminal") and _ap_term.get(ai): fl["arr_terminal"] = _ap_term[ai]
+            if not fl.get("dep_airport")  and _ap_name.get(di): fl["dep_airport"]  = _ap_name[di]
 
     segs_html = ""
     for grp in seg_groups:
