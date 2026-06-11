@@ -63,6 +63,22 @@
       "processed_at": "2026-06-11",
       "drive_link": "https://drive.google.com/file/d/1yFa8MpPYkcRg9hKlb2S0jwc3QJszB_02/view?usp=drivesdk",
       "emailed": true
+    },
+    {
+      "message_id": "19eb552a392a8ade",
+      "pnr": "RRG2XJ",
+      "portal": "Alhind",
+      "processed_at": "2026-06-11",
+      "drive_link": "https://drive.google.com/file/d/1RCUY6OOuOWgM-iks1Q64k2EQSXr6z3mT/view?usp=drivesdk",
+      "emailed": true
+    },
+    {
+      "message_id": "19eb5520371e3c80",
+      "pnr": "ZGU2WH",
+      "portal": "Akbar Travels",
+      "processed_at": "2026-06-11",
+      "drive_link": "https://drive.google.com/file/d/1_uZotm81CLRENzzLeY1gFZfFcrzo7IRT/view?usp=drivesdk",
+      "emailed": true
     }
   ]
 }
