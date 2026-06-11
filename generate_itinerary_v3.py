@@ -242,6 +242,8 @@ def _terms_block() -> str:
          "In the event of cancellation, significant delay, or denied boarding, passenger rights are governed by the operating carrier's conditions of carriage and applicable GACA regulations. Pivot Travel &amp; Tourism will assist where possible but holds no financial liability for disruptions caused by the carrier, weather, force majeure, or events beyond its control."),
         ("7.", "Liability &amp; Governing Law",
          "Pivot Travel &amp; Tourism acts solely as a ticketing agent. Its liability is limited to the agency service fee paid. These terms are governed by the laws of the Kingdom of Saudi Arabia. Disputes are subject to the jurisdiction of the competent courts of Riyadh, KSA, without prejudice to applicable GACA regulations and international conventions."),
+        ("8.", "Confidentiality",
+         "This confirmation and all associated travel details, passenger information, pricing, and documentation are strictly confidential and issued solely for the named passenger(s). Disclosure, reproduction, or distribution to any third party without the prior written consent of Pivot Travel &amp; Tourism is prohibited. All client data is handled in accordance with the applicable data-protection regulations of the Kingdom of Saudi Arabia."),
     ]
     items_html = "\n".join(
         f'<div class="tc-item"><span class="tc-n"><span class="tc-acc">{n}</span> {h}</span>{body}</div>'
@@ -255,7 +257,6 @@ def _terms_block() -> str:
     <div class="tc-cols">
       {items_html}
     </div>
-    <div class="tc-close">This document is system-generated and valid without a signature. &nbsp; Pivot Travel &amp; Tourism &middot; cs@pivot-travels.com</div>
   </div>"""
 
 
@@ -421,7 +422,7 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
 @page :first {{ margin: 0; }}
 body {{
   font-family: 'Inter', Helvetica, Arial, sans-serif;
-  background: #eef0f3;
+  background: #fff;     /* white so no grey shows through page-edge gaps / margins (we render with screen media) */
   color: #1a2332;
   font-size: 13px;
   -webkit-print-color-adjust: exact;
@@ -866,7 +867,6 @@ body {{
   border-radius: 16px;
   text-transform: uppercase;
   white-space: nowrap;
-  box-shadow: 0 1px 3px rgba(11,23,36,0.06);
 }}
 .lay-icon {{
   color: #c9a84c;
@@ -879,10 +879,13 @@ body {{
   flex-shrink: 0;            /* never compress; sits at the bottom of the (last) page */
   page-break-inside: avoid;
   break-inside: avoid;
+  display: flex;
+  align-items: center;       /* vertical middle of the footer band */
+  justify-content: center;   /* horizontal centre */
+  min-height: 13mm;          /* defined footer section */
+  padding: 0 28px;
   text-align: center;
-  padding: 6px 28px 8px;
   border-top: 1px solid #e7e9ee;
-  margin-top: 2px;
 }}
 .footer-line {{
   font-size: 8px;
