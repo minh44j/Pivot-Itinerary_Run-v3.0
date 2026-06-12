@@ -111,6 +111,14 @@
       "processed_at": "2026-06-12",
       "drive_link": "https://drive.google.com/file/d/1SyA8vVqBpgQHgbUXqcqtzD5UM29xp6QT/view?usp=drivesdk",
       "emailed": true
+    },
+    {
+      "message_id": "19ebc7b5d4e7bc1f",
+      "pnr": "49UBAY",
+      "portal": "aJet",
+      "processed_at": "2026-06-12",
+      "drive_link": "https://drive.google.com/file/d/1jG486KKV7qexm0Vj77QDHCw5IFO3CNgD/view?usp=drivesdk",
+      "emailed": true
     }
   ]
 }
