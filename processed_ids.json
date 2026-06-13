@@ -151,6 +151,14 @@
       "processed_at": "2026-06-13",
       "drive_link": "https://drive.google.com/file/d/1Sf4XdwGilxUkn7LJ-Yxm-aRTx7APr2WZ/view?usp=drivesdk",
       "emailed": true
+    },
+    {
+      "message_id": "19ec16d93c8ae4c5",
+      "pnr": "4A29C8",
+      "portal": "aJet",
+      "processed_at": "2026-06-13",
+      "drive_link": "https://drive.google.com/file/d/1PL1prwA11WLWFjQ7TNBFZd1MOkhkbtVG/view?usp=drivesdk",
+      "emailed": true
     }
   ]
 }
