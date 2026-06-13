@@ -448,15 +448,41 @@ def extract_ajet(src, ctx=None):
     d = {"portal": "aJet"}
     d["pnr"] = _m(text, r"Reservation\s*Code\s*\n?\s*([A-Z0-9]{5,7})")
     d["booked_on"] = to_ddmon(_m(text, r"Transaction\s*Date\s*\n?\s*([0-9.\-/]+)"))
-    name = _m(text, r"Contact\s*Person\s*\n\s*([A-Z][A-Za-z' .\-]+)") or \
-        _m(text, r"Dear\s+([A-Z][A-Z' .\-]+)\b")
-    d["passengers"] = [{
-        "name": name or "Not specified",
-        "ticket_no": _m(text, r"Ticket\s*No\s*\n?\s*([0-9]{10,})") or "Not specified",
-        "cabin_bag": _m(text, r"Cabin\s*Baggage\s*\n?\s*([^\n]+)") or "Not specified",
-        "checked_bag": _m(text, r"(?:Total\s*)?Check-?in\s*Baggage\s*\n?\s*([^\n]+)") or "Not specified",
-        "seat": "",
-    }]
+    # Passengers — the "Passenger Information" block has one row per passenger
+    # (name -> check-in baggage -> cabin baggage -> Ticket No). aJet repeats this
+    # block once per flight segment, so de-duplicate by ticket number. Anchoring on
+    # the full Name…Baggage…Ticket-No run captures EVERY passenger (not just one).
+    pax_re = re.compile(
+        r"Dear\s+([A-Z][A-Z'’.\-]+(?:\s+[A-Z][A-Z'’.\-]+)+)"          # full name (2+ caps words)
+        r"[\s\S]*?Total\s*Check-?in\s*Baggage\s*([\s\S]*?)\s*"        # checked baggage
+        r"Cabin\s*Baggage\s*([\s\S]*?)\s*"                            # cabin baggage
+        r"Ticket\s*No\s*(\d{10,})",                                   # ticket number
+    )
+    passengers, seen = [], set()
+    for mo in pax_re.finditer(text):
+        tkt = mo.group(4)
+        if tkt in seen:
+            continue
+        seen.add(tkt)
+        passengers.append({
+            "name": re.sub(r"\s+", " ", mo.group(1)).strip(),
+            "ticket_no": tkt,
+            "checked_bag": re.sub(r"\s+", " ", mo.group(2)).strip() or "Not specified",
+            "cabin_bag": re.sub(r"\s+", " ", mo.group(3)).strip() or "Not specified",
+            "seat": "",
+        })
+    if not passengers:
+        # Fallback — single passenger from the greeting / contact person.
+        name = _m(text, r"Contact\s*Person\s*\n\s*([A-Z][A-Za-z' .\-]+)") or \
+            _m(text, r"Dear\s+([A-Z][A-Z' .\-]+)\b")
+        passengers = [{
+            "name": name or "Not specified",
+            "ticket_no": _m(text, r"Ticket\s*No\s*\n?\s*([0-9]{10,})") or "Not specified",
+            "cabin_bag": _m(text, r"Cabin\s*Baggage\s*\n?\s*([^\n]+)") or "Not specified",
+            "checked_bag": _m(text, r"(?:Total\s*)?Check-?in\s*Baggage\s*\n?\s*([^\n]+)") or "Not specified",
+            "seat": "",
+        }]
+    d["passengers"] = passengers
     flights = []
     seg_re = re.compile(
         r"(\d{1,2}\s+[A-Za-z]+\s+\d{4})\s*\n\s*([^\n]+?)\s*\n\s*([A-Z]{3})\s*\n\s*(\d{1,2}:\d{2})\s*\n\s*"
