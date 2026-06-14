@@ -175,6 +175,14 @@
       "processed_at": "2026-06-14",
       "drive_link": "https://drive.google.com/file/d/1mrD6BvrnJUGND5dFv4vTq28K5siRmOKR/view?usp=drivesdk",
       "emailed": true
+    },
+    {
+      "message_id": "19ec660ad58e7758",
+      "pnr": "KXICNT",
+      "portal": "Alhind",
+      "processed_at": "2026-06-14",
+      "drive_link": "https://drive.google.com/file/d/1AB1JXY_Xm5j3wyD4h-3J6qtvGXYxzzrn/view?usp=drivesdk",
+      "emailed": true
     }
   ]
 }
