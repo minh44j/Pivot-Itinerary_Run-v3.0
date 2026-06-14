@@ -201,6 +201,11 @@ def _pax_card(pax: dict) -> str:
     tkt     = _na(pax.get("ticket_no", "N/A"))
     cabin   = _norm_bag(pax.get("cabin_bag", "N/A"))
     checked = _norm_bag(pax.get("checked_bag", "N/A"))
+    # Partner tickets sometimes omit the cabin allowance even though a checked
+    # allowance is shown. Every fare includes a cabin piece, so when checked
+    # baggage is present but cabin is missing, default cabin to "1Pcs".
+    if cabin == "N/A" and checked != "N/A":
+        cabin = "1Pcs"
     seat    = pax.get("seat", "")
     seat_html = (
         f'<div class="pax-col">'
