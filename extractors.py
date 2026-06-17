@@ -533,6 +533,53 @@ def _pegasus_section_date(sec):
                     or _m(sec, r"(?m)^\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4})\s*$"))
 
 
+def _pegasus_passengers(text, fallback_name):
+    """Pegasus emails list every passenger under a 'Passenger Information'
+    heading as repeating blocks:
+        <Name>   |   icon section   <Fare Package>
+        icon  Seat
+        <seat>
+        icon  Cabin Baggage
+        <cabin baggage>
+        icon  Checked Baggage
+        <checked baggage>
+    The 'Dear <Name>,' salutation only ever names the lead passenger, so for
+    multi-passenger bookings (e.g. PNR 24YWFW: Sedat Caglayan, Mehmet Gullu,
+    Fatih Gog) it must NOT be used as the only source. Confirmed against a
+    real 3-passenger PNR on 2026-06-17 — see [[pivot-pegasus-multi-passenger]].
+    """
+    sec_m = re.search(
+        r"Passenger\s*Information\s*\n(.*?)"
+        r"(?=\n\s*Switch to|\n\s*Banner|\n\s*Bol\s*Bol|\n\s*Enhance your travel|\Z)",
+        text, re.S | re.I,
+    )
+    section = sec_m.group(1) if sec_m else ""
+    blocks = re.split(r"(?m)^\s*([^\n|]+?)\s*\|\s*(?:icon section\s*)?([^\n]+)$", section)
+    passengers = []
+    for i in range(1, len(blocks), 3):
+        name = blocks[i].strip()
+        body = blocks[i + 2] if i + 2 < len(blocks) else ""
+        if not name:
+            continue
+        passengers.append({
+            "name": name,
+            "ticket_no": "Not specified",                                # Pegasus = PNR only
+            "cabin_bag": _m(body, r"Cabin\s*Baggage\s*\n\s*([^\n]+)") or "Not specified",
+            "checked_bag": _m(body, r"Checked\s*Baggage\s*\n\s*([^\n]+)") or "Not specified",
+            "seat": _m(body, r"Seat\s*\n\s*([^\n]+)") or "",
+        })
+    if passengers:
+        return passengers
+    # Fallback (no 'Passenger Information' section parsed) — old single-passenger behavior.
+    return [{
+        "name": fallback_name or "Not specified",
+        "ticket_no": "Not specified",
+        "cabin_bag": _m(text, r"Cabin\s*Baggage\s*\n\s*([^\n]+)") or "Not specified",
+        "checked_bag": _m(text, r"Checked\s*Baggage\s*\n\s*([^\n]+)") or "Not specified",
+        "seat": "",
+    }]
+
+
 def extract_pegasus(src, ctx=None):
     text = fix_pegasus_words(_html_to_text(src))
     raw = _html_to_text(src)
@@ -541,13 +588,7 @@ def extract_pegasus(src, ctx=None):
     d["status"] = "Confirmed" if re.search(r"your booking is confirmed", text, re.I) else ""
     d["booked_on"] = ""
     name = _m(text, r"Dear\s+([A-Z][A-Za-z' .\-]+?)\s*,")
-    d["passengers"] = [{
-        "name": name or "Not specified",
-        "ticket_no": "Not specified",                                # Pegasus = PNR only
-        "cabin_bag": _m(text, r"Cabin\s*Baggage\s*\n\s*([^\n]+)") or "Not specified",
-        "checked_bag": _m(text, r"Checked\s*Baggage\s*\n\s*([^\n]+)") or "Not specified",
-        "seat": "",
-    }]
+    d["passengers"] = _pegasus_passengers(text, name)
     parts = re.split(r"Return\s+Flight\s+Information", text, maxsplit=1, flags=re.I)
     out_sec = parts[0]
     ret_sec = parts[1] if len(parts) > 1 else ""
