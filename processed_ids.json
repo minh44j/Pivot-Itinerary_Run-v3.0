@@ -31,6 +31,38 @@
       "processed_at": "2026-06-18",
       "drive_link": "https://drive.google.com/file/d/1AzyotAfUqr2Vl0uj13i3MZwOd0TX9owK/view?usp=drivesdk",
       "emailed": true
+    },
+    {
+      "message_id": "19eda4acefb02afe",
+      "pnr": "745Y8J",
+      "portal": "Akbar Travels",
+      "processed_at": "2026-06-18",
+      "drive_link": "https://drive.google.com/file/d/1xBCpB5sdAPddt3EBNvnGCuFK8Bz8M8wV/view?usp=drivesdk",
+      "emailed": true
+    },
+    {
+      "message_id": "19eda16743df83b8",
+      "pnr": "UZJ3TM",
+      "portal": "Akbar Travels",
+      "processed_at": "2026-06-18",
+      "drive_link": "https://drive.google.com/file/d/1fHTOY5-3OnFUavjCTCqpW-MyGlMmQd-M/view?usp=drivesdk",
+      "emailed": true
+    },
+    {
+      "message_id": "19ed9b9844ea3794",
+      "pnr": "EYZWPP",
+      "portal": "Akbar Travels",
+      "processed_at": "2026-06-18",
+      "drive_link": "https://drive.google.com/file/d/1PU5Bb4J2oKPurUl-H7lbCW4JrPU9n9mk/view?usp=drivesdk",
+      "emailed": true
+    },
+    {
+      "message_id": "19ed9bd83d6adf0f",
+      "pnr": "EYZWPP",
+      "portal": "Akbar Travels",
+      "processed_at": "2026-06-18",
+      "drive_link": "https://drive.google.com/file/d/11P-IDwkXTOTkwI9dfUVxdDjbzlINCCCy/view?usp=drivesdk",
+      "emailed": true
     }
   ]
 }
