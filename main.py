@@ -180,7 +180,9 @@ def akbar_pdf_text(drive, msg_date_str, msg_epoch=None):
     files = drive.files().list(q=q, fields="files(id,name,modifiedTime)",
                                orderBy="modifiedTime desc").execute().get("files", [])
     if not files:
-        return ""
+        raise RuntimeError(f"Akbar Drive PDF not found / unreadable -- folder '{folder_name}' "
+                            f"(id {folder_id}) has ZERO files matching name contains 'AKBAR_'. "
+                            f"Check AKBAR_FOLDER_NAME secret and that files are actually landing there.")
     # SAFETY: never silently fall back to "whatever's newest in the whole
     # folder" — that can be an old/sample/unrelated PDF (e.g. a test file
     # touched recently) and would attach a STALE booking's PNR/passengers to
@@ -214,7 +216,15 @@ def akbar_pdf_text(drive, msg_date_str, msg_epoch=None):
         close = [f for f in files if _age_seconds(f) <= 48 * 3600]   # within 48h of the email
         pick = min(close, key=_age_seconds) if close else None
     if pick is None:
-        return ""   # no safely-matched file — do NOT guess
+        # DIAGNOSTIC (2026-06-18): show exactly what candidate files existed
+        # and how far off they were, so we stop guessing at window sizes and
+        # fix this for real on the next run. File names/timestamps only —
+        # no PII. Revert to a plain `return ""` once the cause is confirmed.
+        sample = sorted(files, key=lambda f: f["modifiedTime"], reverse=True)[:5]
+        detail = "; ".join(f"{f['name']} (modified {f['modifiedTime']})" for f in sample)
+        raise RuntimeError(f"Akbar Drive PDF not found / unreadable -- looked for date(s) "
+                            f"{sorted(date_candidates)} or within 48h of email epoch {msg_epoch}. "
+                            f"{len(files)} AKBAR_ file(s) exist in folder, most recent 5: {detail}")
     buf = io.BytesIO()
     dl = MediaIoBaseDownload(buf, drive.files().get_media(fileId=pick["id"]))
     done = False
