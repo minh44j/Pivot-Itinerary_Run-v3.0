@@ -167,7 +167,48 @@ def search_messages(gmail, portal, window):
     return [m["id"] for m in res.get("messages", [])]
 
 
-# ── Akbar Drive PDF -> text ────────────────────────────────────────────────
+# ── Akbar PDF -> text ────────────────────────────────────────────────────
+# ROOT CAUSE (found 2026-06-18): the "Pivot AI - Ticket PDFs" Drive folder is
+# fed by a separate, external upload pipeline that silently stopped on
+# 2026-06-06 (12 days stale at time of discovery) -- every Akbar Drive lookup
+# after that date correctly found no safely-matched file. This was not a bug
+# in the matching window; it was a dead upstream pipeline outside this repo.
+#
+# FIX: Akbar's "Booking Success" emails carry the ticket PDF as a direct
+# Gmail attachment (filename "TKT_<ref>.pdf") -- confirmed by inspecting 3
+# live emails on 2026-06-18. This is now the PRIMARY source: it travels with
+# the email itself, so it can never be stale, and needs no extra scope (still
+# plain gmail.readonly). The old Drive-folder lookup is kept only as a
+# fallback for the rare case an Akbar email arrives with no attachment.
+def akbar_attachment_text(gmail, msg):
+    import pdfplumber
+
+    def find_pdf_attachment_id(part):
+        filename = (part.get("filename") or "")
+        mime = part.get("mimeType") or ""
+        att_id = part.get("body", {}).get("attachmentId")
+        if att_id and (mime == "application/pdf" or filename.lower().endswith(".pdf")):
+            return att_id
+        for p in part.get("parts", []) or []:
+            found = find_pdf_attachment_id(p)
+            if found:
+                return found
+        return None
+
+    att_id = find_pdf_attachment_id(msg["payload"])
+    if not att_id:
+        return ""   # no attachment on this email — caller falls back to Drive
+    raw = gmail.users().messages().attachments().get(
+        userId="me", messageId=msg["id"], id=att_id).execute()
+    data = base64.urlsafe_b64decode(raw["data"])
+    text = ""
+    with pdfplumber.open(io.BytesIO(data)) as pdf:
+        for page in pdf.pages:
+            text += (page.extract_text() or "") + "\n"
+    return text
+
+
+# ── Akbar Drive PDF -> text (FALLBACK ONLY — see akbar_attachment_text) ────
 def akbar_pdf_text(drive, msg_date_str, msg_epoch=None):
     import pdfplumber
     folder_name = os.environ.get("AKBAR_FOLDER_NAME", "Pivot AI - Ticket PDFs")
@@ -180,25 +221,14 @@ def akbar_pdf_text(drive, msg_date_str, msg_epoch=None):
     files = drive.files().list(q=q, fields="files(id,name,modifiedTime)",
                                orderBy="modifiedTime desc").execute().get("files", [])
     if not files:
-        raise RuntimeError(f"Akbar Drive PDF not found / unreadable -- folder '{folder_name}' "
-                            f"(id {folder_id}) has ZERO files matching name contains 'AKBAR_'. "
-                            f"Check AKBAR_FOLDER_NAME secret and that files are actually landing there.")
+        return ""
     # SAFETY: never silently fall back to "whatever's newest in the whole
-    # folder" — that can be an old/sample/unrelated PDF (e.g. a test file
-    # touched recently) and would attach a STALE booking's PNR/passengers to
-    # a brand-new email. Only accept:
-    #   1) a file whose name contains the email's date string — checked
-    #      against the email's UTC date AND the day before/after, since
-    #      Akbar's Drive filename date may be in a different timezone than
-    #      Gmail's UTC internalDate (this was causing false "not found" on
-    #      every real booking — fixed 2026-06-18), or
-    #   2) failing that, a file modified within 48h of the email's own
-    #      arrival time (Akbar's Drive upload can lag the email by hours —
-    #      widened from 6h on 2026-06-18 after it was rejecting every real
-    #      booking; 48h is still far short of "unbounded newest in folder",
-    #      the original bug that caused the ZGU2WH stale-data incident).
-    # If neither matches, return "" so extraction fails to find a PNR and
-    # qc_check flags it for manual review instead of mis-attributing data.
+    # folder" — that can be an old/sample/unrelated PDF and would attach a
+    # STALE booking's PNR/passengers to a brand-new email (the ZGU2WH
+    # incident). Only accept a file whose name contains the email's date
+    # string (±1 day, for timezone drift) or one modified within 48h of the
+    # email's own arrival. If neither matches, return "" so qc_check flags
+    # the booking for manual review instead of mis-attributing data.
     from datetime import timedelta
     date_candidates = {msg_date_str}
     if msg_epoch is not None:
@@ -216,15 +246,7 @@ def akbar_pdf_text(drive, msg_date_str, msg_epoch=None):
         close = [f for f in files if _age_seconds(f) <= 48 * 3600]   # within 48h of the email
         pick = min(close, key=_age_seconds) if close else None
     if pick is None:
-        # DIAGNOSTIC (2026-06-18): show exactly what candidate files existed
-        # and how far off they were, so we stop guessing at window sizes and
-        # fix this for real on the next run. File names/timestamps only —
-        # no PII. Revert to a plain `return ""` once the cause is confirmed.
-        sample = sorted(files, key=lambda f: f["modifiedTime"], reverse=True)[:5]
-        detail = "; ".join(f"{f['name']} (modified {f['modifiedTime']})" for f in sample)
-        raise RuntimeError(f"Akbar Drive PDF not found / unreadable -- looked for date(s) "
-                            f"{sorted(date_candidates)} or within 48h of email epoch {msg_epoch}. "
-                            f"{len(files)} AKBAR_ file(s) exist in folder, most recent 5: {detail}")
+        return ""   # no safely-matched file — do NOT guess
     buf = io.BytesIO()
     dl = MediaIoBaseDownload(buf, drive.files().get_media(fileId=pick["id"]))
     done = False
@@ -313,9 +335,11 @@ def main():
                     continue
 
                 if portal["source"] == "drive_pdf":
-                    epoch = int(msg["internalDate"]) / 1000
-                    date_str = datetime.fromtimestamp(epoch, timezone.utc).strftime("%Y-%m-%d")
-                    src = akbar_pdf_text(drive, date_str, msg_epoch=epoch)
+                    src = akbar_attachment_text(gmail, msg)   # primary: email's own PDF attachment
+                    if not src:
+                        epoch = int(msg["internalDate"]) / 1000
+                        date_str = datetime.fromtimestamp(epoch, timezone.utc).strftime("%Y-%m-%d")
+                        src = akbar_pdf_text(drive, date_str, msg_epoch=epoch)   # fallback: Drive
                 else:
                     src = _plain_body(msg)
 
@@ -360,16 +384,6 @@ def main():
         "flagged_total": len(flagged),
         "flagged_reasons": sorted({(f.get("reason") or "").split(":")[0] for f in flagged}),
     }
-    # TEMP DIAGNOSTIC (2026-06-18): print portal + truncated error reason per
-    # flagged item so we can see WHY emails are erroring instead of just a
-    # generic "error" bucket. No passenger names/PNRs are in scope at the
-    # exception site for most failures, but keep this OFF outside debugging —
-    # revert by deleting this block once the cause is found.
-    if os.environ.get("DEBUG_VERBOSE") == "1":
-        summary["flagged_detail"] = [
-            {"portal": f.get("portal"), "id": f.get("id"), "reason": (f.get("reason") or "")[:300]}
-            for f in flagged
-        ]
     print(json.dumps(summary, indent=2))
 
 
