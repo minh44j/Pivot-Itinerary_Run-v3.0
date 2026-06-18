@@ -1,0 +1,48 @@
+{
+  "issue": "Stale Akbar Drive PDF fallback attached old ZGU2WH sample booking to a new, unrelated email",
+  "affected_message_id": "19ed9b9844ea3794",
+  "wrong_data_sent": {
+    "pnr": "ZGU2WH",
+    "passengers": ["Mr. ASRAF ALI", "Mr. SHAUKAT ALI"],
+    "booked_on": "06 Jun 2026"
+  },
+  "real_booking_for_this_email": {
+    "passenger": "Mr ONDER AKPINAR",
+    "pnr": "EYZWPP",
+    "booking_ref": "AS 260964571",
+    "ticket_no": "EXKT EYZWPP",
+    "airline": "flynas (XY)",
+    "outbound": {
+      "flight_no": "XY 261",
+      "route": "RUH-HTY",
+      "departure": "08:25, 08 Jul 2026",
+      "arrival": "11:05, 08 Jul 2026"
+    },
+    "return": {
+      "flight_no": "XY 262",
+      "route": "HTY-RUH",
+      "departure": "11:55, 22 Jul 2026",
+      "arrival": "14:55, 22 Jul 2026"
+    },
+    "expected_drive_filename": "AKBAR_2026-06-18_TKT_260964571.pdf"
+  },
+  "action_required_on_live_github_repo": {
+    "file": "processed_ids.json",
+    "step": "Open the live processed_ids.json on GitHub and find the entry whose \"message_id\" is \"19ed9b9844ea3794\". Delete that entire object from the \"processed\" array, then commit. This removes the false 'already done' mark so the next poll can correctly reprocess this email once the real Akbar Drive PDF (260964571) is in the 'Pivot AI - Ticket PDFs' folder.",
+    "example_entry_to_remove": {
+      "message_id": "19ed9b9844ea3794",
+      "pnr": "ZGU2WH",
+      "portal": "Akbar Travels",
+      "processed_at": "<whatever date is shown>",
+      "drive_link": "<whatever link is shown>",
+      "emailed": true
+    },
+    "note": "Exact field values in the live entry may differ slightly from the example above — match by message_id, not by the other fields."
+  },
+  "code_fix_status": {
+    "file": "github-actions-automation/main.py",
+    "function": "akbar_pdf_text",
+    "status": "fixed locally, verified to compile, NOT yet pushed to GitHub",
+    "change_summary": "Removed blind fallback to the most-recently-modified file in the whole Drive folder. Now only accepts a file matching today's date in its name, or modified within 6 hours of the email's arrival; otherwise returns empty so the booking is flagged for manual review instead of mis-attributed."
+  }
+}
