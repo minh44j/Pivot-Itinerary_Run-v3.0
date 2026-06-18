@@ -1,647 +1,346 @@
+#!/usr/bin/env python3
 """
-Per-portal extractors — hardened against REAL inbox samples (Jun 2026).
+Pivot Itinerary Automation — cloud runner (GitHub Actions).
 =========================================================================
-Body portals (Alhind, aJet, Pegasus) receive the RAW HTML body; each extractor
-flattens or cell-parses internally. Akbar receives Drive-PDF text.
+Runs on a schedule. For each NEW qualifying ticket email:
+  scan Gmail -> extract -> QC gate -> render EXACT Playwright PDF
+  (generate_itinerary_v3.py) -> upload to Drive -> email PDF back to cs@ -> log.
 
-Each extractor: fn(src, ctx) -> data dict for generate_itinerary_v3.build_pdf.
-ctx may carry {"date": "DD Mon YYYY"} (email received date) for booked_on fallback.
+Reading/searching cs@ uses gmail.readonly (no message is ever modified, replied
+to, forwarded, or deleted). Outbound delivery is a deliberate, narrowly-scoped
+exception approved by Minh on 2026-06-08: the SAME impersonated cs@ account also
+holds gmail.send, used SOLELY to email the finished booking-confirmation PDF back
+to itself (self-email, "arrives in gmail inbox"). No other send/reply/forward
+action is ever taken.
 
-Design decisions (locked with Minh, 2026-06-08/09):
-  * Alhind is parsed by HTML TABLE CELLS (passenger table + travel-details table),
-    not brittle line-regex — this is the reliable source (cleaner than the PDF).
-  * Baggage strings are captured RAW; the generator's _norm_bag() formats them
-    (weight-only, "7kg + 3kg", "1Pcs", etc.).
-  * Journey type is ONE-WAY or ROUND TRIP only (no MULTI-CITY / no "connecting").
-  * Ticket number = the Ticket-No cell verbatim (real number when present, else
-    the portal placeholder like "F8VJTS1").
+Auth: a Google service account with domain-wide delegation, impersonating
+IMPERSONATE_USER (cs@pivot-travels.com). See SETUP_GITHUB.md.
+
+Environment variables (set as GitHub secrets):
+  GOOGLE_SA_JSON       full service-account JSON (string)
+  IMPERSONATE_USER     cs@pivot-travels.com (default self-email recipient too)
+  DRIVE_OUTPUT_FOLDER  Drive folder ID for output PDFs
+  AKBAR_FOLDER_NAME    e.g. "Pivot AI - Ticket PDFs"   (optional)
+  NOTIFY_TO            override recipient (defaults to IMPERSONATE_USER) (optional)
+  SEARCH_WINDOW        Gmail window, default "newer_than:2d" (optional)
 """
-import re
-import html as _htmllib
-from datetime import datetime, timedelta
+import os
+import io
+import json
+import base64
+import traceback
+from email.message import EmailMessage
+from datetime import datetime, timezone
 
-MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-          "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-_MON_IDX = {m.lower(): i for i, m in enumerate(MONTHS)}
-_FULLMON = {"january": 0, "february": 1, "march": 2, "april": 3, "may": 4, "june": 5,
-            "july": 6, "august": 7, "september": 8, "october": 9, "november": 10, "december": 11}
+import google.auth
+from google.auth import iam
+from google.auth.transport.requests import Request
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 
+import extractors
+from generate_itinerary_v3 import build_pdf
 
-# ── shared helpers ────────────────────────────────────────────────────────
-def _m(text, pattern, group=1, flags=re.I):
-    mo = re.search(pattern, text or "", flags)
-    return mo.group(group).strip() if mo else ""
-
-
-def _pad2(n):
-    n = str(n)
-    return n if len(n) >= 2 else "0" + n
-
-
-def to_ddmon(s):
-    """Normalise many date spellings to 'DD Mon YYYY'."""
-    s = (s or "").strip()
-    m = re.search(r"(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})", s)        # 02 July 2026
-    if m:
-        mon = m.group(2).lower()
-        idx = _FULLMON.get(mon, _MON_IDX.get(mon[:3]))
-        if idx is not None:
-            return f"{_pad2(m.group(1))} {MONTHS[idx]} {m.group(3)}"
-    m = re.search(r"(\d{1,2})-([A-Za-z]{3})-(\d{4})", s)          # 06-Jun-2026
-    if m:
-        return f"{_pad2(m.group(1))} {m.group(2).title()} {m.group(3)}"
-    m = re.search(r"(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})", s)    # 06.06.2026
-    if m:
-        return f"{_pad2(m.group(1))} {MONTHS[int(m.group(2))-1]} {m.group(3)}"
-    m = re.search(r"(\d{4})-(\d{1,2})-(\d{1,2})", s)              # 2026-06-06
-    if m:
-        return f"{_pad2(m.group(3))} {MONTHS[int(m.group(2))-1]} {m.group(1)}"
-    m = re.search(r"(\d{1,2})\s+([A-Za-z]{3})\s+(\d{2})\b", s)    # 20 Jun 26  (2-digit year)
-    if m:
-        idx = _MON_IDX.get(m.group(2).lower())
-        if idx is not None:
-            return f"{_pad2(m.group(1))} {MONTHS[idx]} 20{m.group(3)}"
-    return s
+SCOPES = [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/drive",
+]
+LOG_FILE = "processed_ids.json"
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+OUT_DIR = os.path.join(PROJECT_DIR, "out")
 
 
-def _norm_dur(s):
-    m = re.search(r"(\d+)\s*[Hh]\s*(\d+)\s*[Mm]?", s or "")
-    return f"{int(m.group(1))}H {int(m.group(2)):02d}M" if m else (s or "").strip()
+# ── auth ──────────────────────────────────────────────────────────────────
+# Two supported modes (both impersonate cs@ via domain-wide delegation):
+#   1. KEYLESS (Workload Identity Federation) — preferred. No downloadable key.
+#      GitHub Actions gets ADC via google-github-actions/auth; we then mint a
+#      DWD token for cs@ using the IAM Credentials API (signBlob), so the service
+#      account never needs an exported JSON key. Requires env SERVICE_ACCOUNT_EMAIL
+#      and the SA holding roles/iam.serviceAccountTokenCreator on itself.
+#   2. KEY (fallback) — set env GOOGLE_SA_JSON to the full service-account JSON.
+def _creds_for(subject, scopes):
+    """Build delegated credentials impersonating `subject` (a domain user)."""
+    if os.environ.get("GOOGLE_SA_JSON"):                       # exported key
+        info = json.loads(os.environ["GOOGLE_SA_JSON"])
+        return service_account.Credentials.from_service_account_info(
+            info, scopes=scopes, subject=subject)
+    # keyless WIF: sign via IAM Credentials API (no private key)
+    sa_email = os.environ["SERVICE_ACCOUNT_EMAIL"]
+    source_creds, _ = google.auth.default(
+        scopes=["https://www.googleapis.com/auth/cloud-platform"])
+    signer = iam.Signer(Request(), source_creds, sa_email)
+    return service_account.Credentials(
+        signer=signer, service_account_email=sa_email,
+        token_uri="https://oauth2.googleapis.com/token",
+        scopes=scopes, subject=subject)
 
 
-def _parse_dt(date_str, time_str):
-    m = re.search(r"(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})", date_str or "")
-    t = re.search(r"(\d{1,2}):(\d{2})", re.sub(r"\s*\(\+\d\)", "", time_str or ""))
-    if not m or not t:
-        return None
-    return datetime(int(m.group(3)), _MON_IDX[m.group(2).lower()] + 1, int(m.group(1)),
-                    int(t.group(1)), int(t.group(2)))
+def _services():
+    creds = _creds_for(os.environ["IMPERSONATE_USER"], SCOPES)   # reads inbox as cs@
+    return build("gmail", "v1", credentials=creds, cache_discovery=False), \
+        build("drive", "v3", credentials=creds, cache_discovery=False)
 
 
-def _diff_hm(d1, t1, d2, t2):
-    a, b = _parse_dt(d1, t1), _parse_dt(d2, t2)
-    if not a or not b:
-        return ""
-    mins = int((b - a).total_seconds() // 60)
-    if mins < 0:
-        mins += 24 * 60
-    return f"{mins // 60}H {mins % 60:02d}M"
+def _sender_gmail():
+    """Gmail service that SENDS the confirmation. Defaults to cs@ (IMPERSONATE_USER)
+    unless SENDER_USER is set to another address in the same domain."""
+    sender = os.environ.get("SENDER_USER") or os.environ["IMPERSONATE_USER"]
+    creds = _creds_for(sender, ["https://www.googleapis.com/auth/gmail.send"])
+    return build("gmail", "v1", credentials=creds, cache_discovery=False), sender
 
 
-def _norm_flight(s):
-    """'VF - 610' -> 'VF 610'; '9P - 9P711' -> '9P711'; 'G9 - G9557' -> 'G9557'."""
-    parts = [p.strip() for p in re.split(r"\s*-\s*", (s or "").strip(), maxsplit=1)]
-    if len(parts) == 2:
-        carrier, num = parts
-        return num if num.upper().startswith(carrier.upper()) else f"{carrier} {num}"
-    return (s or "").strip()
+# ── processed log (message ids only — no passenger PII in the repo) ────────
+def load_log():
+    if os.path.exists(LOG_FILE):
+        with open(LOG_FILE) as f:
+            return json.load(f)
+    return {"processed": []}
 
 
-def _flight_key(s):
-    return re.sub(r"\s*-\s*", "-", (s or "").strip()).upper()
+def save_log(log):
+    with open(LOG_FILE, "w") as f:
+        json.dump(log, f, indent=2)
 
 
-def fix_pegasus_words(text):
-    """Fix Pegasus 'i'->'6' glitch in plain English words ONLY (never codes/names/IATA)."""
-    def repl(mo):
-        w = mo.group(0)
-        if len(re.findall(r"\d", w.replace("6", ""))) >= 1:
-            return w
-        return w.replace("6", "i")
-    return re.sub(r"[A-Za-z]+6[A-Za-z0-9]*", repl, text or "")
+def processed_ids(log):
+    return {e["message_id"] for e in log["processed"]}
 
 
-def _city(block):
-    return re.split(r"\s*-\s*", (block or "").strip())[0].strip()
-
-
-def _airport(block):
-    parts = re.split(r"\s*-\s*", (block or "").strip(), maxsplit=1)
-    ap = parts[1] if len(parts) > 1 else ""
-    return re.sub(r"\s*Terminal\s*:?.*$", "", ap, flags=re.I).strip()
-
-
-def _terminal(block):
-    return _m(block or "", r"Terminal\s*:?\s*([A-Za-z0-9]+)")
+# ── gmail helpers ──────────────────────────────────────────────────────────
+def _header(msg, name):
+    for h in msg["payload"].get("headers", []):
+        if h["name"].lower() == name.lower():
+            return h["value"]
+    return ""
 
 
 def _html_to_text(h):
-    h = re.sub(r"(?is)<(script|style|head).*?</\1>", " ", h or "")
-    h = re.sub(r"(?i)<br\s*/?>", "\n", h)
-    h = re.sub(r"(?i)</(td|th|tr|div|p|li|h[1-6]|table)\s*>", "\n", h)
-    h = re.sub(r"<[^>]+>", " ", h)
-    h = _htmllib.unescape(h)
-    h = re.sub(r"[ \t\xa0]+", " ", h)
+    """HTML -> text, mapping table cells/rows/blocks to newlines so the parsers
+    see fields on separate lines (matches the format the extractors were tuned on)."""
+    import re as _re
+    import html as _html
+    h = _re.sub(r"(?is)<(script|style|head).*?</\1>", " ", h)
+    h = _re.sub(r"(?i)<br\s*/?>", "\n", h)
+    h = _re.sub(r"(?i)</(td|th|tr|div|p|li|h[1-6]|table)\s*>", "\n", h)
+    h = _re.sub(r"<[^>]+>", " ", h)
+    h = _html.unescape(h)
+    h = _re.sub(r"[ \t\xa0]+", " ", h)
     return "\n".join(ln.strip() for ln in h.splitlines() if ln.strip())
 
 
-def _cells(tr_html):
-    out = []
-    for c in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", tr_html, re.S | re.I):
-        c = re.sub(r"(?is)<img[^>]*>", "", c)
-        c = re.sub(r"(?i)<br\s*/?>", " ", c)
-        c = re.sub(r"<[^>]+>", " ", c)
-        c = _htmllib.unescape(c)
-        out.append(re.sub(r"\s+", " ", c).strip())
-    return out
+def _plain_body(msg):
+    """Return the RAW body for the extractors (HTML preferred). The extractors
+    flatten or cell-parse internally — Alhind needs the HTML table structure,
+    aJet/Pegasus flatten it themselves. Some portals (e.g. Alhind) put the HTML
+    in the text/plain part, so we treat anything HTML-ish as HTML."""
+    plain, html_raw = [], []
+
+    def walk(part):
+        mime = part.get("mimeType", "")
+        data = part.get("body", {}).get("data")
+        if data and mime in ("text/plain", "text/html"):
+            decoded = base64.urlsafe_b64decode(data).decode("utf-8", "ignore")
+            (plain if mime == "text/plain" else html_raw).append(decoded)
+        for p in part.get("parts", []) or []:
+            walk(p)
+
+    walk(msg["payload"])
+    html_join = "\n".join(html_raw).strip()
+    plain_join = "\n".join(plain).strip()
+    # Prefer real HTML; fall back to a plain part only if it carries HTML too.
+    if html_join:
+        return html_join
+    return plain_join
 
 
-# ── journey-type + grouping (ONE-WAY / ROUND TRIP only) ────────────────────
-def _is_return(flights):
-    return len(flights) > 1 and flights[-1].get("arr_iata") == flights[0].get("dep_iata")
+def _email_date_ddmon(msg):
+    from datetime import datetime, timezone
+    epoch = int(msg["internalDate"]) / 1000
+    return datetime.fromtimestamp(epoch, timezone.utc).strftime("%d %b %Y")
 
 
-def journey_label(flights):
-    return "Round Trip" if _is_return(flights) else "One-Way"
+def search_messages(gmail, portal, window):
+    q = f'from:({portal["from"]}) subject:("{portal["subject"]}") {window}'
+    res = gmail.users().messages().list(userId="me", q=q, maxResults=25).execute()
+    return [m["id"] for m in res.get("messages", [])]
 
 
-def _connection_gaps(flights):
-    gaps = []
-    for i in range(len(flights) - 1):
-        a, b = flights[i], flights[i + 1]
-        if a.get("arr_iata") != b.get("dep_iata"):
-            continue
-        ta, tb = _parse_dt(a.get("arr_date"), a.get("arr_time")), _parse_dt(b.get("dep_date"), b.get("dep_time"))
-        mins = int((tb - ta).total_seconds() // 60) if ta and tb else 0
-        gaps.append((i, mins))
-    return gaps
+# ── Akbar Drive PDF -> text ────────────────────────────────────────────────
+def akbar_pdf_text(drive, msg_date_str, msg_epoch=None):
+    import pdfplumber
+    folder_name = os.environ.get("AKBAR_FOLDER_NAME", "Pivot AI - Ticket PDFs")
+    fres = drive.files().list(q=f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder'",
+                              fields="files(id)").execute().get("files", [])
+    if not fres:
+        return ""
+    folder_id = fres[0]["id"]
+    q = f"'{folder_id}' in parents and name contains 'AKBAR_' and mimeType='application/pdf'"
+    files = drive.files().list(q=q, fields="files(id,name,modifiedTime)",
+                               orderBy="modifiedTime desc").execute().get("files", [])
+    if not files:
+        return ""
+    # SAFETY: never silently fall back to "whatever's newest in the whole
+    # folder" — that can be an old/sample/unrelated PDF (e.g. a test file
+    # touched recently) and would attach a STALE booking's PNR/passengers to
+    # a brand-new email. Only accept:
+    #   1) a file whose name contains today's date string (the documented
+    #      AKBAR_<date>_TKT_*.pdf format), or
+    #   2) failing that, a file modified within a tight window of the
+    #      email's own arrival time (handles timezone/date-string drift,
+    #      e.g. Akbar uploading to Drive a little before/after midnight UTC).
+    # If neither matches, return "" so extraction fails to find a PNR and
+    # qc_check flags it for manual review instead of mis-attributing data.
+    exact = [f for f in files if msg_date_str in f["name"]]
+    pick = exact[0] if exact else None
+    if pick is None and msg_epoch is not None:
+        def _age_seconds(f):
+            ts = f["modifiedTime"]
+            fmt = "%Y-%m-%dT%H:%M:%S.%fZ" if "." in ts else "%Y-%m-%dT%H:%M:%SZ"
+            mt = datetime.strptime(ts, fmt).replace(tzinfo=timezone.utc)
+            return abs((mt - datetime.fromtimestamp(msg_epoch, timezone.utc)).total_seconds())
+        close = [f for f in files if _age_seconds(f) <= 6 * 3600]   # within 6h of the email
+        pick = min(close, key=_age_seconds) if close else None
+    if pick is None:
+        return ""   # no safely-matched file — do NOT guess
+    buf = io.BytesIO()
+    dl = MediaIoBaseDownload(buf, drive.files().get_media(fileId=pick["id"]))
+    done = False
+    while not done:
+        _, done = dl.next_chunk()
+    buf.seek(0)
+    text = ""
+    with pdfplumber.open(buf) as pdf:
+        for page in pdf.pages:
+            text += (page.extract_text() or "") + "\n"
+    return text
 
 
-def _layovers_for(flights):
-    out = []
-    for i in range(len(flights) - 1):
-        a, b = flights[i], flights[i + 1]
-        if a.get("arr_iata") != b.get("dep_iata"):
-            out.append(None)
-            continue
-        out.append({"airport": a["arr_iata"],
-                    "duration": _diff_hm(a.get("arr_date"), a.get("arr_time"),
-                                         b.get("dep_date"), b.get("dep_time"))})
-    return out
+# ── Drive upload ───────────────────────────────────────────────────────────
+def upload_to_drive(drive, pdf_path, date_sub):
+    parent = os.environ["DRIVE_OUTPUT_FOLDER"]
+    # find/create date subfolder
+    q = (f"'{parent}' in parents and name='{date_sub}' "
+         f"and mimeType='application/vnd.google-apps.folder'")
+    found = drive.files().list(q=q, fields="files(id)").execute().get("files", [])
+    sub_id = found[0]["id"] if found else drive.files().create(
+        body={"name": date_sub, "mimeType": "application/vnd.google-apps.folder", "parents": [parent]},
+        fields="id").execute()["id"]
+    media = MediaFileUpload(pdf_path, mimetype="application/pdf")
+    f = drive.files().create(
+        body={"name": os.path.basename(pdf_path), "parents": [sub_id]},
+        media_body=media, fields="id,webViewLink").execute()
+    return f.get("webViewLink", "")
 
 
-def group_segments(flights):
-    if not flights:
-        return []
-    if not _is_return(flights):
-        return [{"type": "FLIGHT", "flights": flights, "layovers": _layovers_for(flights)}]
-    gaps = _connection_gaps(flights)
-    split_idx = max(gaps, key=lambda g: g[1])[0] if gaps else len(flights) // 2 - 1
-    out, ret = flights[:split_idx + 1], flights[split_idx + 1:]
-    if not ret:
-        out, ret = flights[:1], flights[1:]
-    return [
-        {"type": "OUTBOUND", "flights": out, "layovers": _layovers_for(out)},
-        {"type": "INBOUND", "flights": ret, "layovers": _layovers_for(ret)},
-    ]
+# ── email delivery: cs@ self-emails the finished PDF (gmail.send, scoped) ──
+# Approved 2026-06-08: cs@ keeps gmail.readonly for all reading/searching (no
+# message is ever touched, replied to, forwarded, or deleted). It additionally
+# holds gmail.send for exactly ONE purpose — emailing the finished PDF back to
+# itself so the confirmation "arrives in gmail inbox" alongside the source email.
+def email_pdf(send_gmail, sender, pdf_path, data):
+    to = os.environ.get("NOTIFY_TO") or sender             # default recipient = sender
+    m = EmailMessage()
+    m["Subject"] = f"Booking Confirmation — {data.get('pnr')} ({data.get('portal')})"
+    m["From"] = sender                                     # SENDER_USER or cs@
+    m["To"] = to
+    pax = ", ".join(p["name"] for p in data.get("passengers", []))
+    m.set_content(f"PNR: {data.get('pnr')}\nPortal: {data.get('portal')}\n"
+                  f"Passenger(s): {pax}\nBooked On: {data.get('booked_on')}\n\n"
+                  f"PDF attached. (Automated — PIVOT AI AUTOMATED ITINERARY)")
+    with open(pdf_path, "rb") as f:
+        m.add_attachment(f.read(), maintype="application", subtype="pdf",
+                         filename=os.path.basename(pdf_path))
+    raw = base64.urlsafe_b64encode(m.as_bytes()).decode("ascii")
+    send_gmail.users().messages().send(userId="me", body={"raw": raw}).execute()
+    return True
 
 
-def _mark_next_day(flights):
-    """Mark ' (+1)' on arrivals that land the next calendar day; advance arr_date
-    when the source only gave a single (departure) date."""
-    for f in flights:
-        if "(+1)" in (f.get("arr_time") or ""):
-            continue
-        a = _parse_dt(f.get("dep_date"), f.get("dep_time"))
-        b = _parse_dt(f.get("arr_date"), f.get("arr_time"))
-        if a and b:
-            if b.date() > a.date():
-                f["arr_time"] = f["arr_time"] + " (+1)"
-            elif b < a:                                  # same date, earlier time => overnight
-                f["arr_time"] = f["arr_time"] + " (+1)"
-                f["arr_date"] = (a + timedelta(days=1)).strftime("%d %b %Y")
-        elif f.get("dep_date") == f.get("arr_date") and (f.get("arr_time") or "") < (f.get("dep_time") or ""):
-            f["arr_time"] = f["arr_time"] + " (+1)"
+# ── main ───────────────────────────────────────────────────────────────────
+def main():
+    os.makedirs(OUT_DIR, exist_ok=True)
+    gmail, drive = _services()
+    send_gmail, sender = _sender_gmail()       # confirmation From-address (SENDER_USER or cs@)
+    # SAFETY: a blank/unset SEARCH_WINDOW must NOT mean "scan everything".
+    # An empty string is treated as the safe default (last 1 day).
+    window = os.environ.get("SEARCH_WINDOW") or "newer_than:1d"
+    # SAFETY: hard cap on how many PDFs one run may create, so a fresh log can
+    # never blast the whole inbox. Default 15; override with MAX_PER_RUN.
+    try:
+        max_per_run = int(os.environ.get("MAX_PER_RUN") or "15")
+    except ValueError:
+        max_per_run = 15
+    log = load_log()
+    done_ids = processed_ids(log)
+    created, skipped, flagged = [], [], []
 
-
-def _finalize(d, ctx=None):
-    d.setdefault("status", "Confirmed")
-    d.setdefault("passengers", [])
-    if not d.get("booked_on") and ctx and ctx.get("date"):
-        d["booked_on"] = ctx["date"]
-    flights = d.pop("flights", [])
-    _mark_next_day(flights)
-    d["segments"] = group_segments(flights)
-    d["journey_type"] = journey_label(flights)
-    return d
-
-
-# ═════════════════════════════════════════════════════════════════════════
-# 1. ALHIND — HTML email. Parse the two tables by CELLS.
-#    Passenger table:  <tbody id="seg_dt">  (name, segment IATA, flight no,
-#                       ticket, cabin/checked baggage, class)
-#    Travel-details table: 7-col rows (date, flight no, origin, dest, dep, arr, op)
-# ═════════════════════════════════════════════════════════════════════════
-def extract_alhind(html, ctx=None):
-    d = {"portal": "Alhind"}
-    head = _html_to_text(html)
-    d["pnr"] = _m(head, r"Airline\s*PNR\s*\n\s*([A-Z0-9]{5,7})")
-    d["crs_ref"] = _m(head, r"CRS\s*PNR\s*:?\s*([A-Z0-9]{5,7})")
-    d["booking_ref"] = _m(head, r"Booking\s*Reference\s*:?\s*([A-Z0-9]+)")
-    d["booked_on"] = to_ddmon(_m(head, r"Booked\s*On\s*:?\s*([0-9A-Za-z-]+)"))
-    default_class = (_m(head, r"Class of Travel\s*:?\s*([A-Za-z]+)") or "Economy").title()
-
-    # ── passenger table ──
-    pax_tbody = _m(html, r'<tbody[^>]*id="seg_dt"[^>]*>(.*?)</tbody>', 1, re.S | re.I)
-    passengers, seg_flightseq = [], []      # seg_flightseq: ordered (key, dep_iata, arr_iata, class)
-    seg_seen = set()
-    cur = None
-    name_re = re.compile(r"^(?:Mr|Mrs|Ms|Mstr|Master|Miss|Dr)\.?\s+[A-Z]", re.I)
-    iata_re = re.compile(r"^[A-Z]{3}\s*-\s*[A-Z]{3}$")
-    for tr in re.findall(r"<tr[^>]*>(.*?)</tr>", pax_tbody, re.S | re.I):
-        cells = _cells(tr)
-        if not cells:
-            continue
-        # locate the Segment cell (IATA-IATA); fields run consecutively from there:
-        # Seg, Flight, Ticket, FF, Cabin, Checkin, ...
-        si = next((i for i, c in enumerate(cells) if iata_re.match(c)), None)
-        # passenger name = a cell with a title prefix
-        nm = next((c for c in cells if name_re.match(c)), "")
-        if nm:
-            cur = {"name": re.sub(r"\s+", " ", nm).strip(), "ticket_no": "Not specified",
-                   "cabin_bag": "Not specified", "checked_bag": "Not specified", "seat": ""}
-            passengers.append(cur)
-        if si is None:
-            continue
-        seg = cells[si]
-        flt = cells[si + 1] if si + 1 < len(cells) else ""
-        tkt = cells[si + 2] if si + 2 < len(cells) else ""
-        cabin = cells[si + 4] if si + 4 < len(cells) else ""
-        # checked allowance: usually the Checkin column (si+5); some carriers
-        # (e.g. Air Arabia / Himalaya) put it in Extra-Checkin (si+6) instead.
-        checked = ""
-        for j in (si + 5, si + 6):
-            if j < len(cells) and cells[j].strip():
-                checked = cells[j]
+    for portal in extractors.PORTALS:
+        if len(created) >= max_per_run:
+            break
+        for mid in search_messages(gmail, portal, window):
+            if len(created) >= max_per_run:
                 break
-        klass = next((c for c in cells if re.fullmatch(r"(?i)economy|business|first|premium\s*economy", c)), "")
-        if cur and cur["ticket_no"] == "Not specified":
-            cur["ticket_no"] = tkt or "Not specified"
-            cur["cabin_bag"] = cabin or "Not specified"
-            cur["checked_bag"] = checked or "Not specified"
-        dep_i, arr_i = re.split(r"\s*-\s*", seg)
-        key = _flight_key(flt)
-        if key not in seg_seen:
-            seg_seen.add(key)
-            seg_flightseq.append((key, dep_i.strip(), arr_i.strip(),
-                                  klass.title() if klass else default_class))
-    iata_by_flight = {k: (di, ai, cl) for (k, di, ai, cl) in seg_flightseq}
-    d["passengers"] = passengers or [{"name": "Not specified", "ticket_no": "Not specified",
-                                      "cabin_bag": "Not specified", "checked_bag": "Not specified"}]
+            if mid in done_ids:
+                skipped.append(mid)
+                continue
+            try:
+                msg = gmail.users().messages().get(userId="me", id=mid, format="full").execute()
+                subj = _header(msg, "Subject").lower()
+                frm = _header(msg, "From").lower()
+                if portal["subject"].lower() not in subj or portal["from"].lower() not in frm:
+                    continue
 
-    # ── travel-details table (first <tbody> after the 'Travel Details' heading) ──
-    tdi = html.find("Travel")
-    tdi = html.find("Travel Details", tdi if tdi > 0 else 0)
-    travel_html = html[tdi:] if tdi >= 0 else html
-    travel_tbody = _m(travel_html, r"<tbody[^>]*>(.*?)</tbody>", 1, re.S | re.I)
-    flights = []
-    for tr in re.findall(r"<tr[^>]*>(.*?)</tr>", travel_tbody, re.S | re.I):
-        cells = _cells(tr)
-        if len(cells) < 6:
-            continue
-        # identify columns by content (robust to minor shifts)
-        flt_cell = next((c for c in cells if re.search(r"[A-Z0-9]{1,3}\s*-\s*[A-Z0-9]{2,5}", c)
-                         and re.search(r"\d", c)), "")
-        key = _flight_key(flt_cell)
-        di, ai, cl = iata_by_flight.get(key, ("", "", default_class))
-        # city/airport blocks = cells containing ' - '
-        # Airport cells contain ' - ' (e.g. 'Islamabad - Islamabad Intl'). EXCLUDE the
-        # flight-number cell ('PA - 270') which also contains ' - ' — otherwise it gets
-        # read as the origin airport and scrambles the whole itinerary.
-        ap_cells = [c for c in cells
-                    if " - " in c and not re.search(r"\d{1,2}:\d{2}", c)
-                    and c != flt_cell
-                    and not re.fullmatch(r"\s*[A-Z0-9]{1,3}\s*-\s*[A-Z0-9]{2,5}\s*", c)]
-        origin = ap_cells[0] if ap_cells else ""
-        dest = ap_cells[1] if len(ap_cells) > 1 else ""
-        # times + dates: scan whole row in order
-        times = re.findall(r"\b(\d{1,2}:\d{2})\b", " ".join(cells))
-        dates = re.findall(r"\d{1,2}-[A-Za-z]{3}-\d{4}", " ".join(cells))
-        op = cells[-1] if cells else ""
-        flights.append({
-            "flight_no": _norm_flight(flt_cell), "airline": op.strip() or "",
-            "dep_iata": di, "arr_iata": ai,
-            "dep_city": _city(origin), "arr_city": _city(dest),
-            "dep_airport": _airport(origin), "arr_airport": _airport(dest),
-            "terminal": _terminal(origin),
-            "dep_time": times[0] if times else "", "dep_date": to_ddmon(dates[0]) if dates else "",
-            "arr_time": times[1] if len(times) > 1 else "", "arr_date": to_ddmon(dates[1]) if len(dates) > 1 else (to_ddmon(dates[0]) if dates else ""),
-            "cabin": cl, "duration": "",
-        })
-    d["flights"] = flights
-    return _finalize(d, ctx)
+                if portal["source"] == "drive_pdf":
+                    epoch = int(msg["internalDate"]) / 1000
+                    date_str = datetime.fromtimestamp(epoch, timezone.utc).strftime("%Y-%m-%d")
+                    src = akbar_pdf_text(drive, date_str, msg_epoch=epoch)
+                else:
+                    src = _plain_body(msg)
 
+                data = portal["fn"](src, {"date": _email_date_ddmon(msg)})
+                data["portal"] = data.get("portal") or portal["name"]
 
-# ═════════════════════════════════════════════════════════════════════════
-# 2. AKBAR TRAVELS — Drive PDF text (best-effort; tune with a real PDF)
-# ═════════════════════════════════════════════════════════════════════════
-def extract_akbar(pdf_text, ctx=None):
-    """Akbar Travels — Drive PDF (pdfplumber text). Validated against a real
-    multi-segment round-trip sample (2026-06-09). Structure: one block per
-    segment, each introduced by 'Airline Ref : <PNR>', with '<City> [IATA]'
-    pairs, '6E NN (AIRCRAFT)' flight, HH:MM times, 'Sat, DD Mon YY' dates,
-    'Terminal X', and 'Layover Time : HHh:MMm' lines."""
-    if not pdf_text:
-        raise ValueError("Akbar Drive PDF not found / unreadable")
-    t = pdf_text
-    d = {"portal": "Akbar Travels"}
-    d["pnr"] = _m(t, r"Airline\s*Ref\s*:?\s*([A-Z0-9]{5,7})")
-    d["crs_ref"] = _m(t, r"CRS\s*Ref\s*:?\s*([A-Z0-9]{5,7})")
-    # booking_ref + booked_on from the data row "AS260890572 06 June 2026 CONFIRMED"
-    mo = re.search(r"\b([A-Z]{2}\d{6,})\s+(\d{1,2}\s+[A-Za-z]+\s+\d{4})\s+CONFIRMED", t, re.I)
-    d["booking_ref"] = (mo.group(1) if mo else _m(t, r"Ref\.?\s*No\s*:?\s*([A-Z0-9]+)"))
-    d["booked_on"] = to_ddmon(mo.group(2)) if mo else to_ddmon(_m(t, r"Date of Booking\s*:?\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4})"))
-    d["status"] = "Confirmed" if re.search(r"\bCONFIRMED\b", t, re.I) else ""
-    default_class = (_m(t, r"\b(Economy|Business|First|Premium\s*Economy)\b") or "Economy").title()
-    # Baggage strings vary ('Adult 07 Kg' OR 'Adult 1Pc : 1 BAG UP TO 7 KG').
-    # Capture the raw allowance line; the generator's _norm_bag pulls the kg out.
-    cabin = (_m(t, r"Carry-On\s*:?\s*([^\n]+)")
-             or _m(t, r"Adult\s+(\d+\s*K[gG])") or "Not specified")
-    checked = (_m(t, r"Baggage Allowance\s*:?\s*([^\n]+)")
-               or _m(t, r"Adult\s*-\s*(\d+\s*K[gG])") or "Not specified")
+                problem = extractors.qc_check(data)
+                if problem:
+                    flagged.append({"id": mid, "portal": portal["name"], "reason": problem,
+                                    "subject": _header(msg, "Subject")})
+                    continue
 
-    names, seen = [], set()
-    for nmo in re.finditer(r"(?m)\b((?:Mr|Mrs|Ms|Mstr|Master|Miss|Dr)\.?\s+[A-Z][A-Z .'\-]+?)\s*$", t):
-        nm = re.sub(r"\s+", " ", nmo.group(1)).strip()
-        if nm.upper() not in seen:
-            seen.add(nm.upper())
-            names.append(nm)
-    # Ticket numbers: 'EXKT <num>' OR a plain 10+ digit number in the Traveler
-    # section (Akbar's 'Ticket No.' column). Bound to that section to avoid
-    # picking up fare/footer numbers.
-    trav = t[t.find("Traveler"):] if "Traveler" in t else t
-    trav = trav[:trav.find("Carry-On")] if "Carry-On" in trav else trav
-    tickets = re.findall(r"EXKT\s*([0-9]{10,})", trav) or re.findall(r"\b(\d{10,})\b", trav)
-    d["passengers"] = [{"name": n, "ticket_no": tickets[i] if i < len(tickets) else "Not specified",
-                        "cabin_bag": cabin, "checked_bag": checked, "seat": ""}
-                       for i, n in enumerate(names)] \
-        or [{"name": "Not specified", "ticket_no": "Not specified",
-             "cabin_bag": cabin, "checked_bag": checked}]
+                pnr = "".join(c for c in str(data["pnr"]) if c.isalnum() or c in "_-") or "UNKNOWN"
+                date_sub = datetime.now().strftime("%Y-%m-%d")
+                pdf_path = build_pdf(data, os.path.join(OUT_DIR, date_sub), project_dir=PROJECT_DIR)
 
-    # city -> IATA map. The text before '[IATA]' often carries airport/aircraft
-    # words ("Indira Gandhi International Gorakhpur [GOP]"); strip those JUNK
-    # tokens so the key is the clean city ("gorakhpur"). Direction comes from the
-    # per-segment header line ("ONWARD Jeddah New Delhi"), not [IATA] text order.
-    JUNK = {"airbus", "jet", "a320", "a321", "indira", "gandhi", "international",
-            "intl", "airport", "arpt", "chhatrapati", "shivaji", "maharaj", "king",
-            "abdulaziz", "adnan", "menderes", "sabiha", "gokcen", "esenboga",
-            "terminal", "non", "stop", "operated", "by", "india", "saudi", "arabia",
-            "turkiye", "türkiye", "gandhinagar"}
-    city2iata, city2disp = {}, {}
-    for cty, code in re.findall(r"([A-Za-z][A-Za-z .]+?)\s*\[([A-Z]{3})\]", t):
-        words = [w for w in cty.split() if w.lower() not in JUNK]
-        if not words:
-            continue
-        name = " ".join(words)
-        k = name.lower()
-        city2iata[k] = code
-        city2disp[k] = name
-    known = sorted(city2iata.keys(), key=len, reverse=True)
-    MON = r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)"
+                link = upload_to_drive(drive, pdf_path, date_sub)
+                emailed = email_pdf(send_gmail, sender, pdf_path, data)
 
-    def _split_cities(line):
-        line = re.sub(r"^\s*(?:ONWARD|RETURN)\s+", "", line.strip(), flags=re.I)
-        for dc in known:
-            if line.lower().startswith(dc) and line[len(dc):].strip():
-                return dc, line[len(dc):].strip().lower()
-        return None, None
+                log["processed"].append({
+                    "message_id": mid, "pnr": data["pnr"], "portal": data["portal"],
+                    "processed_at": date_sub, "drive_link": link, "emailed": emailed,
+                })
+                done_ids.add(mid)
+                created.append({"pnr": data["pnr"], "portal": data["portal"], "link": link})
+            except Exception as e:
+                flagged.append({"id": mid, "portal": portal["name"],
+                                "reason": f"error: {e}", "trace": traceback.format_exc()[-500:]})
 
-    parts = re.split(r"Airline\s*Ref\s*:", t)
-    flights, seen_fl = [], set()
-    for i in range(1, len(parts)):
-        prev_lines = [ln for ln in parts[i - 1].strip().splitlines() if ln.strip()]
-        header = prev_lines[-1] if prev_lines else ""
-        dep_c, arr_c = _split_cities(header)
-        detail = parts[i]
-        fl = _m(detail, r"(\d?[A-Z]{1,2}\s?\d{2,4})\s*\(")
-        times = re.findall(r"\b(\d{1,2}:\d{2})\b", detail)
-        dates = re.findall(r"(\d{1,2}\s+" + MON + r"\s+\d{2})\b", detail)
-        terms = re.findall(r"Terminal\s+([A-Za-z0-9]+)", detail)
-        dm = re.search(r"(\d+)\s*hrs?\s*(\d+)\s*min", detail, re.I)
-        fkey = re.sub(r"\s+", "", fl).upper()
-        if not (dep_c and arr_c and fl and len(times) >= 2 and len(dates) >= 2):
-            continue
-        if fkey in seen_fl:                       # PDF repeats on a 2nd page
-            continue
-        seen_fl.add(fkey)
-        flights.append({
-            "flight_no": re.sub(r"\s+", " ", fl).strip(),
-            "airline": _m(detail, r"Operated by\s*:?\s*([A-Za-z]+)") or "IndiGo",
-            "dep_iata": city2iata.get(dep_c, ""), "arr_iata": city2iata.get(arr_c, ""),
-            "dep_city": city2disp.get(dep_c, ""), "arr_city": city2disp.get(arr_c, ""),
-            "dep_airport": "", "arr_airport": "",
-            "terminal": terms[0] if terms else "",
-            "dep_time": times[0], "dep_date": to_ddmon(dates[0]),
-            "arr_time": times[1], "arr_date": to_ddmon(dates[1]),
-            "cabin": default_class,
-            "duration": f"{int(dm.group(1))}H {int(dm.group(2)):02d}M" if dm else "",
-        })
-    d["flights"] = flights
-    return _finalize(d, ctx)
+    save_log(log)
+    # PUBLIC-SAFE LOG: print COUNTS only — never PNRs, passenger names, Drive
+    # links, message ids, subjects, or tracebacks (Action logs are world-readable
+    # on a public repo). Per-portal tallies + generic flag reasons are enough to
+    # monitor; the actual confirmations are delivered privately by email.
+    by_portal = {}
+    for c in created:
+        by_portal[c["portal"]] = by_portal.get(c["portal"], 0) + 1
+    summary = {
+        "created_total": len(created),
+        "created_by_portal": by_portal,
+        "skipped": len(skipped),
+        "flagged_total": len(flagged),
+        "flagged_reasons": sorted({(f.get("reason") or "").split(":")[0] for f in flagged}),
+    }
+    print(json.dumps(summary, indent=2))
 
 
-# ═════════════════════════════════════════════════════════════════════════
-# 3. aJet — HTML email; one block per segment
-# ═════════════════════════════════════════════════════════════════════════
-def extract_ajet(src, ctx=None):
-    text = _html_to_text(src)
-    d = {"portal": "aJet"}
-    d["pnr"] = _m(text, r"Reservation\s*Code\s*\n?\s*([A-Z0-9]{5,7})")
-    d["booked_on"] = to_ddmon(_m(text, r"Transaction\s*Date\s*\n?\s*([0-9.\-/]+)"))
-    # Passengers — the "Passenger Information" block has one row per passenger
-    # (name -> check-in baggage -> cabin baggage -> Ticket No). aJet repeats this
-    # block once per flight segment, so de-duplicate by ticket number. Anchoring on
-    # the full Name…Baggage…Ticket-No run captures EVERY passenger (not just one).
-    pax_re = re.compile(
-        r"Dear\s+([A-Z][A-Z'’.\-]+(?:\s+[A-Z][A-Z'’.\-]+)+)"          # full name (2+ caps words)
-        r"[\s\S]*?Total\s*Check-?in\s*Baggage\s*([\s\S]*?)\s*"        # checked baggage
-        r"Cabin\s*Baggage\s*([\s\S]*?)\s*"                            # cabin baggage
-        r"Ticket\s*No\s*(\d{10,})",                                   # ticket number
-    )
-    passengers, seen = [], set()
-    for mo in pax_re.finditer(text):
-        tkt = mo.group(4)
-        if tkt in seen:
-            continue
-        seen.add(tkt)
-        passengers.append({
-            "name": re.sub(r"\s+", " ", mo.group(1)).strip(),
-            "ticket_no": tkt,
-            "checked_bag": re.sub(r"\s+", " ", mo.group(2)).strip() or "Not specified",
-            "cabin_bag": re.sub(r"\s+", " ", mo.group(3)).strip() or "Not specified",
-            "seat": "",
-        })
-    if not passengers:
-        # Fallback — single passenger from the greeting / contact person.
-        name = _m(text, r"Contact\s*Person\s*\n\s*([A-Z][A-Za-z' .\-]+)") or \
-            _m(text, r"Dear\s+([A-Z][A-Z' .\-]+)\b")
-        passengers = [{
-            "name": name or "Not specified",
-            "ticket_no": _m(text, r"Ticket\s*No\s*\n?\s*([0-9]{10,})") or "Not specified",
-            "cabin_bag": _m(text, r"Cabin\s*Baggage\s*\n?\s*([^\n]+)") or "Not specified",
-            "checked_bag": _m(text, r"(?:Total\s*)?Check-?in\s*Baggage\s*\n?\s*([^\n]+)") or "Not specified",
-            "seat": "",
-        }]
-    d["passengers"] = passengers
-    flights = []
-    seg_re = re.compile(
-        r"(\d{1,2}\s+[A-Za-z]+\s+\d{4})\s*\n\s*([^\n]+?)\s*\n\s*([A-Z]{3})\s*\n\s*(\d{1,2}:\d{2})\s*\n\s*"
-        r"([^\n]+?)\s*\n\s*([A-Z]{3})\s*\n\s*(\d{1,2}:\d{2})\s*\n\s*(?:Connecting|Non[ -]?Stop|Direct)?\s*\n?\s*"
-        r"(?:(\d+\s*[Hh]\s*\d+\s*[Mm]))?\s*\n?\s*(VF\s?\d{2,4})\s*\n\s*(ECOJET|BIZJET)?")
-    for mo in seg_re.finditer(text):
-        brand = (mo.group(10) or "").upper()
-        flights.append({
-            "dep_date": to_ddmon(mo.group(1)), "arr_date": to_ddmon(mo.group(1)),
-            "dep_city": mo.group(2).strip(), "dep_iata": mo.group(3), "dep_time": mo.group(4),
-            "arr_city": mo.group(5).strip(), "arr_iata": mo.group(6), "arr_time": mo.group(7),
-            "duration": _norm_dur(mo.group(8) or ""),
-            "flight_no": re.sub(r"(VF)\s?", r"\1 ", mo.group(9)).strip(), "airline": "aJet",
-            "cabin": "Business" if brand == "BIZJET" else ("Economy" if brand == "ECOJET" else "Not specified"),
-            "dep_airport": "", "arr_airport": "", "terminal": "",
-        })
-    d["flights"] = flights
-    return _finalize(d, ctx)
-
-
-# ═════════════════════════════════════════════════════════════════════════
-# 4. PEGASUS — HTML email; handles BOTH simple and connecting layouts.
-# ═════════════════════════════════════════════════════════════════════════
-def _pegasus_section_flights(sec, sec_date):
-    flights = []
-    codes = list(re.finditer(r"\bPC\s?\d{2,4}\b", sec))
-    for i, mo in enumerate(codes):
-        chunk = sec[mo.start(): codes[i + 1].start() if i + 1 < len(codes) else len(sec)]
-        iatas = re.findall(r"(?m)^\s*([A-Z]{3})\s*$", chunk)
-        times = re.findall(r"\b(\d{1,2}:\d{2})\b", chunk)
-        cities = [_city(c) for c in re.findall(r"(?m)^\s*([A-Za-z][^\n]*?\s-\s[^\n]+?)\s*$", chunk)]
-        dur = _norm_dur(_m(chunk, r"(\d+\s*[Hh]\s*\d+\s*[Mm])"))
-        if len(iatas) >= 2 and len(times) >= 2:
-            flights.append({
-                "flight_no": re.sub(r"\s+", "", mo.group(0)),
-                "dep_iata": iatas[0], "arr_iata": iatas[1],
-                "dep_time": times[0], "arr_time": times[1],
-                "dep_city": cities[0] if cities else "", "arr_city": cities[1] if len(cities) > 1 else "",
-                "dep_date": sec_date, "arr_date": sec_date,
-                "duration": dur, "airline": "Pegasus", "cabin": "Not specified",
-                "dep_airport": "", "arr_airport": "", "terminal": "",
-            })
-    return flights
-
-
-def _pegasus_section_date(sec):
-    return to_ddmon(_m(sec, r"Flight\s*Date:\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4})")
-                    or _m(sec, r"(?m)^\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4})\s*$"))
-
-
-def _pegasus_passengers(text, fallback_name):
-    """Pegasus emails list every passenger under a 'Passenger Information'
-    heading as repeating blocks:
-        <Name>   |   icon section   <Fare Package>
-        icon  Seat
-        <seat>
-        icon  Cabin Baggage
-        <cabin baggage>
-        icon  Checked Baggage
-        <checked baggage>
-    The 'Dear <Name>,' salutation only ever names the lead passenger, so for
-    multi-passenger bookings (e.g. PNR 24YWFW: Sedat Caglayan, Mehmet Gullu,
-    Fatih Gog) it must NOT be used as the only source. Confirmed against a
-    real 3-passenger PNR on 2026-06-17 — see [[pivot-pegasus-multi-passenger]].
-    """
-    sec_m = re.search(
-        r"Passenger\s*Information\s*\n(.*?)"
-        r"(?=\n\s*Switch to|\n\s*Banner|\n\s*Bol\s*Bol|\n\s*Enhance your travel|\Z)",
-        text, re.S | re.I,
-    )
-    section = sec_m.group(1) if sec_m else ""
-    blocks = re.split(r"(?m)^\s*([^\n|]+?)\s*\|\s*(?:icon section\s*)?([^\n]+)$", section)
-    passengers = []
-    for i in range(1, len(blocks), 3):
-        name = blocks[i].strip()
-        body = blocks[i + 2] if i + 2 < len(blocks) else ""
-        if not name:
-            continue
-        passengers.append({
-            "name": name,
-            "ticket_no": "Not specified",                                # Pegasus = PNR only
-            "cabin_bag": _m(body, r"Cabin\s*Baggage\s*\n\s*([^\n]+)") or "Not specified",
-            "checked_bag": _m(body, r"Checked\s*Baggage\s*\n\s*([^\n]+)") or "Not specified",
-            "seat": _m(body, r"Seat\s*\n\s*([^\n]+)") or "",
-        })
-    if passengers:
-        return passengers
-    # Fallback (no 'Passenger Information' section parsed) — old single-passenger behavior.
-    return [{
-        "name": fallback_name or "Not specified",
-        "ticket_no": "Not specified",
-        "cabin_bag": _m(text, r"Cabin\s*Baggage\s*\n\s*([^\n]+)") or "Not specified",
-        "checked_bag": _m(text, r"Checked\s*Baggage\s*\n\s*([^\n]+)") or "Not specified",
-        "seat": "",
-    }]
-
-
-def extract_pegasus(src, ctx=None):
-    text = fix_pegasus_words(_html_to_text(src))
-    raw = _html_to_text(src)
-    d = {"portal": "Pegasus"}
-    d["pnr"] = _m(raw, r"PNR\s*No\s*:?\s*\n?\s*([A-Z0-9]{5,7})")     # raw — never de-glitch codes
-    d["status"] = "Confirmed" if re.search(r"your booking is confirmed", text, re.I) else ""
-    d["booked_on"] = ""
-    name = _m(text, r"Dear\s+([A-Z][A-Za-z' .\-]+?)\s*,")
-    d["passengers"] = _pegasus_passengers(text, name)
-    parts = re.split(r"Return\s+Flight\s+Information", text, maxsplit=1, flags=re.I)
-    out_sec = parts[0]
-    ret_sec = parts[1] if len(parts) > 1 else ""
-    flights = _pegasus_section_flights(out_sec, _pegasus_section_date(out_sec))
-    if ret_sec:
-        flights += _pegasus_section_flights(ret_sec, _pegasus_section_date(ret_sec))
-    d["flights"] = flights
-    return _finalize(d, ctx)
-
-
-# ── generic segment parser (Akbar PDF fallback) ───────────────────────────
-def _parse_generic_segments(text):
-    flights = []
-    pat = (r"\b([A-Z]{3})\b[^\n]{0,40}?\b([A-Z]{3})\b[^\n]{0,60}?([A-Z]{1,3}\s?\d{2,4})"
-           r"[^\n]{0,60}?(\d{1,2}\s+[A-Za-z]{3}\s+\d{4}|\d{1,2}[.\-/]\d{1,2}[.\-/]\d{4})"
-           r"[^\n]{0,40}?(\d{1,2}:\d{2})[^\n]{0,40}?(\d{1,2}:\d{2})")
-    for mo in re.finditer(pat, text):
-        flights.append({
-            "dep_iata": mo.group(1), "arr_iata": mo.group(2), "flight_no": re.sub(r"\s", "", mo.group(3)),
-            "dep_date": to_ddmon(mo.group(4)), "arr_date": to_ddmon(mo.group(4)),
-            "dep_time": mo.group(5), "arr_time": mo.group(6), "airline": "", "cabin": "Not specified",
-            "dep_city": "", "arr_city": "", "dep_airport": "", "arr_airport": "", "terminal": "", "duration": "",
-        })
-    return flights
-
-
-# ── QC gate (Project Instructions §7/§12) — flag, don't guess ──────────────
-def qc_check(d):
-    if not d:
-        return "No data extracted"
-    if not d.get("pnr") or re.search(r"not specified", d["pnr"], re.I):
-        return "Missing PNR"
-    if not d.get("passengers"):
-        return "No passengers"
-    if any(not p.get("name") or re.search(r"not specified", p["name"], re.I) for p in d["passengers"]):
-        return "Passenger name missing"
-    if not d.get("segments"):
-        return "No flight segments"
-    if d.get("status") and not re.search(r"confirm", d["status"], re.I):
-        return "Status not Confirmed: " + d["status"]
-    for g in d["segments"]:
-        for f in g.get("flights", []):
-            if not all([f.get("flight_no"), f.get("dep_iata"), f.get("arr_iata"),
-                        f.get("dep_time"), f.get("arr_time")]):
-                return "A segment is missing flight number / airport / time"
-    return None
-
-
-# ── registry ───────────────────────────────────────────────────────────────
-PORTALS = [
-    {"name": "Alhind",        "from": "alhind@alhindsanchar.com",   "subject": "Air Ticket",                                      "source": "body",      "fn": extract_alhind},
-    {"name": "Akbar Travels", "from": "sanoreply@akbartravels.com", "subject": "Booking Success",                                 "source": "drive_pdf", "fn": extract_akbar},
-    {"name": "Akbar Travels", "from": "sanoreply@akbartravels.com", "subject": "Ticket Copy",                                    "source": "drive_pdf", "fn": extract_akbar},
-    {"name": "aJet",          "from": "onlineticket@mail.ajet.com", "subject": "Ticket information",                              "source": "body",      "fn": extract_ajet},
-    {"name": "Pegasus",       "from": "pegasus@flypgs.com",         "subject": "Your booking is confirmed! View your ticket now", "source": "body",      "fn": extract_pegasus},
-]
+if __name__ == "__main__":
+    main()
