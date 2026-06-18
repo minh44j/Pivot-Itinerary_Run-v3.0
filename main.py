@@ -168,7 +168,7 @@ def search_messages(gmail, portal, window):
 
 
 # ── Akbar Drive PDF -> text ────────────────────────────────────────────────
-def akbar_pdf_text(drive, msg_date_str):
+def akbar_pdf_text(drive, msg_date_str, msg_epoch=None):
     import pdfplumber
     folder_name = os.environ.get("AKBAR_FOLDER_NAME", "Pivot AI - Ticket PDFs")
     fres = drive.files().list(q=f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder'",
@@ -181,7 +181,29 @@ def akbar_pdf_text(drive, msg_date_str):
                                orderBy="modifiedTime desc").execute().get("files", [])
     if not files:
         return ""
-    pick = next((f for f in files if msg_date_str in f["name"]), files[0])
+    # SAFETY: never silently fall back to "whatever's newest in the whole
+    # folder" — that can be an old/sample/unrelated PDF (e.g. a test file
+    # touched recently) and would attach a STALE booking's PNR/passengers to
+    # a brand-new email. Only accept:
+    #   1) a file whose name contains today's date string (the documented
+    #      AKBAR_<date>_TKT_*.pdf format), or
+    #   2) failing that, a file modified within a tight window of the
+    #      email's own arrival time (handles timezone/date-string drift,
+    #      e.g. Akbar uploading to Drive a little before/after midnight UTC).
+    # If neither matches, return "" so extraction fails to find a PNR and
+    # qc_check flags it for manual review instead of mis-attributing data.
+    exact = [f for f in files if msg_date_str in f["name"]]
+    pick = exact[0] if exact else None
+    if pick is None and msg_epoch is not None:
+        def _age_seconds(f):
+            ts = f["modifiedTime"]
+            fmt = "%Y-%m-%dT%H:%M:%S.%fZ" if "." in ts else "%Y-%m-%dT%H:%M:%SZ"
+            mt = datetime.strptime(ts, fmt).replace(tzinfo=timezone.utc)
+            return abs((mt - datetime.fromtimestamp(msg_epoch, timezone.utc)).total_seconds())
+        close = [f for f in files if _age_seconds(f) <= 6 * 3600]   # within 6h of the email
+        pick = min(close, key=_age_seconds) if close else None
+    if pick is None:
+        return ""   # no safely-matched file — do NOT guess
     buf = io.BytesIO()
     dl = MediaIoBaseDownload(buf, drive.files().get_media(fileId=pick["id"]))
     done = False
@@ -272,7 +294,7 @@ def main():
                 if portal["source"] == "drive_pdf":
                     epoch = int(msg["internalDate"]) / 1000
                     date_str = datetime.fromtimestamp(epoch, timezone.utc).strftime("%Y-%m-%d")
-                    src = akbar_pdf_text(drive, date_str)
+                    src = akbar_pdf_text(drive, date_str, msg_epoch=epoch)
                 else:
                     src = _plain_body(msg)
 
