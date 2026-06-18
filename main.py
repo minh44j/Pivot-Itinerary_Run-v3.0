@@ -339,6 +339,16 @@ def main():
         "flagged_total": len(flagged),
         "flagged_reasons": sorted({(f.get("reason") or "").split(":")[0] for f in flagged}),
     }
+    # TEMP DIAGNOSTIC (2026-06-18): print portal + truncated error reason per
+    # flagged item so we can see WHY emails are erroring instead of just a
+    # generic "error" bucket. No passenger names/PNRs are in scope at the
+    # exception site for most failures, but keep this OFF outside debugging —
+    # revert by deleting this block once the cause is found.
+    if os.environ.get("DEBUG_VERBOSE") == "1":
+        summary["flagged_detail"] = [
+            {"portal": f.get("portal"), "id": f.get("id"), "reason": (f.get("reason") or "")[:300]}
+            for f in flagged
+        ]
     print(json.dumps(summary, indent=2))
 
 
