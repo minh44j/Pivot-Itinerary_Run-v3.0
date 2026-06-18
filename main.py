@@ -185,14 +185,25 @@ def akbar_pdf_text(drive, msg_date_str, msg_epoch=None):
     # folder" — that can be an old/sample/unrelated PDF (e.g. a test file
     # touched recently) and would attach a STALE booking's PNR/passengers to
     # a brand-new email. Only accept:
-    #   1) a file whose name contains today's date string (the documented
-    #      AKBAR_<date>_TKT_*.pdf format), or
-    #   2) failing that, a file modified within a tight window of the
-    #      email's own arrival time (handles timezone/date-string drift,
-    #      e.g. Akbar uploading to Drive a little before/after midnight UTC).
+    #   1) a file whose name contains the email's date string — checked
+    #      against the email's UTC date AND the day before/after, since
+    #      Akbar's Drive filename date may be in a different timezone than
+    #      Gmail's UTC internalDate (this was causing false "not found" on
+    #      every real booking — fixed 2026-06-18), or
+    #   2) failing that, a file modified within 48h of the email's own
+    #      arrival time (Akbar's Drive upload can lag the email by hours —
+    #      widened from 6h on 2026-06-18 after it was rejecting every real
+    #      booking; 48h is still far short of "unbounded newest in folder",
+    #      the original bug that caused the ZGU2WH stale-data incident).
     # If neither matches, return "" so extraction fails to find a PNR and
     # qc_check flags it for manual review instead of mis-attributing data.
-    exact = [f for f in files if msg_date_str in f["name"]]
+    from datetime import timedelta
+    date_candidates = {msg_date_str}
+    if msg_epoch is not None:
+        base = datetime.fromtimestamp(msg_epoch, timezone.utc)
+        date_candidates.add((base - timedelta(days=1)).strftime("%Y-%m-%d"))
+        date_candidates.add((base + timedelta(days=1)).strftime("%Y-%m-%d"))
+    exact = [f for f in files if any(c in f["name"] for c in date_candidates)]
     pick = exact[0] if exact else None
     if pick is None and msg_epoch is not None:
         def _age_seconds(f):
@@ -200,7 +211,7 @@ def akbar_pdf_text(drive, msg_date_str, msg_epoch=None):
             fmt = "%Y-%m-%dT%H:%M:%S.%fZ" if "." in ts else "%Y-%m-%dT%H:%M:%SZ"
             mt = datetime.strptime(ts, fmt).replace(tzinfo=timezone.utc)
             return abs((mt - datetime.fromtimestamp(msg_epoch, timezone.utc)).total_seconds())
-        close = [f for f in files if _age_seconds(f) <= 6 * 3600]   # within 6h of the email
+        close = [f for f in files if _age_seconds(f) <= 48 * 3600]   # within 48h of the email
         pick = min(close, key=_age_seconds) if close else None
     if pick is None:
         return ""   # no safely-matched file — do NOT guess
