@@ -336,47 +336,28 @@ def extract_alhind(html, ctx=None):
 # 2. AKBAR TRAVELS — Drive PDF text (best-effort; tune with a real PDF)
 # ═════════════════════════════════════════════════════════════════════════
 def extract_akbar(pdf_text, ctx=None):
-    """Akbar Travels. Source is read PRIMARILY from the PDF attached directly
-    to the 'Booking Success' email ('Ticket Copy' layout — ONWARD/RETURN
-    headers, 4-digit years e.g. '08 Jul 2026', a plain 'Flight Number'
-    column, 'Stops' duration shown in parens), with the legacy Drive-folder
-    PDF as fallback ('Airline Ref :' segment headers, 2-digit years e.g.
-    '08 Jul 26', 'FlightNo (Aircraft)', 'Layover Time :'). Both date formats
-    and both flight-number formats are handled below.
-
-    2026-06-18 fix: the original version only matched 2-digit years and a
-    '(Aircraft)' suffix after the flight number. Against the new Ticket-Copy
-    layout that silently corrupted the flight number (it matched a fragment
-    of the date instead, e.g. 'ul 26' out of '...Jul 2026...') AND made the
-    return leg fail validation and get DROPPED entirely — producing a
-    confirmed PDF that showed only the outbound leg and mislabeled a round
-    trip as ONE-WAY. Fixed by: (a) accepting 2- or 4-digit years, (b)
-    anchoring the flight number on the 'Flight Number' label first (with a
-    month-name sanity guard) before falling back to the legacy parenthetical
-    pattern, and (c) never silently dropping a segment the document clearly
-    contains — an incomplete segment is still appended so qc_check() flags
-    it for manual review instead of an incomplete itinerary going out as if
-    it were complete."""
+    """Akbar Travels — Drive PDF (pdfplumber text). Validated against a real
+    multi-segment round-trip sample (2026-06-09). Structure: one block per
+    segment, each introduced by 'Airline Ref : <PNR>', with '<City> [IATA]'
+    pairs, '6E NN (AIRCRAFT)' flight, HH:MM times, 'Sat, DD Mon YY' dates,
+    'Terminal X', and 'Layover Time : HHh:MMm' lines."""
     if not pdf_text:
-        raise ValueError("Akbar source document not found / unreadable")
+        raise ValueError("Akbar Drive PDF not found / unreadable")
     t = pdf_text
     d = {"portal": "Akbar Travels"}
     d["pnr"] = _m(t, r"Airline\s*Ref\s*:?\s*([A-Z0-9]{5,7})")
     d["crs_ref"] = _m(t, r"CRS\s*Ref\s*:?\s*([A-Z0-9]{5,7})")
     # booking_ref + booked_on from the data row "AS260890572 06 June 2026 CONFIRMED"
-    mo = re.search(r"\b([A-Z]{2}\s?\d{6,})\s+(\d{1,2}\s+[A-Za-z]+\s+\d{4})\s+CONFIRMED", t, re.I)
-    d["booking_ref"] = (re.sub(r"\s+", " ", mo.group(1)).strip() if mo else _m(t, r"Ref\.?\s*No\s*:?\s*([A-Z0-9]+)"))
+    mo = re.search(r"\b([A-Z]{2}\d{6,})\s+(\d{1,2}\s+[A-Za-z]+\s+\d{4})\s+CONFIRMED", t, re.I)
+    d["booking_ref"] = (mo.group(1) if mo else _m(t, r"Ref\.?\s*No\s*:?\s*([A-Z0-9]+)"))
     d["booked_on"] = to_ddmon(mo.group(2)) if mo else to_ddmon(_m(t, r"Date of Booking\s*:?\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4})"))
     d["status"] = "Confirmed" if re.search(r"\bCONFIRMED\b", t, re.I) else ""
     default_class = (_m(t, r"\b(Economy|Business|First|Premium\s*Economy)\b") or "Economy").title()
-    # Baggage strings vary ('Adult 07 Kg' OR 'Adult 1Pc : 1 BAG UP TO 7 KG' OR the
-    # Ticket-Copy layout's 'Cabin Baggage' / 'Check-In Baggage' labelled columns).
+    # Baggage strings vary ('Adult 07 Kg' OR 'Adult 1Pc : 1 BAG UP TO 7 KG').
     # Capture the raw allowance line; the generator's _norm_bag pulls the kg out.
-    cabin = (_m(t, r"Cabin\s*Baggage\s*:?\s*\n?\s*(Adult[^\n]*)")
-             or _m(t, r"Carry-On\s*:?\s*([^\n]+)")
+    cabin = (_m(t, r"Carry-On\s*:?\s*([^\n]+)")
              or _m(t, r"Adult\s+(\d+\s*K[gG])") or "Not specified")
-    checked = (_m(t, r"Check-?In\s*Baggage\s*:?\s*\n?\s*(Adult[^\n]*)")
-               or _m(t, r"Baggage Allowance\s*:?\s*([^\n]+)")
+    checked = (_m(t, r"Baggage Allowance\s*:?\s*([^\n]+)")
                or _m(t, r"Adult\s*-\s*(\d+\s*K[gG])") or "Not specified")
 
     names, seen = [], set()
@@ -417,87 +398,41 @@ def extract_akbar(pdf_text, ctx=None):
         city2disp[k] = name
     known = sorted(city2iata.keys(), key=len, reverse=True)
     MON = r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)"
-    MONTH_WORDS = {"jan", "feb", "mar", "apr", "may", "jun",
-                   "jul", "aug", "sep", "oct", "nov", "dec"}
 
-    def _split_cities_line(line):
+    def _split_cities(line):
         line = re.sub(r"^\s*(?:ONWARD|RETURN)\s+", "", line.strip(), flags=re.I)
         for dc in known:
             if line.lower().startswith(dc) and line[len(dc):].strip():
                 return dc, line[len(dc):].strip().lower()
         return None, None
 
-    def _split_cities(prev_lines):
-        # The ONWARD/RETURN route header is USUALLY the line immediately
-        # before 'Airline Ref :', but the Ticket-Copy layout can interpose a
-        # date/duration line ('08 Jul 2026 | Non Stop | 02 hrs 40 mins')
-        # between them. Scan back a few lines instead of only the last one,
-        # so the header is still found regardless of exact adjacency.
-        for ln in reversed(prev_lines[-6:]):
-            dep_c, arr_c = _split_cities_line(ln)
-            if dep_c and arr_c:
-                return dep_c, arr_c
-        return None, None
-
-    def _flight_no_for(detail):
-        # Primary: Ticket-Copy layout labels the value explicitly.
-        cand = _m(detail, r"Flight\s*Number\s*:?\s*\n?\s*([0-9]?[A-Z]{1,2}\s?-?\s?\d{2,4})")
-        # Fallback: legacy Drive layout 'FlightNo (Aircraft)'. Case-SENSITIVE
-        # (flags=0) so a lowercase date fragment (e.g. 'ul 26' out of 'Jul
-        # 2026') can never match — that case-insensitive match was the root
-        # cause of the corrupted flight number in the 2026-06-18 bug.
-        if not cand:
-            cand = _m(detail, r"\b(\d?[A-Z]{1,2}\s?\d{2,4})\s*\(", flags=0)
-        # Sanity guard: reject anything whose letters are actually a month name.
-        letters = re.sub(r"[\d\s\-]", "", cand or "").lower()
-        if letters in MONTH_WORDS:
-            return ""
-        return re.sub(r"\s+", " ", cand).strip() if cand else ""
-
     parts = re.split(r"Airline\s*Ref\s*:", t)
     flights, seen_fl = [], set()
     for i in range(1, len(parts)):
         prev_lines = [ln for ln in parts[i - 1].strip().splitlines() if ln.strip()]
-        dep_c, arr_c = _split_cities(prev_lines)
+        header = prev_lines[-1] if prev_lines else ""
+        dep_c, arr_c = _split_cities(header)
         detail = parts[i]
-        fl = _flight_no_for(detail)
+        fl = _m(detail, r"(\d?[A-Z]{1,2}\s?\d{2,4})\s*\(")
         times = re.findall(r"\b(\d{1,2}:\d{2})\b", detail)
-        # Dates: accept 4-digit years (new Ticket-Copy layout, '08 Jul 2026')
-        # OR 2-digit years (legacy Drive layout, '08 Jul 26'). The original
-        # code only accepted 2-digit years, so every 4-digit-year segment
-        # failed validation and was silently dropped — root cause of the
-        # missing return leg in the 2026-06-18 bug.
-        dates4 = re.findall(r"(\d{1,2}\s+" + MON + r"\s+\d{4})", detail)
-        dates = dates4 if len(dates4) >= 2 else re.findall(r"(\d{1,2}\s+" + MON + r"\s+\d{2})\b", detail)
+        dates = re.findall(r"(\d{1,2}\s+" + MON + r"\s+\d{2})\b", detail)
         terms = re.findall(r"Terminal\s+([A-Za-z0-9]+)", detail)
-        # Stops-column "(Xh:Ym)" is fully inside this segment's own table and
-        # can't bleed in from a neighbouring segment's header line the way the
-        # looser "X hrs Y mins" phrase can (that phrase sits in the NEXT
-        # segment's direction header, which — because we split on 'Airline
-        # Ref :' — ends up appended to THIS segment's detail text). Try the
-        # scoped pattern first.
-        dm = (re.search(r"\((\d{1,2})h:?(\d{2})m\)", detail, re.I)
-              or re.search(r"(\d+)\s*hrs?\s*(\d+)\s*min", detail, re.I))
-        dep_iata, arr_iata = city2iata.get(dep_c, ""), city2iata.get(arr_c, "")
-        fkey = (re.sub(r"\s+", "", fl).upper() if fl
-                else f"{dep_iata}-{arr_iata}-{times[0] if times else i}")
+        dm = re.search(r"(\d+)\s*hrs?\s*(\d+)\s*min", detail, re.I)
+        fkey = re.sub(r"\s+", "", fl).upper()
+        if not (dep_c and arr_c and fl and len(times) >= 2 and len(dates) >= 2):
+            continue
         if fkey in seen_fl:                       # PDF repeats on a 2nd page
             continue
         seen_fl.add(fkey)
-        # NEVER silently drop a segment the document clearly contains (an
-        # ONWARD/RETURN header was found) just because one field failed to
-        # parse — append it with whatever was extracted and let qc_check()
-        # flag the gap for manual review instead of an itinerary going out
-        # with an entire leg missing.
         flights.append({
-            "flight_no": fl or "Not specified",
+            "flight_no": re.sub(r"\s+", " ", fl).strip(),
             "airline": _m(detail, r"Operated by\s*:?\s*([A-Za-z]+)") or "IndiGo",
-            "dep_iata": dep_iata, "arr_iata": arr_iata,
+            "dep_iata": city2iata.get(dep_c, ""), "arr_iata": city2iata.get(arr_c, ""),
             "dep_city": city2disp.get(dep_c, ""), "arr_city": city2disp.get(arr_c, ""),
             "dep_airport": "", "arr_airport": "",
             "terminal": terms[0] if terms else "",
-            "dep_time": times[0] if times else "", "dep_date": to_ddmon(dates[0]) if dates else "",
-            "arr_time": times[1] if len(times) > 1 else "", "arr_date": to_ddmon(dates[1]) if len(dates) > 1 else "",
+            "dep_time": times[0], "dep_date": to_ddmon(dates[0]),
+            "arr_time": times[1], "arr_date": to_ddmon(dates[1]),
             "cabin": default_class,
             "duration": f"{int(dm.group(1))}H {int(dm.group(2)):02d}M" if dm else "",
         })
