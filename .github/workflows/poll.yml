@@ -44,6 +44,7 @@ jobs:
           AKBAR_FOLDER_NAME: ${{ secrets.AKBAR_FOLDER_NAME }}
           NOTIFY_TO: ${{ secrets.NOTIFY_TO }}
           SEARCH_WINDOW: ${{ secrets.SEARCH_WINDOW }}
+          DEBUG_VERBOSE: ${{ vars.DEBUG_VERBOS }}
         run: python main.py
 
       - name: Commit processed log
