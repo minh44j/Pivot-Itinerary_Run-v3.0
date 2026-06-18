@@ -240,22 +240,7 @@
       "drive_link": "https://drive.google.com/file/d/1QchWJHDiHMypTT8R7ZRYSJvknRn0hn83/view?usp=drivesdk",
       "emailed": true
     },
-    {
-      "message_id": "19ed9b9844ea3794",
-      "pnr": "ZGU2WH",
-      "portal": "Akbar Travels",
-      "processed_at": "2026-06-18",
-      "drive_link": "https://drive.google.com/file/d/1wYV1My0z6lFr894CMFqpl_i495F5zYwA/view?usp=drivesdk",
-      "emailed": true
-    },
-    {
-      "message_id": "19ed9bd83d6adf0f",
-      "pnr": "ZGU2WH",
-      "portal": "Akbar Travels",
-      "processed_at": "2026-06-18",
-      "drive_link": "https://drive.google.com/file/d/10s0yOQcuWetFf-yHs1IVVCtoRw_ozYx1/view?usp=drivesdk",
-      "emailed": true
-    },
+   
     {
       "message_id": "19ed9f5d0c666877",
       "pnr": "SJA3WY",
