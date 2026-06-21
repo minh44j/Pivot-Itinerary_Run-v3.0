@@ -620,12 +620,25 @@ def _pegasus_passengers(text, fallback_name):
     )
     section = sec_m.group(1) if sec_m else ""
     blocks = re.split(r"(?m)^\s*([^\n|]+?)\s*\|\s*(?:icon section\s*)?([^\n]+)$", section)
-    passengers = []
+    passengers, seen_names = [], set()
     for i in range(1, len(blocks), 3):
         name = blocks[i].strip()
         body = blocks[i + 2] if i + 2 < len(blocks) else ""
         if not name:
             continue
+        # Pegasus repeats the WHOLE "Passenger Information" block once per
+        # flight leg (Departure + Return) — the section regex above can't
+        # stop between them when the email's only later stop-marker
+        # ("Switch to Saver Plus Package", etc.) falls after the SECOND
+        # occurrence, so both legs' blocks get captured together and the
+        # same passenger is split out twice. Dedupe by name (no ticket
+        # number exists on Pegasus to key on, unlike aJet's dedup-by-ticket
+        # for the same per-segment repetition). Confirmed against PNR
+        # 2553WM (single pax, round trip) on 2026-06-21.
+        key = name.upper()
+        if key in seen_names:
+            continue
+        seen_names.add(key)
         passengers.append({
             "name": name,
             "ticket_no": "Not specified",                                # Pegasus = PNR only
