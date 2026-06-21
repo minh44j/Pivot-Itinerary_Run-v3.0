@@ -639,12 +639,22 @@ def _pegasus_passengers(text, fallback_name):
         if key in seen_names:
             continue
         seen_names.add(key)
+        # Seat: Pegasus's template repeats its "Seat Selection" CTA text
+        # twice on the same line (e.g. "Seat Selection Seat Selection") when
+        # no seat has actually been picked — that is a button label, NOT an
+        # assigned seat code. Showing it as the seat value is misleading (and
+        # the doubled phrase visually wraps into two lines in the narrow SEAT
+        # column). Treat any "Seat Selection" CTA text as no seat assigned ->
+        # "Not specified", same as a genuinely blank seat field. A real seat
+        # code (e.g. "14A", "12C") still passes through untouched.
+        seat_raw = _m(body, r"Seat\s*\n\s*([^\n]+)")
+        seat = "" if re.search(r"Seat\s*Selection", seat_raw, re.I) else seat_raw
         passengers.append({
             "name": name,
             "ticket_no": "Not specified",                                # Pegasus = PNR only
             "cabin_bag": _m(body, r"Cabin\s*Baggage\s*\n\s*([^\n]+)") or "Not specified",
             "checked_bag": _m(body, r"Checked\s*Baggage\s*\n\s*([^\n]+)") or "Not specified",
-            "seat": _m(body, r"Seat\s*\n\s*([^\n]+)") or "",
+            "seat": seat,
         })
     if passengers:
         return passengers
