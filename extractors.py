@@ -45,7 +45,14 @@ def _valid_seat(s):
     Never invents a seat — just filters out non-seat strings down to "".
     """
     s = (s or "").strip()
-    return s if re.fullmatch(r"\d{1,3}[A-Za-z]|[A-Za-z]\d{1,3}", s) else ""
+    # Accept one OR several seat codes (connecting flights assign one seat per
+    # leg, e.g. "28G / 11E"). Split on / , ; or whitespace, keep valid codes,
+    # rejoin with " / ". Returns "" if none valid (filters CTA/button text).
+    if not s:
+        return ""
+    toks = [t for t in re.split(r"[\s,;/]+", s.strip()) if t]
+    good = [t for t in toks if re.fullmatch(r"\d{1,3}[A-Za-z]|[A-Za-z]\d{1,3}", t)]
+    return " / ".join(good)
 
 
 def to_ddmon(s):
@@ -542,12 +549,20 @@ def extract_ajet(src, ctx=None):
     # Ticket No (one line per label, value on the next line — often blank since no
     # seat is selected before ticketing). Capture it instead of hardcoding "" — the
     # group is optional so a missing/different layout still matches the rest.
+    # Anchor each passenger on their OWN name line immediately preceding the
+    # "Total Check-in Baggage" run inside the "Passenger Information" block —
+    # NOT on the "Dear <Name>" greeting, which names only the lead/booker and
+    # therefore captured a single passenger on 2-pax bookings (regression
+    # 2026-06-22, PNR 4B7SDS). Spec: references/portal_field_maps.md §3
+    # "MULTIPLE PASSENGERS". De-dupe by Ticket No (block repeats per segment).
     pax_re = re.compile(
-        r"Dear\s+([A-Z][A-Z'’.\-]+(?:\s+[A-Z][A-Z'’.\-]+)+)"          # full name (2+ caps words)
-        r"[\s\S]*?Total\s*Check-?in\s*Baggage\s*([\s\S]*?)\s*"        # checked baggage
-        r"Cabin\s*Baggage\s*([\s\S]*?)\s*"                            # cabin baggage
-        r"Ticket\s*No\s*(\d{10,})"                                    # ticket number
-        r"(?:\s*Seat\s*\n?\s*([^\n]*))?",                             # seat (often blank)
+        r"(?m)^\s*([A-Z][A-Z'’.\-]+(?:\s+[A-Z][A-Z'’.\-]+)+)\s*\n"   # name line (2+ caps words)
+        r"\s*Total\s*Check-?in\s*Baggage\s*\n?\s*([\s\S]*?)\s*"       # checked baggage
+        r"Cabin\s*Baggage\s*\n?\s*([\s\S]*?)\s*"                      # cabin baggage
+        r"Ticket\s*No\s*\n?\s*(\d{10,})"                             # ticket number
+        r"(?:[ \t]*\n?[ \t]*Seat(?:[ \t]*\n?[ \t]*"                  # "Seat" label
+        r"((?:\d{1,3}[A-Za-z]|[A-Za-z]\d{1,3})"                         # first seat code ONLY
+        r"(?:[ \t]*[/,][ \t]*(?:\d{1,3}[A-Za-z]|[A-Za-z]\d{1,3}))*))?)?",  # extra legs; never eats a name line
     )
     passengers, seen = [], set()
     for mo in pax_re.finditer(text):
@@ -560,7 +575,7 @@ def extract_ajet(src, ctx=None):
             "ticket_no": tkt,
             "checked_bag": re.sub(r"\s+", " ", mo.group(2)).strip() or "Not specified",
             "cabin_bag": re.sub(r"\s+", " ", mo.group(3)).strip() or "Not specified",
-            "seat": _valid_seat(mo.group(5)),
+            "seat": _valid_seat(mo.group(5) or ""),
         })
     if not passengers:
         # Fallback — single passenger from the greeting / contact person.
