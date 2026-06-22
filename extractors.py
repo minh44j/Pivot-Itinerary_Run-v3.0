@@ -8,13 +8,13 @@ Each extractor: fn(src, ctx) -> data dict for generate_itinerary_v3.build_pdf.
 ctx may carry {"date": "DD Mon YYYY"} (email received date) for booked_on fallback.
 
 Design decisions (locked with Minh, 2026-06-08/09):
-  * Alhind is parsed by HTML TABLE CELLS (passenger table + travel-details table),
-    not brittle line-regex — this is the reliable source (cleaner than the PDF).
-  * Baggage strings are captured RAW; the generator's _norm_bag() formats them
-    (weight-only, "7kg + 3kg", "1Pcs", etc.).
-  * Journey type is ONE-WAY or ROUND TRIP only (no MULTI-CITY / no "connecting").
-  * Ticket number = the Ticket-No cell verbatim (real number when present, else
-    the portal placeholder like "F8VJTS1").
+* Alhind is parsed by HTML TABLE CELLS (passenger table + travel-details table),
+  not brittle line-regex — this is the reliable source (cleaner than the PDF).
+* Baggage strings are captured RAW; the generator's _norm_bag() formats them
+  (weight-only, "7kg + 3kg", "1Pcs", etc.).
+* Journey type is ONE-WAY or ROUND TRIP only (no MULTI-CITY / no "connecting").
+* Ticket number = the Ticket-No cell verbatim (real number when present, else
+  the portal placeholder like "F8VJTS1").
 """
 import re
 import html as _htmllib
@@ -26,17 +26,14 @@ _MON_IDX = {m.lower(): i for i, m in enumerate(MONTHS)}
 _FULLMON = {"january": 0, "february": 1, "march": 2, "april": 3, "may": 4, "june": 5,
             "july": 6, "august": 7, "september": 8, "october": 9, "november": 10, "december": 11}
 
-
 # ── shared helpers ────────────────────────────────────────────────────────
 def _m(text, pattern, group=1, flags=re.I):
     mo = re.search(pattern, text or "", flags)
     return mo.group(group).strip() if mo else ""
 
-
 def _pad2(n):
     n = str(n)
     return n if len(n) >= 2 else "0" + n
-
 
 def _valid_seat(s):
     """Accept only a plausible seat code (e.g. '8A', '14C', 'A8'); reject CTA text,
@@ -54,37 +51,34 @@ def _valid_seat(s):
     good = [t for t in toks if re.fullmatch(r"\d{1,3}[A-Za-z]|[A-Za-z]\d{1,3}", t)]
     return " / ".join(good)
 
-
 def to_ddmon(s):
     """Normalise many date spellings to 'DD Mon YYYY'."""
     s = (s or "").strip()
-    m = re.search(r"(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})", s)        # 02 July 2026
+    m = re.search(r"(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})", s)  # 02 July 2026
     if m:
         mon = m.group(2).lower()
         idx = _FULLMON.get(mon, _MON_IDX.get(mon[:3]))
         if idx is not None:
             return f"{_pad2(m.group(1))} {MONTHS[idx]} {m.group(3)}"
-    m = re.search(r"(\d{1,2})-([A-Za-z]{3})-(\d{4})", s)          # 06-Jun-2026
+    m = re.search(r"(\d{1,2})-([A-Za-z]{3})-(\d{4})", s)  # 06-Jun-2026
     if m:
         return f"{_pad2(m.group(1))} {m.group(2).title()} {m.group(3)}"
-    m = re.search(r"(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})", s)    # 06.06.2026
+    m = re.search(r"(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})", s)  # 06.06.2026
     if m:
         return f"{_pad2(m.group(1))} {MONTHS[int(m.group(2))-1]} {m.group(3)}"
-    m = re.search(r"(\d{4})-(\d{1,2})-(\d{1,2})", s)              # 2026-06-06
+    m = re.search(r"(\d{4})-(\d{1,2})-(\d{1,2})", s)  # 2026-06-06
     if m:
         return f"{_pad2(m.group(3))} {MONTHS[int(m.group(2))-1]} {m.group(1)}"
-    m = re.search(r"(\d{1,2})\s+([A-Za-z]{3})\s+(\d{2})\b", s)    # 20 Jun 26  (2-digit year)
+    m = re.search(r"(\d{1,2})\s+([A-Za-z]{3})\s+(\d{2})\b", s)  # 20 Jun 26 (2-digit year)
     if m:
         idx = _MON_IDX.get(m.group(2).lower())
         if idx is not None:
             return f"{_pad2(m.group(1))} {MONTHS[idx]} 20{m.group(3)}"
     return s
 
-
 def _norm_dur(s):
     m = re.search(r"(\d+)\s*[Hh]\s*(\d+)\s*[Mm]?", s or "")
     return f"{int(m.group(1))}H {int(m.group(2)):02d}M" if m else (s or "").strip()
-
 
 def _parse_dt(date_str, time_str):
     m = re.search(r"(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})", date_str or "")
@@ -92,8 +86,7 @@ def _parse_dt(date_str, time_str):
     if not m or not t:
         return None
     return datetime(int(m.group(3)), _MON_IDX[m.group(2).lower()] + 1, int(m.group(1)),
-                    int(t.group(1)), int(t.group(2)))
-
+                     int(t.group(1)), int(t.group(2)))
 
 def _diff_hm(d1, t1, d2, t2):
     a, b = _parse_dt(d1, t1), _parse_dt(d2, t2)
@@ -104,7 +97,6 @@ def _diff_hm(d1, t1, d2, t2):
         mins += 24 * 60
     return f"{mins // 60}H {mins % 60:02d}M"
 
-
 def _norm_flight(s):
     """'VF - 610' -> 'VF 610'; '9P - 9P711' -> '9P711'; 'G9 - G9557' -> 'G9557'."""
     parts = [p.strip() for p in re.split(r"\s*-\s*", (s or "").strip(), maxsplit=1)]
@@ -113,10 +105,8 @@ def _norm_flight(s):
         return num if num.upper().startswith(carrier.upper()) else f"{carrier} {num}"
     return (s or "").strip()
 
-
 def _flight_key(s):
     return re.sub(r"\s*-\s*", "-", (s or "").strip()).upper()
-
 
 def fix_pegasus_words(text):
     """Fix Pegasus 'i'->'6' glitch in plain English words ONLY (never codes/names/IATA)."""
@@ -127,20 +117,16 @@ def fix_pegasus_words(text):
         return w.replace("6", "i")
     return re.sub(r"[A-Za-z]+6[A-Za-z0-9]*", repl, text or "")
 
-
 def _city(block):
     return re.split(r"\s*-\s*", (block or "").strip())[0].strip()
-
 
 def _airport(block):
     parts = re.split(r"\s*-\s*", (block or "").strip(), maxsplit=1)
     ap = parts[1] if len(parts) > 1 else ""
     return re.sub(r"\s*Terminal\s*:?.*$", "", ap, flags=re.I).strip()
 
-
 def _terminal(block):
     return _m(block or "", r"Terminal\s*:?\s*([A-Za-z0-9]+)")
-
 
 def _html_to_text(h):
     h = re.sub(r"(?is)<(script|style|head).*?</\1>", " ", h or "")
@@ -150,7 +136,6 @@ def _html_to_text(h):
     h = _htmllib.unescape(h)
     h = re.sub(r"[ \t\xa0]+", " ", h)
     return "\n".join(ln.strip() for ln in h.splitlines() if ln.strip())
-
 
 def _cells(tr_html):
     out = []
@@ -162,15 +147,12 @@ def _cells(tr_html):
         out.append(re.sub(r"\s+", " ", c).strip())
     return out
 
-
 # ── journey-type + grouping (ONE-WAY / ROUND TRIP only) ────────────────────
 def _is_return(flights):
     return len(flights) > 1 and flights[-1].get("arr_iata") == flights[0].get("dep_iata")
 
-
 def journey_label(flights):
     return "Round Trip" if _is_return(flights) else "One-Way"
-
 
 def _connection_gaps(flights):
     gaps = []
@@ -183,7 +165,6 @@ def _connection_gaps(flights):
         gaps.append((i, mins))
     return gaps
 
-
 def _layovers_for(flights):
     out = []
     for i in range(len(flights) - 1):
@@ -192,10 +173,9 @@ def _layovers_for(flights):
             out.append(None)
             continue
         out.append({"airport": a["arr_iata"],
-                    "duration": _diff_hm(a.get("arr_date"), a.get("arr_time"),
-                                         b.get("dep_date"), b.get("dep_time"))})
+                     "duration": _diff_hm(a.get("arr_date"), a.get("arr_time"),
+                                           b.get("dep_date"), b.get("dep_time"))})
     return out
-
 
 def group_segments(flights):
     if not flights:
@@ -212,7 +192,6 @@ def group_segments(flights):
         {"type": "INBOUND", "flights": ret, "layovers": _layovers_for(ret)},
     ]
 
-
 def _mark_next_day(flights):
     """Mark ' (+1)' on arrivals that land the next calendar day; advance arr_date
     when the source only gave a single (departure) date."""
@@ -224,12 +203,11 @@ def _mark_next_day(flights):
         if a and b:
             if b.date() > a.date():
                 f["arr_time"] = f["arr_time"] + " (+1)"
-            elif b < a:                                  # same date, earlier time => overnight
+            elif b < a:  # same date, earlier time => overnight
                 f["arr_time"] = f["arr_time"] + " (+1)"
                 f["arr_date"] = (a + timedelta(days=1)).strftime("%d %b %Y")
         elif f.get("dep_date") == f.get("arr_date") and (f.get("arr_time") or "") < (f.get("dep_time") or ""):
             f["arr_time"] = f["arr_time"] + " (+1)"
-
 
 def _finalize(d, ctx=None):
     d.setdefault("status", "Confirmed")
@@ -242,11 +220,10 @@ def _finalize(d, ctx=None):
     d["journey_type"] = journey_label(flights)
     return d
 
-
 # ═════════════════════════════════════════════════════════════════════════
 # 1. ALHIND — HTML email. Parse the two tables by CELLS.
-#    Passenger table:  <tbody id="seg_dt">  (name, segment IATA, flight no,
-#                       ticket, cabin/checked baggage, class)
+#    Passenger table: <tbody id="seg_dt"> (name, segment IATA, flight no,
+#    ticket, cabin/checked baggage, class)
 #    Travel-details table: 7-col rows (date, flight no, origin, dest, dep, arr, op)
 # ═════════════════════════════════════════════════════════════════════════
 def extract_alhind(html, ctx=None):
@@ -260,7 +237,7 @@ def extract_alhind(html, ctx=None):
 
     # ── passenger table ──
     pax_tbody = _m(html, r'<tbody[^>]*id="seg_dt"[^>]*>(.*?)</tbody>', 1, re.S | re.I)
-    passengers, seg_flightseq = [], []      # seg_flightseq: ordered (key, dep_iata, arr_iata, class)
+    passengers, seg_flightseq = [], []  # seg_flightseq: ordered (key, dep_iata, arr_iata, class)
     seg_seen = set()
     cur = None
     name_re = re.compile(r"^(?:Mr|Mrs|Ms|Mstr|Master|Miss|Dr)\.?\s+[A-Z]", re.I)
@@ -312,10 +289,10 @@ def extract_alhind(html, ctx=None):
         if key not in seg_seen:
             seg_seen.add(key)
             seg_flightseq.append((key, dep_i.strip(), arr_i.strip(),
-                                  klass.title() if klass else default_class))
+                                   klass.title() if klass else default_class))
     iata_by_flight = {k: (di, ai, cl) for (k, di, ai, cl) in seg_flightseq}
     d["passengers"] = passengers or [{"name": "Not specified", "ticket_no": "Not specified",
-                                      "cabin_bag": "Not specified", "checked_bag": "Not specified", "seat": ""}]
+                                        "cabin_bag": "Not specified", "checked_bag": "Not specified", "seat": ""}]
 
     # ── travel-details table (first <tbody> after the 'Travel Details' heading) ──
     tdi = html.find("Travel")
@@ -329,7 +306,7 @@ def extract_alhind(html, ctx=None):
             continue
         # identify columns by content (robust to minor shifts)
         flt_cell = next((c for c in cells if re.search(r"[A-Z0-9]{1,3}\s*-\s*[A-Z0-9]{2,5}", c)
-                         and re.search(r"\d", c)), "")
+                          and re.search(r"\d", c)), "")
         key = _flight_key(flt_cell)
         di, ai, cl = iata_by_flight.get(key, ("", "", default_class))
         # city/airport blocks = cells containing ' - '
@@ -359,7 +336,6 @@ def extract_alhind(html, ctx=None):
     d["flights"] = flights
     return _finalize(d, ctx)
 
-
 # ═════════════════════════════════════════════════════════════════════════
 # 2. AKBAR TRAVELS — Drive PDF text (best-effort; tune with a real PDF)
 # ═════════════════════════════════════════════════════════════════════════
@@ -384,7 +360,30 @@ def extract_akbar(pdf_text, ctx=None):
     pattern, and (c) never silently dropping a segment the document clearly
     contains — an incomplete segment is still appended so qc_check() flags
     it for manual review instead of an incomplete itinerary going out as if
-    it were complete."""
+    it were complete.
+
+    2026-06-22 fix (Ref AS260990906, Saudia "Business Class" layout): two
+    further bugs found on this PDF format —
+    (1) the city↔IATA bracket regex didn't allow hyphens, so "Al-Baha [ABT]"
+        was captured as just "Baha", breaking the route-header lookup for
+        any hyphenated city and silently producing an empty dep_iata/arr_iata
+        for BOTH legs. Fixed by allowing hyphen/apostrophe in the city-name
+        character class.
+    (2) this layout's "Flight Number" label sits in a multi-column header
+        row (From/Departure/Stops/To/Arrival all interposed) before the
+        actual code, so the existing label-adjacent regex never matched.
+        Added a new fallback anchored on the code immediately preceding its
+        own "Operated by:" line (e.g. "SV 1707 \nOperated by:Saudi Airline").
+    (3) the extractor was pre-filling "flight_no": fl or "Not specified"
+        BEFORE qc_check ran — "Not specified" is truthy, so a genuinely
+        failed flight-number extraction silently passed the "missing
+        flight number" QC gate and shipped as "FLIGHT NO: N/A" on a
+        CONFIRMED document instead of getting flagged (this is what
+        happened to Ref AS260990720 / RIW18E on 2026-06-22). Fixed by
+        leaving flight_no as the raw (possibly empty) value so qc_check's
+        existing gate — see its own docstring/comment below — can do the
+        job it was already designed to do.
+    """
     if not pdf_text:
         raise ValueError("Akbar source document not found / unreadable")
     t = pdf_text
@@ -397,6 +396,7 @@ def extract_akbar(pdf_text, ctx=None):
     d["booked_on"] = to_ddmon(mo.group(2)) if mo else to_ddmon(_m(t, r"Date of Booking\s*:?\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4})"))
     d["status"] = "Confirmed" if re.search(r"\bCONFIRMED\b", t, re.I) else ""
     default_class = (_m(t, r"\b(Economy|Business|First|Premium\s*Economy)\b") or "Economy").title()
+
     # Baggage strings vary ('Adult 07 Kg' OR 'Adult 1Pc : 1 BAG UP TO 7 KG' OR the
     # Ticket-Copy layout's 'Cabin Baggage' / 'Check-In Baggage' labelled columns).
     # Capture the raw allowance line; the generator's _norm_bag pulls the kg out.
@@ -407,12 +407,22 @@ def extract_akbar(pdf_text, ctx=None):
                or _m(t, r"Baggage Allowance\s*:?\s*([^\n]+)")
                or _m(t, r"Adult\s*-\s*(\d+\s*K[gG])") or "Not specified")
 
+    # Name can be alone at end-of-line (older layout) OR share a line with the
+    # ticket number — "Code Name Ticket No." renders as one text line per
+    # passenger, e.g. "Mr. OSMAN SAHIN 0652400185383" (2026-06-22 fix, Ref
+    # AS260990906). The lookahead accepts either a trailing 10+ digit ticket
+    # number or true end-of-line, so both layouts match without the name
+    # ever swallowing the digits (the character class has no \d in it).
     names, seen = [], set()
-    for nmo in re.finditer(r"(?m)\b((?:Mr|Mrs|Ms|Mstr|Master|Miss|Dr)\.?\s+[A-Z][A-Z .'\-]+?)\s*$", t):
+    for nmo in re.finditer(
+        r"(?m)\b((?:Mr|Mrs|Ms|Mstr|Master|Miss|Dr)\.?\s+[A-Z][A-Z .'\-]+?)"
+        r"(?=\s+\d{10,}\s*$|\s*$)", t,
+    ):
         nm = re.sub(r"\s+", " ", nmo.group(1)).strip()
         if nm.upper() not in seen:
             seen.add(nm.upper())
             names.append(nm)
+
     # Ticket numbers: 'EXKT <num>' OR a plain 10+ digit number in the Traveler
     # section (Akbar's 'Ticket No.' column). Bound to that section to avoid
     # picking up fare/footer numbers.
@@ -420,10 +430,10 @@ def extract_akbar(pdf_text, ctx=None):
     trav = trav[:trav.find("Carry-On")] if "Carry-On" in trav else trav
     tickets = re.findall(r"EXKT\s*([0-9]{10,})", trav) or re.findall(r"\b(\d{10,})\b", trav)
     d["passengers"] = [{"name": n, "ticket_no": tickets[i] if i < len(tickets) else "Not specified",
-                        "cabin_bag": cabin, "checked_bag": checked, "seat": ""}
-                       for i, n in enumerate(names)] \
+                          "cabin_bag": cabin, "checked_bag": checked, "seat": ""}
+                         for i, n in enumerate(names)] \
         or [{"name": "Not specified", "ticket_no": "Not specified",
-             "cabin_bag": cabin, "checked_bag": checked}]
+              "cabin_bag": cabin, "checked_bag": checked}]
 
     # city -> IATA map. The text before '[IATA]' often carries airport/aircraft
     # words ("Indira Gandhi International Gorakhpur [GOP]"); strip those JUNK
@@ -435,7 +445,10 @@ def extract_akbar(pdf_text, ctx=None):
             "terminal", "non", "stop", "operated", "by", "india", "saudi", "arabia",
             "turkiye", "türkiye", "gandhinagar"}
     city2iata, city2disp = {}, {}
-    for cty, code in re.findall(r"([A-Za-z][A-Za-z .]+?)\s*\[([A-Z]{3})\]", t):
+    # Allow hyphen/apostrophe in city names (e.g. "Al-Baha", "Sana'a") — the old
+    # class dropped everything before the hyphen, capturing "Baha" instead of
+    # "Al-Baha" and breaking the route-header lookup for that city (2026-06-22 fix).
+    for cty, code in re.findall(r"([A-Za-z][A-Za-z .\-']+?)\s*\[([A-Z]{3})\]", t):
         words = [w for w in cty.split() if w.lower() not in JUNK]
         if not words:
             continue
@@ -444,6 +457,7 @@ def extract_akbar(pdf_text, ctx=None):
         city2iata[k] = code
         city2disp[k] = name
     known = sorted(city2iata.keys(), key=len, reverse=True)
+
     MON = r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)"
     MONTH_WORDS = {"jan", "feb", "mar", "apr", "may", "jun",
                    "jul", "aug", "sep", "oct", "nov", "dec"}
@@ -468,9 +482,20 @@ def extract_akbar(pdf_text, ctx=None):
         return None, None
 
     def _flight_no_for(detail):
-        # Primary: Ticket-Copy layout labels the value explicitly.
+        # Primary: Ticket-Copy layout labels the value explicitly, code right
+        # after the "Flight Number" label.
         cand = _m(detail, r"Flight\s*Number\s*:?\s*\n?\s*([0-9]?[A-Z]{1,2}\s?-?\s?\d{2,4})")
-        # Fallback: legacy Drive layout 'FlightNo (Aircraft)'. Case-SENSITIVE
+        # Fallback A: "table header first" layout (e.g. Saudia Business Class
+        # tickets) — "Flight Number" sits in a multi-column header row,
+        # separated from the actual code by the rest of that row's labels
+        # ("From (Terminal)", "Departure date & time", etc.), so the
+        # single-newline primary pattern above never reaches it. In this
+        # layout the code instead sits immediately before its own
+        # "Operated by:" line, e.g. "SV 1707 \nOperated by:Saudi\nAirline".
+        # Confirmed against PDF Ref AS260990906 (2026-06-22).
+        if not cand:
+            cand = _m(detail, r"\b(\d?[A-Z]{1,2}\s?\d{2,4})\s*\n\s*Operated\s*by\s*:", flags=0)
+        # Fallback B: legacy Drive layout 'FlightNo (Aircraft)'. Case-SENSITIVE
         # (flags=0) so a lowercase date fragment (e.g. 'ul 26' out of 'Jul
         # 2026') can never match — that case-insensitive match was the root
         # cause of the corrupted flight number in the 2026-06-18 bug.
@@ -509,7 +534,7 @@ def extract_akbar(pdf_text, ctx=None):
         dep_iata, arr_iata = city2iata.get(dep_c, ""), city2iata.get(arr_c, "")
         fkey = (re.sub(r"\s+", "", fl).upper() if fl
                 else f"{dep_iata}-{arr_iata}-{times[0] if times else i}")
-        if fkey in seen_fl:                       # PDF repeats on a 2nd page
+        if fkey in seen_fl:  # PDF repeats on a 2nd page
             continue
         seen_fl.add(fkey)
         # NEVER silently drop a segment the document clearly contains (an
@@ -518,7 +543,12 @@ def extract_akbar(pdf_text, ctx=None):
         # flag the gap for manual review instead of an itinerary going out
         # with an entire leg missing.
         flights.append({
-            "flight_no": fl or "Not specified",
+            # Leave as the raw (possibly empty) value — do NOT pre-fill
+            # "Not specified" here. That string is truthy and would silently
+            # pass qc_check's "missing flight number" gate, letting an
+            # incomplete segment ship as if it were complete (2026-06-22 fix
+            # — see function docstring above).
+            "flight_no": fl,
             "airline": _m(detail, r"Operated by\s*:?\s*([A-Za-z]+)") or "IndiGo",
             "dep_iata": dep_iata, "arr_iata": arr_iata,
             "dep_city": city2disp.get(dep_c, ""), "arr_city": city2disp.get(arr_c, ""),
@@ -532,7 +562,6 @@ def extract_akbar(pdf_text, ctx=None):
     d["flights"] = flights
     return _finalize(d, ctx)
 
-
 # ═════════════════════════════════════════════════════════════════════════
 # 3. aJet — HTML email; one block per segment
 # ═════════════════════════════════════════════════════════════════════════
@@ -541,6 +570,7 @@ def extract_ajet(src, ctx=None):
     d = {"portal": "aJet"}
     d["pnr"] = _m(text, r"Reservation\s*Code\s*\n?\s*([A-Z0-9]{5,7})")
     d["booked_on"] = to_ddmon(_m(text, r"Transaction\s*Date\s*\n?\s*([0-9.\-/]+)"))
+
     # Passengers — the "Passenger Information" block has one row per passenger
     # (name -> check-in baggage -> cabin baggage -> Ticket No). aJet repeats this
     # block once per flight segment, so de-duplicate by ticket number. Anchoring on
@@ -556,12 +586,12 @@ def extract_ajet(src, ctx=None):
     # 2026-06-22, PNR 4B7SDS). Spec: references/portal_field_maps.md §3
     # "MULTIPLE PASSENGERS". De-dupe by Ticket No (block repeats per segment).
     pax_re = re.compile(
-        r"(?m)^\s*([A-Z][A-Z'’.\-]+(?:\s+[A-Z][A-Z'’.\-]+)+)\s*\n"   # name line (2+ caps words)
-        r"\s*Total\s*Check-?in\s*Baggage\s*\n?\s*([\s\S]*?)\s*"       # checked baggage
-        r"Cabin\s*Baggage\s*\n?\s*([\s\S]*?)\s*"                      # cabin baggage
-        r"Ticket\s*No\s*\n?\s*(\d{10,})"                             # ticket number
+        r"(?m)^\s*([A-Z][A-Z'’.\-]+(?:\s+[A-Z][A-Z'’.\-]+)+)\s*\n"  # name line (2+ caps words)
+        r"\s*Total\s*Check-?in\s*Baggage\s*\n?\s*([\s\S]*?)\s*"      # checked baggage
+        r"Cabin\s*Baggage\s*\n?\s*([\s\S]*?)\s*"                     # cabin baggage
+        r"Ticket\s*No\s*\n?\s*(\d{10,})"                              # ticket number
         r"(?:[ \t]*\n?[ \t]*Seat(?:[ \t]*\n?[ \t]*"                  # "Seat" label
-        r"((?:\d{1,3}[A-Za-z]|[A-Za-z]\d{1,3})"                         # first seat code ONLY
+        r"((?:\d{1,3}[A-Za-z]|[A-Za-z]\d{1,3})"                      # first seat code ONLY
         r"(?:[ \t]*[/,][ \t]*(?:\d{1,3}[A-Za-z]|[A-Za-z]\d{1,3}))*))?)?",  # extra legs; never eats a name line
     )
     passengers, seen = [], set()
@@ -589,6 +619,7 @@ def extract_ajet(src, ctx=None):
             "seat": _valid_seat(_m(text, r"Seat\s*\n?\s*([^\n]*)")),
         }]
     d["passengers"] = passengers
+
     flights = []
     seg_re = re.compile(
         r"(\d{1,2}\s+[A-Za-z]+\s+\d{4})\s*\n\s*([^\n]+?)\s*\n\s*([A-Z]{3})\s*\n\s*(\d{1,2}:\d{2})\s*\n\s*"
@@ -607,7 +638,6 @@ def extract_ajet(src, ctx=None):
         })
     d["flights"] = flights
     return _finalize(d, ctx)
-
 
 # ═════════════════════════════════════════════════════════════════════════
 # 4. PEGASUS — HTML email; handles BOTH simple and connecting layouts.
@@ -633,22 +663,21 @@ def _pegasus_section_flights(sec, sec_date):
             })
     return flights
 
-
 def _pegasus_section_date(sec):
     return to_ddmon(_m(sec, r"Flight\s*Date:\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4})")
-                    or _m(sec, r"(?m)^\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4})\s*$"))
-
+                     or _m(sec, r"(?m)^\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4})\s*$"))
 
 def _pegasus_passengers(text, fallback_name):
     """Pegasus emails list every passenger under a 'Passenger Information'
     heading as repeating blocks:
-        <Name>   |   icon section   <Fare Package>
-        icon  Seat
+        <Name> | icon section <Fare Package>
+        icon Seat
         <seat>
-        icon  Cabin Baggage
+        icon Cabin Baggage
         <cabin baggage>
-        icon  Checked Baggage
+        icon Checked Baggage
         <checked baggage>
+
     The 'Dear <Name>,' salutation only ever names the lead passenger, so for
     multi-passenger bookings (e.g. PNR 24YWFW: Sedat Caglayan, Mehmet Gullu,
     Fatih Gog) it must NOT be used as the only source. Confirmed against a
@@ -689,7 +718,7 @@ def _pegasus_passengers(text, fallback_name):
         seat = _valid_seat(_m(body, r"Seat\s*\n\s*([^\n]+)"))
         passengers.append({
             "name": name,
-            "ticket_no": "Not specified",                                # Pegasus = PNR only
+            "ticket_no": "Not specified",  # Pegasus = PNR only
             "cabin_bag": _m(body, r"Cabin\s*Baggage\s*\n\s*([^\n]+)") or "Not specified",
             "checked_bag": _m(body, r"Checked\s*Baggage\s*\n\s*([^\n]+)") or "Not specified",
             "seat": seat,
@@ -705,16 +734,16 @@ def _pegasus_passengers(text, fallback_name):
         "seat": "",
     }]
 
-
 def extract_pegasus(src, ctx=None):
     text = fix_pegasus_words(_html_to_text(src))
     raw = _html_to_text(src)
     d = {"portal": "Pegasus"}
-    d["pnr"] = _m(raw, r"PNR\s*No\s*:?\s*\n?\s*([A-Z0-9]{5,7})")     # raw — never de-glitch codes
+    d["pnr"] = _m(raw, r"PNR\s*No\s*:?\s*\n?\s*([A-Z0-9]{5,7})")  # raw — never de-glitch codes
     d["status"] = "Confirmed" if re.search(r"your booking is confirmed", text, re.I) else ""
     d["booked_on"] = ""
     name = _m(text, r"Dear\s+([A-Z][A-Za-z' .\-]+?)\s*,")
     d["passengers"] = _pegasus_passengers(text, name)
+
     parts = re.split(r"Return\s+Flight\s+Information", text, maxsplit=1, flags=re.I)
     out_sec = parts[0]
     ret_sec = parts[1] if len(parts) > 1 else ""
@@ -723,7 +752,6 @@ def extract_pegasus(src, ctx=None):
         flights += _pegasus_section_flights(ret_sec, _pegasus_section_date(ret_sec))
     d["flights"] = flights
     return _finalize(d, ctx)
-
 
 # ── generic segment parser (Akbar PDF fallback) ───────────────────────────
 def _parse_generic_segments(text):
@@ -739,7 +767,6 @@ def _parse_generic_segments(text):
             "dep_city": "", "arr_city": "", "dep_airport": "", "arr_airport": "", "terminal": "", "duration": "",
         })
     return flights
-
 
 # ── QC gate (Project Instructions §7/§12) — flag, don't guess ──────────────
 def qc_check(d):
@@ -762,12 +789,11 @@ def qc_check(d):
                 return "A segment is missing flight number / airport / time"
     return None
 
-
 # ── registry ───────────────────────────────────────────────────────────────
 PORTALS = [
-    {"name": "Alhind",        "from": "alhind@alhindsanchar.com",   "subject": "Air Ticket",                                      "source": "body",      "fn": extract_alhind},
-    {"name": "Akbar Travels", "from": "sanoreply@akbartravels.com", "subject": "Booking Success",                                 "source": "drive_pdf", "fn": extract_akbar},
-    {"name": "Akbar Travels", "from": "sanoreply@akbartravels.com", "subject": "Ticket Copy",                                    "source": "drive_pdf", "fn": extract_akbar},
-    {"name": "aJet",          "from": "onlineticket@mail.ajet.com", "subject": "Ticket information",                              "source": "body",      "fn": extract_ajet},
-    {"name": "Pegasus",       "from": "pegasus@flypgs.com",         "subject": "Your booking is confirmed! View your ticket now", "source": "body",      "fn": extract_pegasus},
+    {"name": "Alhind", "from": "alhind@alhindsanchar.com", "subject": "Air Ticket", "source": "body", "fn": extract_alhind},
+    {"name": "Akbar Travels", "from": "sanoreply@akbartravels.com", "subject": "Booking Success", "source": "drive_pdf", "fn": extract_akbar},
+    {"name": "Akbar Travels", "from": "sanoreply@akbartravels.com", "subject": "Ticket Copy", "source": "drive_pdf", "fn": extract_akbar},
+    {"name": "aJet", "from": "onlineticket@mail.ajet.com", "subject": "Ticket information", "source": "body", "fn": extract_ajet},
+    {"name": "Pegasus", "from": "pegasus@flypgs.com", "subject": "Your booking is confirmed! View your ticket now", "source": "body", "fn": extract_pegasus},
 ]
