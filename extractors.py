@@ -38,6 +38,16 @@ def _pad2(n):
     return n if len(n) >= 2 else "0" + n
 
 
+def _valid_seat(s):
+    """Accept only a plausible seat code (e.g. '8A', '14C', 'A8'); reject CTA text,
+    section headings, or other cell content a layout-position/regex slip could pick
+    up (e.g. 'Seat Selection', 'Flight and Passenger Information', 'Economy').
+    Never invents a seat — just filters out non-seat strings down to "".
+    """
+    s = (s or "").strip()
+    return s if re.fullmatch(r"\d{1,3}[A-Za-z]|[A-Za-z]\d{1,3}", s) else ""
+
+
 def to_ddmon(s):
     """Normalise many date spellings to 'DD Mon YYYY'."""
     s = (s or "").strip()
@@ -275,6 +285,17 @@ def extract_alhind(html, ctx=None):
                 checked = cells[j]
                 break
         klass = next((c for c in cells if re.fullmatch(r"(?i)economy|business|first|premium\s*economy", c)), "")
+        # Seat: column order from Segment is Seg(si)·Flight(si+1)·Ticket(si+2)·FFNo
+        # (si+3)·Cabin(si+4)·Checkin(si+5)·ExtraCheckin(si+6)·ExtraCabin(si+7)·Meal
+        # (si+8)·Seat(si+9)·Class(si+10)·Status(si+11) — confirmed against real
+        # Alhind source (PNR 8RKBMK, 21 Jun 2026: seat 8A landed exactly at si+9).
+        # ONLY trust this offset on the passenger's first/name row — continuation
+        # segment rows (return leg, connections) drop rowspan'd columns (FFNo, Meal,
+        # Seat) so si+9 there lands on Class/Status instead and must NOT be read.
+        if nm and si + 9 < len(cells):
+            seat = _valid_seat(cells[si + 9])
+            if cur and seat:
+                cur["seat"] = seat
         if cur and cur["ticket_no"] == "Not specified":
             cur["ticket_no"] = tkt or "Not specified"
             cur["cabin_bag"] = cabin or "Not specified"
@@ -287,7 +308,7 @@ def extract_alhind(html, ctx=None):
                                   klass.title() if klass else default_class))
     iata_by_flight = {k: (di, ai, cl) for (k, di, ai, cl) in seg_flightseq}
     d["passengers"] = passengers or [{"name": "Not specified", "ticket_no": "Not specified",
-                                      "cabin_bag": "Not specified", "checked_bag": "Not specified"}]
+                                      "cabin_bag": "Not specified", "checked_bag": "Not specified", "seat": ""}]
 
     # ── travel-details table (first <tbody> after the 'Travel Details' heading) ──
     tdi = html.find("Travel")
@@ -517,11 +538,16 @@ def extract_ajet(src, ctx=None):
     # (name -> check-in baggage -> cabin baggage -> Ticket No). aJet repeats this
     # block once per flight segment, so de-duplicate by ticket number. Anchoring on
     # the full Name…Baggage…Ticket-No run captures EVERY passenger (not just one).
+    # Seat: aJet's "Passenger Information" block carries a "Seat" label right after
+    # Ticket No (one line per label, value on the next line — often blank since no
+    # seat is selected before ticketing). Capture it instead of hardcoding "" — the
+    # group is optional so a missing/different layout still matches the rest.
     pax_re = re.compile(
         r"Dear\s+([A-Z][A-Z'’.\-]+(?:\s+[A-Z][A-Z'’.\-]+)+)"          # full name (2+ caps words)
         r"[\s\S]*?Total\s*Check-?in\s*Baggage\s*([\s\S]*?)\s*"        # checked baggage
         r"Cabin\s*Baggage\s*([\s\S]*?)\s*"                            # cabin baggage
-        r"Ticket\s*No\s*(\d{10,})",                                   # ticket number
+        r"Ticket\s*No\s*(\d{10,})"                                    # ticket number
+        r"(?:\s*Seat\s*\n?\s*([^\n]*))?",                             # seat (often blank)
     )
     passengers, seen = [], set()
     for mo in pax_re.finditer(text):
@@ -534,7 +560,7 @@ def extract_ajet(src, ctx=None):
             "ticket_no": tkt,
             "checked_bag": re.sub(r"\s+", " ", mo.group(2)).strip() or "Not specified",
             "cabin_bag": re.sub(r"\s+", " ", mo.group(3)).strip() or "Not specified",
-            "seat": "",
+            "seat": _valid_seat(mo.group(5)),
         })
     if not passengers:
         # Fallback — single passenger from the greeting / contact person.
@@ -545,7 +571,7 @@ def extract_ajet(src, ctx=None):
             "ticket_no": _m(text, r"Ticket\s*No\s*\n?\s*([0-9]{10,})") or "Not specified",
             "cabin_bag": _m(text, r"Cabin\s*Baggage\s*\n?\s*([^\n]+)") or "Not specified",
             "checked_bag": _m(text, r"(?:Total\s*)?Check-?in\s*Baggage\s*\n?\s*([^\n]+)") or "Not specified",
-            "seat": "",
+            "seat": _valid_seat(_m(text, r"Seat\s*\n?\s*([^\n]*)")),
         }]
     d["passengers"] = passengers
     flights = []
@@ -642,13 +668,10 @@ def _pegasus_passengers(text, fallback_name):
         # Seat: Pegasus's template repeats its "Seat Selection" CTA text
         # twice on the same line (e.g. "Seat Selection Seat Selection") when
         # no seat has actually been picked — that is a button label, NOT an
-        # assigned seat code. Showing it as the seat value is misleading (and
-        # the doubled phrase visually wraps into two lines in the narrow SEAT
-        # column). Treat any "Seat Selection" CTA text as no seat assigned ->
-        # "Not specified", same as a genuinely blank seat field. A real seat
+        # assigned seat code. _valid_seat() filters this (and any other
+        # non-seat text) down to "" -> displays as Not specified. A real seat
         # code (e.g. "14A", "12C") still passes through untouched.
-        seat_raw = _m(body, r"Seat\s*\n\s*([^\n]+)")
-        seat = "" if re.search(r"Seat\s*Selection", seat_raw, re.I) else seat_raw
+        seat = _valid_seat(_m(body, r"Seat\s*\n\s*([^\n]+)"))
         passengers.append({
             "name": name,
             "ticket_no": "Not specified",                                # Pegasus = PNR only
