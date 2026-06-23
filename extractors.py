@@ -489,10 +489,10 @@ def extract_akbar(pdf_text, ctx=None):
         # "To (Terminal)", "Arrival date & time") BEFORE the actual code
         # ("SV 1707") appears — too many intervening lines for the primary
         # pattern's single optional newline. The code itself reliably sits
-        # on its own line immediately before that segment's "Operated by:"
-        # line, so anchor on that instead.
+        # at the START of a line immediately before that segment's
+        # "Operated by:" line, so anchor on that instead.
         if not cand:
-            m = re.search(r"\n\s*([0-9]?[A-Z]{1,2}\s?-?\s?\d{2,4})\s*\n(?:[^\n]*\n){0,6}?\s*Operated\s*by",
+            m = re.search(r"\n\s*([0-9]?[A-Z]{1,2}\s?-?\s?\d{2,4})\b[^\n]*\n(?:[^\n]*\n){0,6}?\s*Operated\s*by",
                            detail, re.I)
             cand = m.group(1) if m else None
         # Fallback: legacy Drive layout 'FlightNo (Aircraft)'. Case-SENSITIVE
