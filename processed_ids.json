@@ -175,6 +175,14 @@
       "processed_at": "2026-06-23",
       "drive_link": "https://drive.google.com/file/d/1m5S8ex7ofltNA5_pCswGz0KI-i_kxfrT/view?usp=drivesdk",
       "emailed": true
+    },
+    {
+      "message_id": "19ef4b314f621147",
+      "pnr": "KE75MD",
+      "portal": "Akbar Travels",
+      "processed_at": "2026-06-23",
+      "drive_link": "https://drive.google.com/file/d/17NNUKLL_Vrw3lHKhBdgyFbADlLzEH3Tt/view?usp=drivesdk",
+      "emailed": true
     }
   ]
 }
