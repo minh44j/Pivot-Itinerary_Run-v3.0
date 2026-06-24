@@ -303,6 +303,14 @@
       "processed_at": "2026-06-24",
       "drive_link": "https://drive.google.com/file/d/1_2FfIS7VPHOjhPrvEMIml_SYTlPH8WWg/view?usp=drivesdk",
       "emailed": true
+    },
+    {
+      "message_id": "19ef9b8fdce8bf4c",
+      "pnr": "4BH1R9",
+      "portal": "aJet",
+      "processed_at": "2026-06-24",
+      "drive_link": "https://drive.google.com/file/d/1Y2d3SIkcddKxJ4TB4Q5Db-iu8VOXoYic/view?usp=drivesdk",
+      "emailed": true
     }
   ]
 }
