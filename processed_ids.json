@@ -231,6 +231,14 @@
       "processed_at": "2026-06-24",
       "drive_link": "https://drive.google.com/file/d/17PPtBjTg2foS9uzzJy0XLkZjfZ3edats/view?usp=drivesdk",
       "emailed": true
+    },
+    {
+      "message_id": "19ef84a1381c86df",
+      "pnr": "4BFBN2",
+      "portal": "aJet",
+      "processed_at": "2026-06-24",
+      "drive_link": "https://drive.google.com/file/d/1rGy5ZSIiEule4nhJv6UOeUIFz7Wv03wn/view?usp=drivesdk",
+      "emailed": true
     }
   ]
 }
