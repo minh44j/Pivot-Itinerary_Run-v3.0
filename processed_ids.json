@@ -311,6 +311,14 @@
       "processed_at": "2026-06-24",
       "drive_link": "https://drive.google.com/file/d/1Y2d3SIkcddKxJ4TB4Q5Db-iu8VOXoYic/view?usp=drivesdk",
       "emailed": true
+    },
+    {
+      "message_id": "19efd038efc74d1f",
+      "pnr": "60EHOO",
+      "portal": "Alhind",
+      "processed_at": "2026-06-25",
+      "drive_link": "https://drive.google.com/file/d/1Q90xrPfwTdejJDdtSMZl2IKtnJ4TVpgk/view?usp=drivesdk",
+      "emailed": true
     }
   ]
 }
