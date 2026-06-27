@@ -351,6 +351,14 @@
       "processed_at": "2026-06-25",
       "drive_link": "https://drive.google.com/file/d/1pSwFZOOHTLI46oIc8Cc8av7-RHZ_uZmU/view?usp=drivesdk",
       "emailed": true
+    },
+    {
+      "message_id": "19f089733f1db487",
+      "pnr": "8MU5RS",
+      "portal": "Akbar Travels",
+      "processed_at": "2026-06-27",
+      "drive_link": "https://drive.google.com/file/d/1Sms81dUs4nBcsYmOmdL-23nYVTmRvMbq/view?usp=drivesdk",
+      "emailed": true
     }
   ]
 }
