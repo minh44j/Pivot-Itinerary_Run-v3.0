@@ -359,6 +359,14 @@
       "processed_at": "2026-06-27",
       "drive_link": "https://drive.google.com/file/d/1Sms81dUs4nBcsYmOmdL-23nYVTmRvMbq/view?usp=drivesdk",
       "emailed": true
+    },
+    {
+      "message_id": "19f08a5d7d319dbf",
+      "pnr": "VI58NY",
+      "portal": "Alhind",
+      "processed_at": "2026-06-27",
+      "drive_link": "https://drive.google.com/file/d/16ejPVySJt-iCq6vHIAdWMQCLvfThxz2j/view?usp=drivesdk",
+      "emailed": true
     }
   ]
 }
