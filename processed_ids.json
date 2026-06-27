@@ -383,6 +383,14 @@
       "processed_at": "2026-06-27",
       "drive_link": "https://drive.google.com/file/d/1INdkxg0axZmlTFgvyu7TlryrIKNDa74A/view?usp=drivesdk",
       "emailed": true
+    },
+    {
+      "message_id": "19f09415e599b39c",
+      "pnr": "S2Z5DX",
+      "portal": "Alhind",
+      "processed_at": "2026-06-27",
+      "drive_link": "https://drive.google.com/file/d/1ubi5R7Z4rdKNAXc6vPMTyozOQ3yuJ7eP/view?usp=drivesdk",
+      "emailed": true
     }
   ]
 }
