@@ -391,6 +391,14 @@
       "processed_at": "2026-06-27",
       "drive_link": "https://drive.google.com/file/d/1ubi5R7Z4rdKNAXc6vPMTyozOQ3yuJ7eP/view?usp=drivesdk",
       "emailed": true
+    },
+    {
+      "message_id": "19f0cd3cdf51d1f8",
+      "pnr": "25SCYH",
+      "portal": "Pegasus",
+      "processed_at": "2026-06-28",
+      "drive_link": "https://drive.google.com/file/d/1WSo0zAeXVpNMcg449is1anSmgZ5dX3lQ/view?usp=drivesdk",
+      "emailed": true
     }
   ]
 }
