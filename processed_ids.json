@@ -519,6 +519,14 @@
       "processed_at": "2026-07-01",
       "drive_link": "https://drive.google.com/file/d/1qyNP-zQJEwEfdkI7ci4Pfya8sEr4EVzL/view?usp=drivesdk",
       "emailed": true
+    },
+    {
+      "message_id": "19f1d2787b9e72b9",
+      "pnr": "4CCY5H",
+      "portal": "Alhind",
+      "processed_at": "2026-07-01",
+      "drive_link": "https://drive.google.com/file/d/1QpdhixY5O99wgCI-46wUJ4Qrjw2VsGuJ/view?usp=drivesdk",
+      "emailed": true
     }
   ]
 }
