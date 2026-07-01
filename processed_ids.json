@@ -503,6 +503,14 @@
       "processed_at": "2026-07-01",
       "drive_link": "https://drive.google.com/file/d/1x8YqFElT8-vLAs9lF7hiWaJyTPyGtTSc/view?usp=drivesdk",
       "emailed": true
+    },
+    {
+      "message_id": "19f1d0e8fd03d096",
+      "pnr": "4CCF7J",
+      "portal": "Alhind",
+      "processed_at": "2026-07-01",
+      "drive_link": "https://drive.google.com/file/d/1h7cxCxSgNYmxMilrTZaXiabUBNE5tp5F/view?usp=drivesdk",
+      "emailed": true
     }
   ]
 }
