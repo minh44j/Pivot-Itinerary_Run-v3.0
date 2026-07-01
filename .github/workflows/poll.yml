@@ -50,8 +50,8 @@ jobs:
       - name: Commit processed log
         run: |
           if [[ -n "$(git status --porcelain processed_ids.json)" ]]; then
-            git config user.name "pivot-bot"
-            git config user.email "pivot-bot@users.noreply.github.com"
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
             git add processed_ids.json
             git commit -m "chore: update processed log [skip ci]"
             git push
