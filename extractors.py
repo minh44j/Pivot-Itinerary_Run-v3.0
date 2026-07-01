@@ -292,17 +292,23 @@ def extract_alhind(html, ctx=None):
                 checked = cells[j]
                 break
         klass = next((c for c in cells if re.fullmatch(r"(?i)economy|business|first|premium\s*economy", c)), "")
-        # Seat: column order from Segment is Seg(si)·Flight(si+1)·Ticket(si+2)·FFNo
-        # (si+3)·Cabin(si+4)·Checkin(si+5)·ExtraCheckin(si+6)·ExtraCabin(si+7)·Meal
-        # (si+8)·Seat(si+9)·Class(si+10)·Status(si+11) — confirmed against real
-        # Alhind source (PNR 8RKBMK, 21 Jun 2026: seat 8A landed exactly at si+9).
-        # ONLY trust this offset on the passenger's first/name row — continuation
-        # segment rows (return leg, connections) drop rowspan'd columns (FFNo, Meal,
-        # Seat) so si+9 there lands on Class/Status instead and must NOT be read.
+        # Seat column offsets (confirmed against real Alhind source PNR 8RKBMK):
+        # First/name row: Seg(si)·Flight(si+1)·Ticket(si+2)·FFNo(si+3)·Cabin(si+4)·
+        #   Checkin(si+5)·ExtraCheckin(si+6)·ExtraCabin(si+7)·Meal(si+8)·Seat(si+9)
+        # Continuation rows (2nd segment, return leg): Name, Image, and FFNo are
+        #   rowspan'd and absent — Meal and Seat ARE present, just shifted one earlier:
+        #   Seg(si)·Flight(si+1)·Ticket(si+2)·Cabin(si+3)·Checkin(si+4)·
+        #   ExtraCheckin(si+5)·ExtraCabin(si+6)·Meal(si+7)·Seat(si+8)
+        # Collect all per-segment seats and join with " / " for multi-leg bookings.
         if nm and si + 9 < len(cells):
             seat = _valid_seat(cells[si + 9])
             if cur and seat:
                 cur["seat"] = seat
+        elif not nm and cur and si + 8 < len(cells):
+            # continuation row: FFNo absent (rowspan'd), seat shifts to si+8
+            seat = _valid_seat(cells[si + 8])
+            if seat:
+                cur["seat"] = (cur["seat"] + " / " + seat) if cur["seat"] else seat
         if cur and cur["ticket_no"] == "Not specified":
             cur["ticket_no"] = tkt or "Not specified"
             cur["cabin_bag"] = cabin or "Not specified"
