@@ -1,0 +1,60 @@
+name: Pivot Itinerary Poll
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+concurrency:
+  group: pivot-poll
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Playwright Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run poll
+        env:
+          GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
+          IMPERSONATE_USER: ${{ secrets.IMPERSONATE_USER }}
+          SENDER_USER: ${{ secrets.SENDER_USER }}
+          DRIVE_OUTPUT_FOLDER: ${{ secrets.DRIVE_OUTPUT_FOLDER }}
+          AKBAR_FOLDER_NAME: ${{ secrets.AKBAR_FOLDER_NAME }}
+          NOTIFY_TO: ${{ secrets.NOTIFY_TO }}
+          SEARCH_WINDOW: ${{ secrets.SEARCH_WINDOW }}
+          DEBUG_VERBOSE: ${{ vars.DEBUG_VERBOS }}
+        run: python main.py
+
+      - name: Commit processed log
+        run: |
+          if [[ -n "$(git status --porcelain processed_ids.json)" ]]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add processed_ids.json
+            git commit -m "chore: update processed log [skip ci]"
+            git push
+          else
+            echo "No new bookings — log unchanged."
+          fi
