@@ -442,11 +442,18 @@ def extract_akbar(pdf_text, ctx=None):
     # words ("Indira Gandhi International Gorakhpur [GOP]"); strip those JUNK
     # tokens so the key is the clean city ("gorakhpur"). Direction comes from the
     # per-segment header line ("ONWARD Jeddah New Delhi"), not [IATA] text order.
+    # 2026-07-12 fix: added "khalid"/"khaled" (King Khalid International Airport,
+    # Riyadh). When pdfplumber merges the Saudia ticket table row into a single line
+    # ("SV 1707 King Khalid International Airport Al-Baha [ABT]") and "king" is
+    # already in JUNK but "khalid" is not, the compound remainder "khalid al-baha"
+    # becomes the city2iata key. The ONWARD header says "ONWARD RIYADH AL-BAHA",
+    # so lookups for "riyadh" and "al-baha" both miss -> dep/arr iata empty -> QC
+    # flag "A segment is missing flight number / airport / time".
     JUNK = {"airbus", "jet", "a320", "a321", "indira", "gandhi", "international",
             "intl", "airport", "arpt", "chhatrapati", "shivaji", "maharaj", "king",
-            "abdulaziz", "adnan", "menderes", "sabiha", "gokcen", "esenboga",
-            "terminal", "non", "stop", "operated", "by", "india", "saudi", "arabia",
-            "turkiye", "türkiye", "gandhinagar"}
+            "khalid", "khaled", "abdulaziz", "adnan", "menderes", "sabiha", "gokcen",
+            "esenboga", "terminal", "non", "stop", "operated", "by", "india",
+            "saudi", "arabia", "turkiye", "türkiye", "gandhinagar"}
     city2iata, city2disp = {}, {}
     # 2026-06-22 fix (<ref>): widened to allow a hyphen/apostrophe in the
     # city name. "Al-Baha [ABT]" was being captured as just "Baha" (the regex
@@ -461,6 +468,16 @@ def extract_akbar(pdf_text, ctx=None):
         k = name.lower()
         city2iata[k] = code
         city2disp[k] = name
+        # 2026-07-12 fix (robustness): when pdfplumber merges airport-name words
+        # that survive JUNK filtering with the actual city name (e.g. "khalid
+        # riyadh"), the ONWARD header uses just the city ("riyadh"). Also add
+        # the last word of compound keys as a standalone fallback so the lookup
+        # succeeds even when the airport name leaks into the key.
+        if len(words) > 1:
+            last = words[-1].lower()
+            if last not in city2iata:
+                city2iata[last] = code
+                city2disp[last] = words[-1]
     known = sorted(city2iata.keys(), key=len, reverse=True)
     MON = r"(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)"
     MONTH_WORDS = {"jan", "feb", "mar", "apr", "may", "jun",
