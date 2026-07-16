@@ -534,8 +534,16 @@ def extract_akbar(pdf_text, ctx=None):
         # code pattern and reconstructing "9P 700". Also covers the case where
         # "Flight Number" has multiple column-header lines before the value
         # (re.S lets . match newlines; up to 8 intervening lines tolerated).
+        # 2026-07-16 fix (Air Arabia G9 connecting, <ref> / PNR <ref>):
+        # the code group only matched [0-9]?[A-Z]{1,2} (e.g. "9P", "6E"), which
+        # cannot match a LETTER-then-DIGIT designator like "G9"/"U2" — so the
+        # doubled cell "G9 G9148" was missed and the segment shipped with an
+        # empty flight number (QC flag "missing flight number"). Widened the
+        # code group to a proper 2-char IATA designator (LL | LD | DL). The
+        # \1 back-reference (an exact repeat of the same 2-char code) keeps
+        # this specific enough that ref numbers / times cannot false-match.
         if not cand:
-            m = re.search(r"\b([0-9]?[A-Z]{1,2})\s+\1(\d{2,4})\b", detail)
+            m = re.search(r"\b((?:[A-Z]{2}|[A-Z][0-9]|[0-9][A-Z]))\s+\1(\d{2,4})\b", detail)
             if m:
                 cand = f"{m.group(1)} {m.group(2)}"
         if not cand:
@@ -669,7 +677,7 @@ def extract_ajet(src, ctx=None):
     seg_re = re.compile(
         r"(\d{1,2}\s+[A-Za-z]+\s+\d{4})\s*\n\s*([^\n]+?)\s*\n\s*([A-Z]{3})\s*\n\s*(\d{1,2}:\d{2})\s*\n\s*"
         r"([^\n]+?)\s*\n\s*([A-Z]{3})\s*\n\s*(\d{1,2}:\d{2})\s*\n\s*(?:Connecting|Non[ -]?Stop|Direct)?\s*\n?\s*"
-        r"(?:(\d+\s*[Hh]\s*\d+\s*[Mm]))?\s*\n?\s*(VF\s?\d{2,4})\s*\n\s*(ECOJET|BIZJET)?")
+        r"(?:(\d+\s*[Hh]\s*\d+\s*[Mm]))?\s*\n?\s*(VF\s?\d{2,4})\s*\n\s*(ECOJET|BIZJET|PREMIUM)?")
     for mo in seg_re.finditer(text):
         brand = (mo.group(10) or "").upper()
         flights.append({
@@ -678,7 +686,14 @@ def extract_ajet(src, ctx=None):
             "arr_city": mo.group(5).strip(), "arr_iata": mo.group(6), "arr_time": mo.group(7),
             "duration": _norm_dur(mo.group(8) or ""),
             "flight_no": re.sub(r"(VF)\s?", r"\1 ", mo.group(9)).strip(), "airline": "aJet",
-            "cabin": "Business" if brand == "BIZJET" else ("Economy" if brand == "ECOJET" else "Not specified"),
+            # 2026-07-16 fix (PNR <ref>): aJet also sells a "PREMIUM" fare
+            # brand (e.g. "PREMIUM / A Class"). Previously only ECOJET/BIZJET
+            # were recognised, so PREMIUM bookings rendered cabin = N/A. Map
+            # PREMIUM -> "Premium Economy". (BIZJET->Business, ECOJET->Economy.)
+            "cabin": ("Business" if brand == "BIZJET"
+                      else "Economy" if brand == "ECOJET"
+                      else "Premium Economy" if brand == "PREMIUM"
+                      else "Not specified"),
             "dep_airport": "", "arr_airport": "", "terminal": "",
         })
     d["flights"] = flights
