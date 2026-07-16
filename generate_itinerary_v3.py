@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Pivot Travel & Tourism — Itinerary PDF Generator v3
+Pivot Travel Management — Itinerary PDF Generator v3
 Design: 7BBKYN approved reference.
 White header · light ref strip · dark navy segment bars · white flight cards · dark navy footer.
 Gold accent #c9a84c · Navy #0b1724 · Fonts: Cormorant Garamond + Inter.
@@ -112,14 +112,15 @@ def _flight_card(seg: dict, standalone: bool = False) -> str:
         </div>
 
         <div class="connector">
-          <div class="conn-dot"></div>
-          <div class="conn-line">
-            <div class="conn-center">
-              <div class="conn-flight-no">{flight_no}</div>
-              <div class="conn-airline">{airline}</div>
-            </div>
+          <div class="conn-info">
+            <div class="conn-flight-no">{flight_no}</div>
+            <div class="conn-airline">{airline}</div>
           </div>
-          <div class="conn-dot"></div>
+          <div class="conn-line-wrap">
+            <div class="conn-dot"></div>
+            <div class="conn-line"><div class="plane-icon">&#9992;</div></div>
+            <div class="conn-dot"></div>
+          </div>
         </div>
 
         <div class="ap-block ap-right">
@@ -241,19 +242,19 @@ def _terms_block() -> str:
         ("1.", "Ticket Validity &amp; Changes",
          "Travel is valid only for the date, flight, and class specified. Name changes are not permitted after ticketing. Date or routing changes are subject to carrier fare rules and applicable fees. Refunds are governed by the purchased fare conditions. Unused outbound segments may result in automatic cancellation of onward flights (no-show policy)."),
         ("2.", "Check-In &amp; Boarding",
-         "Passengers must arrive at the airport with sufficient time to complete check-in and boarding. Check-in deadlines and gate closing times are set by the operating carrier &mdash; confirm prior to travel. Denied boarding due to late arrival is not the liability of Pivot Travel &amp; Tourism. Valid photo ID or passport matching the ticket name is mandatory at all times."),
+         "Passengers must arrive at the airport with sufficient time to complete check-in and boarding. Check-in deadlines and gate closing times are set by the operating carrier &mdash; confirm prior to travel. Denied boarding due to late arrival is not the liability of Pivot Travel Management. Valid photo ID or passport matching the ticket name is mandatory at all times."),
         ("3.", "Baggage &mdash; Inclusions",
          "Cabin and checked baggage allowances are determined by the operating carrier and fare class purchased. Confirm weight limits, piece count, and size restrictions directly with the carrier before travel. Allowances are per passenger and non-transferable."),
         ("4.", "Baggage &mdash; Exclusions &amp; Restrictions",
-         "Excess baggage charges apply for any baggage exceeding permitted allowances and are payable directly to the carrier at airport rates. Prohibited items include explosives, flammable materials, compressed gases, and all items restricted under IATA Dangerous Goods Regulations. Liquids in cabin baggage are subject to airport security limits. Spare lithium batteries and power banks must be carried in cabin baggage only. Pivot Travel &amp; Tourism and the carrier accept no liability for fragile, valuable, or perishable items in checked baggage."),
+         "Excess baggage charges apply for any baggage exceeding permitted allowances and are payable directly to the carrier at airport rates. Prohibited items include explosives, flammable materials, compressed gases, and all items restricted under IATA Dangerous Goods Regulations. Liquids in cabin baggage are subject to airport security limits. Spare lithium batteries and power banks must be carried in cabin baggage only. Pivot Travel Management and the carrier accept no liability for fragile, valuable, or perishable items in checked baggage."),
         ("5.", "Travel Documents &amp; Visa",
-         "Passengers are solely responsible for holding valid passports, visas, transit permits, and any health documentation required for all points of travel including transit countries. Pivot Travel &amp; Tourism may provide general guidance only. Denied boarding or deportation due to inadequate documents does not entitle the passenger to a refund."),
+         "Passengers are solely responsible for holding valid passports, visas, transit permits, and any health documentation required for all points of travel including transit countries. Pivot Travel Management may provide general guidance only. Denied boarding or deportation due to inadequate documents does not entitle the passenger to a refund."),
         ("6.", "Flight Disruptions",
-         "In the event of cancellation, significant delay, or denied boarding, passenger rights are governed by the operating carrier's conditions of carriage and applicable GACA regulations. Pivot Travel &amp; Tourism will assist where possible but holds no financial liability for disruptions caused by the carrier, weather, force majeure, or events beyond its control."),
+         "In the event of cancellation, significant delay, or denied boarding, passenger rights are governed by the operating carrier's conditions of carriage and applicable GACA regulations. Pivot Travel Management will assist where possible but holds no financial liability for disruptions caused by the carrier, weather, force majeure, or events beyond its control."),
         ("7.", "Liability &amp; Governing Law",
-         "Pivot Travel &amp; Tourism acts solely as a ticketing agent. Its liability is limited to the agency service fee paid. These terms are governed by the laws of the Kingdom of Saudi Arabia. Disputes are subject to the jurisdiction of the competent courts of Riyadh, KSA, without prejudice to applicable GACA regulations and international conventions."),
+         "Pivot Travel Management acts solely as a ticketing agent. Its liability is limited to the agency service fee paid. These terms are governed by the laws of the Kingdom of Saudi Arabia. Disputes are subject to the jurisdiction of the competent courts of Riyadh, KSA, without prejudice to applicable GACA regulations and international conventions."),
         ("8.", "Confidentiality",
-         "This confirmation and all associated travel details, passenger information, pricing, and documentation are strictly confidential and issued solely for the named passenger(s). Disclosure, reproduction, or distribution to any third party without the prior written consent of Pivot Travel &amp; Tourism is prohibited. All client data is handled in accordance with the applicable data-protection regulations of the Kingdom of Saudi Arabia."),
+         "This confirmation and all associated travel details, passenger information, pricing, and documentation are strictly confidential and issued solely for the named passenger(s). Disclosure, reproduction, or distribution to any third party without the prior written consent of Pivot Travel Management is prohibited. All client data is handled in accordance with the applicable data-protection regulations of the Kingdom of Saudi Arabia."),
     ]
     items_html = "\n".join(
         f'<div class="tc-item"><span class="tc-n"><span class="tc-acc">{n}</span> {h}</span>{body}</div>'
@@ -262,7 +263,7 @@ def _terms_block() -> str:
     return f"""
   <div class="tc">
     <div class="tc-title">TERMS &amp; CONDITIONS <span class="tc-acc">&mdash;</span> FLIGHT BOOKING CONFIRMATION</div>
-    <div class="tc-issued">Issued by Pivot Travel &amp; Tourism &middot; Suite 20, 2762 Ibn Al Anbari Street, Al Amal District, Riyadh, Kingdom of Saudi Arabia &middot; Clarifications: cs@pivot-travels.com</div>
+    <div class="tc-issued">Issued by Pivot Travel Management &middot; Suite 20, 2762 Ibn Al Anbari Street, Al Amal District, Riyadh, Kingdom of Saudi Arabia &middot; Clarifications: cs@pivot-travels.com</div>
     <div class="tc-rule"></div>
     <div class="tc-cols">
       {items_html}
@@ -287,19 +288,21 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
     if logo_b64:
         logo_html = (
             f'<img class="logo-img" src="data:image/png;base64,{logo_b64}" '
-            f'alt="Pivot Travel &amp; Tourism">'
+            f'alt="Pivot Travel Management">'
+            f'<div class="company-name">Pivot Travel Management</div>'
         )
         footer_logo_html = (
             f'<img class="footer-logo-img" src="data:image/png;base64,{logo_b64}" '
-            f'alt="Pivot Travel &amp; Tourism">'
+            f'alt="Pivot Travel Management">'
         )
     else:
         logo_html = (
             '<div class="logo-fallback">'
-            '<span class="logo-text-main">Pivot Travel &amp; Tourism</span>'
+            '<span class="logo-text-main">Pivot Travel Management</span>'
+            '<div class="company-name">Pivot Travel Management</div>'
             '</div>'
         )
-        footer_logo_html = '<span style="font-family:Inter,sans-serif;font-size:13px;font-weight:700;color:#fff;">Pivot Travel &amp; Tourism</span>'
+        footer_logo_html = '<span style="font-family:Inter,sans-serif;font-size:13px;font-weight:700;color:#fff;">Pivot Travel Management</span>'
 
     # Ref strip — show booking_ref if present; crs_ref only if differs from pnr
     booking_ref_col = f"""
@@ -353,24 +356,23 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
 
     header_html = f"""
   <div class="header">
-    <div class="header-left">
-      {logo_html}
-      <div>
-        <div class="doc-label">Official Travel Document</div>
-        <div class="doc-title">
-          <span class="doc-title-bold">Booking </span><span class="doc-title-light">Confirmation</span>
-        </div>
+    <div class="title-block">
+      <div class="doc-label">Official Travel Document</div>
+      <div class="doc-title">
+        <span class="doc-title-bold">Booking</span> <span class="doc-title-light">Confirmation</span>
       </div>
     </div>
-    <div class="header-center"></div>
-    <div class="header-right">
+    <div class="brand-block">
+      {logo_html}
+    </div>
+    <div class="status-block">
       <div class="confirmed-pill">
         <span class="pill-dot"></span>
         <span class="pill-text">Confirmed</span>
       </div>
       <div class="pnr-block">
-        <div class="pnr-value">{pnr}</div>
         <div class="pnr-label">PNR Reference</div>
+        <div class="pnr-value">{pnr}</div>
       </div>
     </div>
   </div>"""
@@ -468,151 +470,157 @@ body {{
   flex-direction: column;
 }}
 
-/* ── Header ── */
+/* ── Header — title left | brand centre | pill+PNR right ── */
 .header {{
-  background: linear-gradient(135deg, #071220 0%, #0b1f38 45%, #112d4e 100%);
-  padding: 14px 28px 12px;
-  display: flex;
-  align-items: center;
+  background: linear-gradient(150deg, #323234 0%, #1e1e20 50%, #0e0e0f 100%);
+  padding: 18px 28px 16px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: flex-end;
   border-bottom: 2px solid #c9a84c;
 }}
-/* Layout: LEFT = logo + title stacked  |  RIGHT = pill + PNR */
-.header-left {{
-  flex: 1;
+.title-block {{
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 10px;
+  gap: 5px;
+  padding-right: 20px;
+  border-right: 1px solid rgba(201,168,76,0.2);
 }}
-.logo-img {{
-  height: 52px;
-  width: auto;
-  object-fit: contain;
-  display: block;
-  filter: brightness(0) invert(1);
-}}
-.logo-fallback {{
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}}
-.logo-text-main {{
-  font-family: 'Inter', sans-serif;
-  font-size: 18px;
-  font-weight: 700;
-  color: #ffffff;
-}}
-.header-center {{ display: none; }}
 .doc-label {{
-  font-size: 8.5px;
+  font-size: 7px;
   font-weight: 600;
-  letter-spacing: 3px;
-  color: #c9a84c;
+  letter-spacing: 2.8px;
+  color: rgba(255,255,255,0.3);
   text-transform: uppercase;
-  margin-bottom: 5px;
-  display: block;
 }}
 .doc-title {{
   font-family: 'Cormorant Garamond', serif;
-  font-style: normal;
-  font-size: 26px;
-  color: #ffffff;
-  line-height: 1.1;
-  letter-spacing: 0.5px;
+  font-size: 18px;
+  font-weight: 400;
+  font-style: italic;
+  color: #f0ead8;
+  line-height: 1;
   white-space: nowrap;
+}}
+.doc-title-bold {{ font-style: normal; font-weight: 700; color: #ffffff; }}
+.doc-title-light {{ font-weight: 400; }}
+.brand-block {{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 28px;
+}}
+.logo-img {{
+  height: 40px;
+  width: auto;
+  object-fit: contain;
   display: block;
 }}
-.doc-title-bold {{
+.logo-fallback {{ display: flex; flex-direction: column; align-items: center; gap: 4px; }}
+.logo-text-main {{
+  font-family: 'Inter', sans-serif;
+  font-size: 16px;
   font-weight: 700;
+  color: #ffffff;
 }}
-.doc-title-light {{
-  font-weight: 400;
+.company-name {{
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: #d9d4c8;
+  text-align: center;
+  white-space: nowrap;
 }}
-.header-right {{
-  flex: 1;
+.status-block {{
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  justify-content: center;
-  gap: 8px;
+  justify-content: flex-end;
+  gap: 7px;
+  padding-left: 20px;
+  border-left: 1px solid rgba(201,168,76,0.2);
 }}
 .confirmed-pill {{
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  border: 1.5px solid #c9a84c;
+  gap: 7px;
+  border: 1.5px solid #4ea87a;
+  background: rgba(78,168,122,0.12);
   border-radius: 20px;
-  padding: 4px 12px;
+  padding: 4px 13px;
 }}
 .pill-dot {{
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #c9a84c;
+  background: #4ea87a;
+  box-shadow: 0 0 5px rgba(78,168,122,0.6);
   flex-shrink: 0;
 }}
 .pill-text {{
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 700;
-  letter-spacing: 2px;
-  color: #c9a84c;
+  letter-spacing: 2.2px;
+  color: #7fd0a6;
   text-transform: uppercase;
 }}
 .pnr-block {{ text-align: right; }}
+.pnr-label {{
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: rgba(201,168,76,0.55);
+  text-transform: uppercase;
+  margin-bottom: 3px;
+  text-align: right;
+}}
 .pnr-value {{
   font-family: 'Cormorant Garamond', serif;
   font-style: normal;
-  font-size: 28px;
+  font-size: 18px;
   font-weight: 700;
   color: #ffffff;
-  letter-spacing: 3px;
+  letter-spacing: 1.5px;
   line-height: 1;
   font-variant-numeric: lining-nums;
   font-feature-settings: "lnum" 1;
 }}
-.pnr-label {{
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 8px;
-  font-weight: 600;
-  letter-spacing: 2px;
-  color: rgba(201,168,76,0.80);
-  text-transform: uppercase;
-  margin-top: 3px;
-  text-align: right;
-}}
 
 /* ── Ref Strip — navy gradient, centred, ALL CAPS values ── */
 .ref-strip {{
-  background: linear-gradient(135deg, #071220 0%, #0b1f38 45%, #112d4e 100%);
-  padding: 10px 28px;
+  margin: 14px 28px 0;
+  background: #f7f7f7;
+  border: 1px solid #ececec;
+  border-radius: 40px;
+  padding: 11px 24px;
   display: flex;
-  gap: 0;
-  border-bottom: 2px solid rgba(201,168,76,0.35);
+  justify-content: center;
 }}
 .ref-col {{
-  flex: 1;
   text-align: center;
-  padding: 0 8px;
-  border-right: 1px solid rgba(201,168,76,0.20);
+  padding: 0 22px;
+  border-right: 1px solid #ddd;
 }}
 .ref-col:last-child {{
   border-right: none;
 }}
 .ref-lbl {{
-  font-size: 8px;
+  font-size: 7px;
   font-weight: 600;
   letter-spacing: 1.5px;
-  color: rgba(201,168,76,0.75);
+  color: #c9a84c;
   text-transform: uppercase;
-  margin-bottom: 5px;
+  margin-bottom: 4px;
 }}
 .ref-val {{
   font-family: 'Cormorant Garamond', serif;
   font-size: 15px;
   font-weight: 700;
-  color: #ffffff;
-  letter-spacing: 1px;
+  color: #1a1a1a;
+  letter-spacing: 0.6px;
   text-transform: uppercase;
   font-variant-numeric: lining-nums;
   font-feature-settings: "lnum" 1;
@@ -631,17 +639,17 @@ body {{
   margin-bottom: 10px;
 }}
 .section-icon {{
-  width: 14px;
-  height: 14px;
-  background: #0b1724;
-  border-radius: 3px;
+  width: 7px;
+  height: 7px;
+  background: #c9a84c;
+  border-radius: 50%;
   flex-shrink: 0;
 }}
 .section-title {{
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 2.5px;
-  color: #0b1724;
+  color: #c9a84c;
   text-transform: uppercase;
 }}
 .section-rule {{
@@ -653,40 +661,54 @@ body {{
 /* ── Passenger card ── */
 .pax-card {{
   display: flex;
-  gap: 0;
-  border: 1px solid #e2e5ea;
-  border-radius: 8px;
-  padding: 9px 20px;
-  background: #fafbfc;
+  gap: 12px;
+  border: 1px solid #ececec;
+  border-radius: 18px;
+  padding: 16px 20px 14px;
+  background: #ffffff;
   margin-bottom: 8px;
   flex-wrap: wrap;
+  align-items: center;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.05);
+  position: relative;
+  overflow: hidden;
   page-break-inside: avoid;
+}}
+.pax-card::before {{
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 3px;
+  background: linear-gradient(90deg, #c9a84c, #e4c97a 50%, #c9a84c);
 }}
 .pax-col {{
   flex: 1;
-  min-width: 100px;
-  padding: 0 8px;
+  min-width: 90px;
+  padding: 8px 10px;
   text-align: center;
+  background: #f7f7f7;
+  border-radius: 14px;
 }}
-.pax-name-col {{ flex: 1.4; }}
+.pax-name-col {{ flex: 1.4; background: transparent; }}
 .pax-lbl {{
-  font-size: 8px;
+  font-size: 7px;
   font-weight: 600;
   letter-spacing: 1.5px;
-  color: #8a9bb0;
+  color: #c9a84c;
   text-transform: uppercase;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
 }}
 .pax-name, .pax-val {{
   font-family: 'Cormorant Garamond', serif;
   font-size: 18px;
   font-weight: 700;
-  color: #0b1724;
+  color: #111111;
   letter-spacing: 0.5px;
   line-height: 1.2;
   font-variant-numeric: lining-nums;
   font-feature-settings: "lnum" 1;
 }}
+.pax-val {{ font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600; }}
 /* Long passenger names wrap cleanly within the column instead of overflowing. */
 .pax-name {{
   overflow-wrap: break-word;
@@ -695,48 +717,49 @@ body {{
 
 /* ── Segment header ── */
 .seg-header {{
-  background: #0b1724;
-  padding: 7px 16px;
+  background: linear-gradient(150deg, #323234 0%, #1e1e20 60%, #0e0e0f 100%);
+  padding: 10px 24px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-radius: 7px 7px 0 0;
+  border-radius: 40px;
+  margin-top: 16px;
+  margin-bottom: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
   page-break-inside: avoid;
   page-break-after: avoid;
   break-after: avoid;
 }}
 .seg-route {{
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
-  color: #fff;
+  color: #ffffff;
   letter-spacing: 1.5px;
   text-transform: uppercase;
 }}
 .seg-date {{
-  font-size: 10px;
-  font-weight: 400;
-  color: rgba(255,255,255,0.55);
-  letter-spacing: 0.3px;
+  font-size: 8.5px;
+  font-weight: 500;
+  color: #e8e2d2;
+  letter-spacing: 0.5px;
 }}
 
 /* ── Flight card ── */
 .flight-card {{
-  border: 1px solid #e2e5ea;
-  border-top: none;
-  border-radius: 0 0 7px 7px;
-  background: #fff;
-  padding: 6px 20px 5px;
-  margin-bottom: 6px;
+  border: 1px solid #ececec;
+  border-radius: 22px;
+  background: #ffffff;
+  padding: 16px 22px 14px;
+  margin-bottom: 8px;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.06);
   page-break-inside: avoid;
 }}
-/* A flight card that follows a layover stands on its own (full border, all corners rounded). */
 .flight-card.standalone {{
-  border-top: 1px solid #e2e5ea;
-  border-radius: 7px;
+  border-radius: 22px;
 }}
 .route-row {{
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   margin-bottom: 6px;
 }}
 .ap-block {{
@@ -750,9 +773,9 @@ body {{
 }}
 .iata {{
   font-family: 'Cormorant Garamond', serif;
-  font-size: 40px;
+  font-size: 42px;
   font-weight: 700;
-  color: #0b1724;
+  color: #111111;
   letter-spacing: -1.5px;
   line-height: 1;
   margin-bottom: 1px;
@@ -760,7 +783,7 @@ body {{
 .ap-city {{
   font-size: 11px;
   font-weight: 700;
-  color: #0b1724;
+  color: #1a1a1a;
   margin-bottom: 1px;
 }}
 .ap-detail {{
@@ -772,27 +795,49 @@ body {{
 .flight-time {{
   font-size: 20px;
   font-weight: 700;
-  color: #0b1724;
+  color: #111111;
   letter-spacing: 0.5px;
   margin-bottom: 1px;
 }}
 .flight-date {{
   font-size: 9px;
-  color: #8a9bb0;
+  color: #c9a84c;
   font-weight: 500;
 }}
 
-/* ── Connector ── */
+/* ── Connector — flight info lifted above a plane-badge line ── */
 .connector {{
   flex: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  padding: 0 6px;
-  margin-top: 11px;        /* drop the line onto the horizontal mid-line of the IATA codes */
+  gap: 12px;
+  padding: 0 12px;
+  margin-top: 8px;
+}}
+.conn-info {{ text-align: center; }}
+.conn-flight-no {{
+  font-size: 10px;
+  font-weight: 700;
+  color: #c9a84c;
+  letter-spacing: 0.6px;
+  line-height: 1.1;
+}}
+.conn-airline {{
+  font-size: 8px;
+  color: #999999;
+  font-weight: 400;
+  line-height: 1;
+  margin-top: 1px;
+}}
+.conn-line-wrap {{
+  width: 100%;
+  display: flex;
+  align-items: center;
 }}
 .conn-dot {{
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: #c9a84c;
   flex-shrink: 0;
@@ -800,48 +845,33 @@ body {{
 .conn-line {{
   flex: 1;
   position: relative;
-  border-top: 1.5px solid #c9a84c;
+  height: 1.5px;
+  background: linear-gradient(90deg, rgba(201,168,76,0) 0%, #c9a84c 15%, #c9a84c 85%, rgba(201,168,76,0) 100%);
   display: flex;
   align-items: center;
   justify-content: center;
 }}
-.conn-center {{
-  position: absolute;
-  left: 50%;
-  top: 0;
-  transform: translate(-50%, -50%);   /* centre the flight label ON the line */
-  background: #fff;
-  padding: 0 12px;
-  text-align: center;
-  white-space: nowrap;
-}}
-.conn-plane {{
-  font-size: 15px;
+.plane-icon {{
+  width: 22px;
+  height: 22px;
+  background: #ffffff;
+  border: 1.5px solid #c9a84c;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
   color: #c9a84c;
-  line-height: 1;
-  margin-bottom: 1px;
-}}
-.conn-flight-no {{
-  font-size: 11px;
-  font-weight: 700;
-  color: #0b1724;
-  letter-spacing: 0.5px;
-  line-height: 1.1;
-}}
-.conn-airline {{
-  font-size: 9px;
-  color: #8a9bb0;
-  font-weight: 400;
-  line-height: 1;
+  box-shadow: 0 2px 6px rgba(201,168,76,0.2);
 }}
 
-/* ── Meta row ── */
+/* ── Meta row -> rounded chips ── */
 .meta-row {{
   display: flex;
-  justify-content: space-around;
-  align-items: flex-start;
-  border-top: 1px solid #f0f2f5;
-  padding-top: 6px;
+  justify-content: space-between;
+  align-items: stretch;
+  gap: 10px;
+  margin-top: 14px;
   width: 100%;
 }}
 .meta-item {{
@@ -851,18 +881,21 @@ body {{
   text-align: center;
   gap: 3px;
   flex: 1;
+  background: #f7f7f7;
+  border-radius: 14px;
+  padding: 8px 12px;
 }}
 .meta-lbl {{
-  font-size: 8px;
+  font-size: 7px;
   font-weight: 600;
   letter-spacing: 1.5px;
-  color: #8a9bb0;
+  color: #c9a84c;
   text-transform: uppercase;
 }}
 .meta-val {{
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  color: #1a2332;
+  color: #1a1a1a;
 }}
 
 /* ── Layover — detached, centred transit badge ── */
@@ -904,7 +937,7 @@ body {{
   line-height: 1;
 }}
 
-/* ── Footer ── */
+/* ── Footer — dark bar matching the header ── */
 .footer {{
   flex-shrink: 0;            /* never compress; sits at the bottom of the (last) page */
   page-break-inside: avoid;
@@ -915,14 +948,15 @@ body {{
   min-height: 13mm;          /* defined footer section */
   padding: 0 28px;
   text-align: center;
-  border-top: 1px solid #e7e9ee;
+  background: linear-gradient(150deg, #323234 0%, #1e1e20 55%, #0e0e0f 100%);
+  border-top: 2px solid #c9a84c;
 }}
 .footer-line {{
   font-size: 8px;
   font-weight: 600;
   letter-spacing: 2px;
   text-transform: uppercase;
-  color: #9aa6b4;            /* low-key muted grey */
+  color: rgba(255,255,255,0.35);
 }}
 
 /* ── Page sheets (layout wrappers) ── */
