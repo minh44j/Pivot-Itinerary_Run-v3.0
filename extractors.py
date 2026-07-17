@@ -357,7 +357,11 @@ def extract_alhind(html, ctx=None):
             "dep_iata": di, "arr_iata": ai,
             "dep_city": _city(origin), "arr_city": _city(dest),
             "dep_airport": _airport(origin), "arr_airport": _airport(dest),
-            "terminal": _terminal(origin),
+            # 2026-07-17: Alhind embeds each airport's terminal INSIDE its own
+            # Origin/Destination table cell ("Riyadh - King Khaled Intl <p>Terminal
+            # : 5</p>"). Pull the departure terminal from the origin cell and the
+            # ARRIVAL terminal from the destination cell (previously only origin).
+            "terminal": _terminal(origin), "arr_terminal": _terminal(dest),
             "dep_time": times[0] if times else "", "dep_date": to_ddmon(dates[0]) if dates else "",
             "arr_time": times[1] if len(times) > 1 else "", "arr_date": to_ddmon(dates[1]) if len(dates) > 1 else (to_ddmon(dates[0]) if dates else ""),
             "cabin": cl, "duration": "",
@@ -573,7 +577,16 @@ def extract_akbar(pdf_text, ctx=None):
         # missing return leg in the 2026-06-18 bug.
         dates4 = re.findall(r"(\d{1,2}\s+" + MON + r"\s+\d{4})", detail)
         dates = dates4 if len(dates4) >= 2 else re.findall(r"(\d{1,2}\s+" + MON + r"\s+\d{2})\b", detail)
-        terms = re.findall(r"Terminal\s+([A-Za-z0-9]+)", detail)
+        # 2026-07-17: Akbar's flight-table "From (Terminal) / To (Terminal)"
+        # columns are EMPTY in every real ticket sampled (rendered as ", ,").
+        # The only "Terminal X" tokens in the PDF sit in a separate airport-
+        # metadata block that pdfplumber scatters unpredictably (e.g. "Terminal 4"
+        # floats next to the RETURN header; "North Terminal" next to the layover
+        # line) and CANNOT be reliably attributed to a segment's departure vs
+        # arrival airport. The old `terms[0]` grab mislabeled these (e.g. it
+        # captured the fragment "North" as a departure terminal on PNR <ref>).
+        # Accuracy-first: leave Akbar terminals blank rather than show a wrong one.
+        terms = []
         # Stops-column "(Xh:Ym)" is fully inside this segment's own table and
         # can't bleed in from a neighbouring segment's header line the way the
         # looser "X hrs Y mins" phrase can (that phrase sits in the NEXT
