@@ -867,6 +867,38 @@ def qc_check(d):
     return None
 
 
+# ── India-arrival detection (drives the Air Suvidha guide attachment) ──────
+# Air Suvidha 2.0 is a health self-declaration required for INTERNATIONAL
+# arrivals into India. So the trigger is: a booking that contains at least one
+# flight whose ARRIVAL airport is in India while its DEPARTURE airport is not —
+# i.e. an inbound international leg. Purely domestic Indian hops (both ends in
+# India) do NOT trigger it. IATA codes of Indian airports (international + major
+# domestic; the domestic ones matter so a domestic leg isn't mistaken for an
+# international arrival).
+INDIA_IATA = {
+    "DEL", "BOM", "MAA", "BLR", "HYD", "CCU", "COK", "TRV", "CJB", "CCJ",
+    "GOI", "GOX", "AMD", "PNQ", "JAI", "LKO", "VNS", "IXC", "ATQ", "GAU",
+    "IXE", "TIR", "TRZ", "IXM", "VTZ", "NAG", "IXB", "BBI", "PAT", "IXZ",
+    "IXA", "IMF", "IXJ", "SXR", "KNU", "BDQ", "STV", "HBX", "IXR", "RPR",
+    "IDR", "BHO", "JLR", "IXD", "GWL", "DED", "IXL", "JDH", "UDR", "BHJ",
+    "DIB", "IXS", "TEZ", "RJA", "VGA", "MYQ", "IXU", "JRH", "DMU", "SHL",
+    "AJL", "IXG", "JGA", "PBD", "RAJ", "CDP", "JRG", "GAY", "IXW", "DBR",
+    "KUU", "SLV", "AGR", "HJR", "PGH", "SAG", "KLH", "TCR", "BEP", "IXY",
+}
+
+
+def india_arrival(data):
+    """True if the booking includes an INTERNATIONAL flight arriving in India
+    (arrival in India, departure outside India). Triggers the Air Suvidha guide."""
+    for seg in (data or {}).get("segments", []):
+        for f in seg.get("flights", []):
+            arr = (f.get("arr_iata") or "").strip().upper()
+            dep = (f.get("dep_iata") or "").strip().upper()
+            if arr in INDIA_IATA and dep and dep not in INDIA_IATA:
+                return True
+    return False
+
+
 # ── registry ───────────────────────────────────────────────────────────────
 PORTALS = [
     {"name": "Alhind",        "from": "alhind@alhindsanchar.com",   "subject": "Air Ticket",                                      "source": "body",      "fn": extract_alhind},

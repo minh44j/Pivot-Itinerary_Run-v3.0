@@ -56,6 +56,24 @@ def test_qc(fixture):
             f"{fixture}: expected QC flag containing {expected!r}, got {qc!r}"
 
 
+@pytest.mark.parametrize("data,expected", [
+    # international arrival into India -> True (triggers Air Suvidha attachment)
+    ({"segments": [{"flights": [{"dep_iata": "IST", "arr_iata": "DEL"}]}]}, True),
+    ({"segments": [{"flights": [{"dep_iata": "DXB", "arr_iata": "COK"}]}]}, True),
+    # round trip India<->abroad: return leg lands in India -> True
+    ({"segments": [{"flights": [{"dep_iata": "BOM", "arr_iata": "IST"}]},
+                   {"flights": [{"dep_iata": "IST", "arr_iata": "BOM"}]}]}, True),
+    # purely domestic Indian hop -> False (no international arrival)
+    ({"segments": [{"flights": [{"dep_iata": "DEL", "arr_iata": "BOM"}]}]}, False),
+    # nothing touching India -> False
+    ({"segments": [{"flights": [{"dep_iata": "IST", "arr_iata": "SAW"}]}]}, False),
+    # India -> abroad only (outbound, no arrival into India) -> False
+    ({"segments": [{"flights": [{"dep_iata": "MAA", "arr_iata": "SIN"}]}]}, False),
+])
+def test_india_arrival(data, expected):
+    assert E.india_arrival(data) is expected
+
+
 @pytest.mark.parametrize("fixture", list(CASES))
 def test_snapshot(fixture):
     data = _run(fixture)

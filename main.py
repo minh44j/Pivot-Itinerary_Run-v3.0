@@ -53,6 +53,9 @@ OUT_DIR = os.path.join(PROJECT_DIR, "out")
 # Transient 5xx / rate-limit responses from Google get retried with exponential
 # backoff by googleapiclient when num_retries is passed to each API execute call.
 API_RETRIES = 4
+# Static India health-declaration guide, attached when a booking is an
+# international arrival into India (see extractors.india_arrival).
+AIR_SUVIDHA_PDF = os.path.join(PROJECT_DIR, "air_suvidha", "air_suvidha_guide.pdf")
 
 
 # ── auth ──────────────────────────────────────────────────────────────────
@@ -330,6 +333,9 @@ def _build_email_body(data, source_ref=""):
             lines.append(f"    {_b(f.get('flight_no'))}   {_b(f.get('dep_time'))} → "
                          f"{_b(f.get('arr_time'))}   {extra}".rstrip())
 
+    if extractors.india_arrival(data):
+        lines.append("")
+        lines.append("India arrival — Air Suvidha 2.0 health-declaration guide also attached.")
     if source_ref:
         lines.append("")
         lines.append(f"Source Ref: {source_ref}")
@@ -348,6 +354,11 @@ def email_pdf(send_gmail, sender, pdf_path, data, source_ref=""):
     with open(pdf_path, "rb") as f:
         m.add_attachment(f.read(), maintype="application", subtype="pdf",
                          filename=os.path.basename(pdf_path))
+    # Attach the static Air Suvidha guide for international arrivals into India.
+    if extractors.india_arrival(data) and os.path.exists(AIR_SUVIDHA_PDF):
+        with open(AIR_SUVIDHA_PDF, "rb") as f:
+            m.add_attachment(f.read(), maintype="application", subtype="pdf",
+                             filename="Air_Suvidha_2.0_Passenger_Guide.pdf")
     raw = base64.urlsafe_b64encode(m.as_bytes()).decode("ascii")
     send_gmail.users().messages().send(userId="me", body={"raw": raw}).execute(num_retries=API_RETRIES)
     return True
