@@ -99,9 +99,15 @@ flight-no / airport / time; non-Confirmed status).
     WeasyPrint.
   - `extractors.india_arrival(data)` returns True when a booking has an
     INTERNATIONAL flight arriving in India (arr in `INDIA_IATA`, dep outside).
-    `main.py`'s `email_pdf` then attaches the guide alongside the itinerary and
-    adds a body note. Purely domestic Indian hops do NOT trigger it. Covered by
-    offline tests.
+    Purely domestic Indian hops do NOT trigger it. Covered by offline tests.
+  - **2026-07-18 (later) — merged into a SINGLE PDF, not a second attachment:**
+    `main._append_air_suvidha()` uses `pypdf` to append the guide's page(s)
+    directly onto the itinerary PDF right after `build_pdf()` (before Drive
+    upload), so Drive and the email both get one file — itinerary + T&C +
+    guide as trailing pages. `email_pdf` sends that single file; the body note
+    says the guide is "included as extra page(s)". Fails safe (no-op, itinerary
+    ships alone) if the guide asset is missing. Verified end-to-end with a real
+    Playwright-rendered PDF (3 pages: itinerary, T&C, guide).
 - **2026-07-18 — reliability pass (tests + notifications + idempotency + retries):**
   - **Offline test suite (`tests/`)** — synthetic, zero-PII fixtures for all four
     portals + 2 negative cases, run through the real extractors + `qc_check()`:
