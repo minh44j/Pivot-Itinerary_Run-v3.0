@@ -73,7 +73,6 @@ confirmation, then apply the SAME change everywhere the generator lives.
 
 ```
 pnr, booking_ref, crs_ref (shown only if != pnr), booked_on, journey_type (ONE-WAY | ROUND TRIP),
-price (optional; aJet only; internal email only — never the PDF),
 passengers[]: { name, ticket_no, cabin_bag, checked_bag, seat }
 segments[]:  { type: Outbound|Inbound, flights[]: { dep_iata, arr_iata, dep_city, arr_city,
                dep_airport, arr_airport, terminal (dep), arr_terminal, dep_date, dep_time,
@@ -101,10 +100,6 @@ flight-no / airport / time; non-Confirmed status).
     **Source Ref** line (the `message_id`) so a public log entry can be traced back privately by
     searching the inbox. Missing fields render `N/A`.
   - Email footer corrected `PIVOT AI AUTOMATED ITINERARY` → `PIVOT AUTOMATED ITINERARY` (§11).
-  - **Price (`data["price"]`, optional):** aJet is the ONLY portal whose parsed source carries a
-    fare ("Total Fare → 527.00 SAR", body). Extracted for the **internal email only** (never the
-    customer PDF). Alhind / Pegasus confirmations contain no amount; Akbar's would sit in the PDF
-    attachment (not yet wired — needs a real sample). A `Total Fare:` line shows only when present.
 - **2026-07-16 — full redesign + rename** to Pivot Travel Management; navy → dark charcoal/gold;
   rounded CRED-style cards, plane connector, emerald pill; T&C + pagination preserved.
 - **2026-07-17 — Model B header** adopted (centred wordmark, no "Booking Confirmation" text, pill

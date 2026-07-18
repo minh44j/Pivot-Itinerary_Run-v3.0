@@ -303,10 +303,6 @@ def _build_email_body(data, source_ref=""):
     lines.append(f"Portal: {_b(data.get('portal'))}")
     lines.append(f"Journey: {_b(data.get('journey_type'))}")
     lines.append(f"Booked On: {_b(data.get('booked_on'))}")
-    # Total Fare — shown ONLY when a price was actually extracted (Stage B).
-    price = (str(data.get("price") or "")).strip()
-    if price:
-        lines.append(f"Total Fare: {price}")
 
     passengers = data.get("passengers", [])
     lines.append("")

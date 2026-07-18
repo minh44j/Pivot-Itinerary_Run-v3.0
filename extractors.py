@@ -638,12 +638,6 @@ def extract_ajet(src, ctx=None):
     d = {"portal": "aJet"}
     d["pnr"] = _m(text, r"Reservation\s*Code\s*\n?\s*([A-Z0-9]{5,7})")
     d["booked_on"] = to_ddmon(_m(text, r"Transaction\s*Date\s*\n?\s*([0-9.\-/]+)"))
-    # Total Fare — aJet is the ONLY portal whose confirmation carries a price.
-    # Layout (flattened): "Total Fare" / "527.00" / "SAR" on separate lines.
-    # Captured for the INTERNAL cs@ email only (never the customer PDF). Renders
-    # as "" (=> omitted) when the block is absent, so nothing is ever invented.
-    pm = re.search(r"Total\s*Fare\s*\n?\s*([0-9][\d,]*\.\d{2})\s*\n?\s*([A-Za-z]{3})", text, re.I)
-    d["price"] = f"{pm.group(1)} {pm.group(2).upper()}" if pm else ""
     # Passengers — the "Passenger Information" block has one row per passenger
     # (name -> check-in baggage -> cabin baggage -> Ticket No). aJet repeats this
     # block once per flight segment, so de-duplicate by ticket number. Anchoring on
