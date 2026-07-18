@@ -1,0 +1,43 @@
+{
+  "portal": "Akbar Travels",
+  "pnr": "AKTST2",
+  "crs_ref": "AKTST2",
+  "booking_ref": "XY260000002",
+  "booked_on": "06 Jul 2026",
+  "status": "Confirmed",
+  "passengers": [
+    {
+      "name": "Mr. JOHN DOE",
+      "ticket_no": "9990000000002",
+      "cabin_bag": "Adult 7 Kg",
+      "checked_bag": "Adult 20 Kg",
+      "seat": ""
+    }
+  ],
+  "segments": [
+    {
+      "type": "FLIGHT",
+      "flights": [
+        {
+          "flight_no": "",
+          "airline": "TestAir",
+          "dep_iata": "TST",
+          "arr_iata": "OTH",
+          "dep_city": "Testcity",
+          "arr_city": "Othercity",
+          "dep_airport": "",
+          "arr_airport": "",
+          "terminal": "",
+          "dep_time": "08:00",
+          "dep_date": "08 Jul 2026",
+          "arr_time": "10:30",
+          "arr_date": "08 Jul 2026",
+          "cabin": "Economy",
+          "duration": ""
+        }
+      ],
+      "layovers": []
+    }
+  ],
+  "journey_type": "One-Way"
+}

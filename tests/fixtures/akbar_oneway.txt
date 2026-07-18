@@ -1,0 +1,19 @@
+Dear Mr. JOHN DOE,
+Your booking has been confirmed
+XY260000001 06 July 2026 CONFIRMED
+CRS Ref : AKTST1
+Economy
+Traveler
+Mr. JOHN DOE 9990000000001
+Cabin Baggage : Adult 7 Kg
+Check-In Baggage : Adult 20 Kg
+Testcity [TST]
+Othercity [OTH]
+ONWARD Testcity Othercity
+08 Jul 2026 | Non Stop | 02 hrs 30 mins
+Airline Ref : AKTST1
+Flight Number
+XY 100
+08 Jul 2026 08:00
+08 Jul 2026 10:30
+Operated by : TestAir

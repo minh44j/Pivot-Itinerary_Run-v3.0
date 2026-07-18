@@ -1,0 +1,64 @@
+{
+  "portal": "Pegasus",
+  "pnr": "PGTST1",
+  "status": "Confirmed",
+  "booked_on": "01 Jan 2026",
+  "passengers": [
+    {
+      "name": "JOHN DOE",
+      "ticket_no": "Not specified",
+      "cabin_bag": "8 kg",
+      "checked_bag": "20 kg",
+      "seat": "14A"
+    }
+  ],
+  "segments": [
+    {
+      "type": "OUTBOUND",
+      "flights": [
+        {
+          "flight_no": "PC100",
+          "dep_iata": "TST",
+          "arr_iata": "OTH",
+          "dep_time": "08:00",
+          "arr_time": "10:30",
+          "dep_city": "Testcity",
+          "arr_city": "Othercity",
+          "dep_date": "18 Jul 2026",
+          "arr_date": "18 Jul 2026",
+          "duration": "2H 30M",
+          "airline": "Pegasus",
+          "cabin": "Not specified",
+          "dep_airport": "",
+          "arr_airport": "",
+          "terminal": ""
+        }
+      ],
+      "layovers": []
+    },
+    {
+      "type": "INBOUND",
+      "flights": [
+        {
+          "flight_no": "PC101",
+          "dep_iata": "OTH",
+          "arr_iata": "TST",
+          "dep_time": "11:00",
+          "arr_time": "13:30",
+          "dep_city": "Othercity",
+          "arr_city": "Testcity",
+          "dep_date": "25 Jul 2026",
+          "arr_date": "25 Jul 2026",
+          "duration": "2H 30M",
+          "airline": "Pegasus",
+          "cabin": "Not specified",
+          "dep_airport": "",
+          "arr_airport": "",
+          "terminal": ""
+        }
+      ],
+      "layovers": []
+    }
+  ],
+  "journey_type": "Round Trip"
+}

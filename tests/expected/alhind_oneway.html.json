@@ -1,0 +1,44 @@
+{
+  "portal": "Alhind",
+  "pnr": "ALTST1",
+  "crs_ref": "ALTST1",
+  "booking_ref": "BR12345",
+  "booked_on": "10 Jul 2026",
+  "passengers": [
+    {
+      "name": "Mr. JOHN DOE",
+      "ticket_no": "9990000000001",
+      "cabin_bag": "7 Kg",
+      "checked_bag": "20 Kg",
+      "seat": "12A"
+    }
+  ],
+  "status": "Confirmed",
+  "segments": [
+    {
+      "type": "FLIGHT",
+      "flights": [
+        {
+          "flight_no": "AB 123",
+          "airline": "TestAir",
+          "dep_iata": "TST",
+          "arr_iata": "OTH",
+          "dep_city": "Testcity",
+          "arr_city": "Othercity",
+          "dep_airport": "Test Intl",
+          "arr_airport": "Other Intl",
+          "terminal": "1",
+          "arr_terminal": "2",
+          "dep_time": "08:00",
+          "dep_date": "10 Jul 2026",
+          "arr_time": "10:30",
+          "arr_date": "10 Jul 2026",
+          "cabin": "Economy",
+          "duration": ""
+        }
+      ],
+      "layovers": []
+    }
+  ],
+  "journey_type": "One-Way"
+}

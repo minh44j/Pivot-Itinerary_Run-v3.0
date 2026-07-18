@@ -1,0 +1,27 @@
+name: Extractor Tests
+
+# Offline regression tests for the portal parsers. Runs on every push and PR.
+# Fast + dependency-light: extractors.py is pure-stdlib, so no Google/Playwright.
+on:
+  push: {}
+  pull_request: {}
+  workflow_dispatch: {}
+
+# Never let the 5-minute poll cron and these tests fight over anything.
+concurrency:
+  group: extractor-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pytest
+        run: python -m pip install --upgrade pip pytest
+      - name: Run extractor regression tests
+        run: python -m pytest tests/ -q
