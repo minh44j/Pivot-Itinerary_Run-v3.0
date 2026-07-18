@@ -91,6 +91,22 @@ flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
 
+- **2026-07-18 — reliability pass (tests + notifications + idempotency + retries):**
+  - **Offline test suite (`tests/`)** — synthetic, zero-PII fixtures for all four
+    portals + 2 negative cases, run through the real extractors + `qc_check()`:
+    QC assertions plus a golden-snapshot comparison (regenerate with
+    `UPDATE_GOLDEN=1`). New `.github/workflows/test.yml` runs pytest on every
+    push/PR (pure-stdlib; no Google/Playwright). Locks in every parser fix.
+  - **Manual-review notifications (`email_flags`)** — a booking that fails
+    `qc_check` (or whose email send fails) now triggers ONE private digest email
+    to cs@ (portal, reason, subject, Source Ref) instead of vanishing into a
+    public count. Inbox-only, so it can name the message id.
+  - **Idempotency** — a booking is marked processed + the log checkpointed to
+    disk right after the PDF lands on Drive, BEFORE emailing; the send is
+    best-effort. A failed send (or a mid-run crash) can no longer cause a
+    duplicate PDF/email next run — it surfaces as a manual-review flag instead.
+  - **Retries** — every Google API call passes `num_retries=API_RETRIES` (4) so
+    transient 5xx / rate-limit responses back off and retry instead of flagging.
 - **2026-07-18 — privacy + internal email upgrade (`main.py`):**
   - `processed_ids.json` (committed to the **public** repo) now stores **only** the opaque Gmail
     `message_id` per booking — no PNR / portal / Drive link. The 126 existing entries were scrubbed.

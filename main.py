@@ -50,6 +50,9 @@ SCOPES = [
 LOG_FILE = "processed_ids.json"
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.path.join(PROJECT_DIR, "out")
+# Transient 5xx / rate-limit responses from Google get retried with exponential
+# backoff by googleapiclient when num_retries is passed to each API execute call.
+API_RETRIES = 4
 
 
 # ── auth ──────────────────────────────────────────────────────────────────
@@ -163,7 +166,7 @@ def _email_date_ddmon(msg):
 
 def search_messages(gmail, portal, window):
     q = f'from:({portal["from"]}) subject:("{portal["subject"]}") {window}'
-    res = gmail.users().messages().list(userId="me", q=q, maxResults=25).execute()
+    res = gmail.users().messages().list(userId="me", q=q, maxResults=25).execute(num_retries=API_RETRIES)
     return [m["id"] for m in res.get("messages", [])]
 
 
@@ -199,7 +202,7 @@ def akbar_attachment_text(gmail, msg):
     if not att_id:
         return ""   # no attachment on this email — caller falls back to Drive
     raw = gmail.users().messages().attachments().get(
-        userId="me", messageId=msg["id"], id=att_id).execute()
+        userId="me", messageId=msg["id"], id=att_id).execute(num_retries=API_RETRIES)
     data = base64.urlsafe_b64decode(raw["data"])
     text = ""
     with pdfplumber.open(io.BytesIO(data)) as pdf:
@@ -213,13 +216,13 @@ def akbar_pdf_text(drive, msg_date_str, msg_epoch=None):
     import pdfplumber
     folder_name = os.environ.get("AKBAR_FOLDER_NAME", "Pivot AI - Ticket PDFs")
     fres = drive.files().list(q=f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder'",
-                              fields="files(id)").execute().get("files", [])
+                              fields="files(id)").execute(num_retries=API_RETRIES).get("files", [])
     if not fres:
         return ""
     folder_id = fres[0]["id"]
     q = f"'{folder_id}' in parents and name contains 'AKBAR_' and mimeType='application/pdf'"
     files = drive.files().list(q=q, fields="files(id,name,modifiedTime)",
-                               orderBy="modifiedTime desc").execute().get("files", [])
+                               orderBy="modifiedTime desc").execute(num_retries=API_RETRIES).get("files", [])
     if not files:
         return ""
     # SAFETY: never silently fall back to "whatever's newest in the whole
@@ -266,14 +269,14 @@ def upload_to_drive(drive, pdf_path, date_sub):
     # find/create date subfolder
     q = (f"'{parent}' in parents and name='{date_sub}' "
          f"and mimeType='application/vnd.google-apps.folder'")
-    found = drive.files().list(q=q, fields="files(id)").execute().get("files", [])
+    found = drive.files().list(q=q, fields="files(id)").execute(num_retries=API_RETRIES).get("files", [])
     sub_id = found[0]["id"] if found else drive.files().create(
         body={"name": date_sub, "mimeType": "application/vnd.google-apps.folder", "parents": [parent]},
-        fields="id").execute()["id"]
+        fields="id").execute(num_retries=API_RETRIES)["id"]
     media = MediaFileUpload(pdf_path, mimetype="application/pdf")
     f = drive.files().create(
         body={"name": os.path.basename(pdf_path), "parents": [sub_id]},
-        media_body=media, fields="id,webViewLink").execute()
+        media_body=media, fields="id,webViewLink").execute(num_retries=API_RETRIES)
     return f.get("webViewLink", "")
 
 
@@ -346,7 +349,38 @@ def email_pdf(send_gmail, sender, pdf_path, data, source_ref=""):
         m.add_attachment(f.read(), maintype="application", subtype="pdf",
                          filename=os.path.basename(pdf_path))
     raw = base64.urlsafe_b64encode(m.as_bytes()).decode("ascii")
-    send_gmail.users().messages().send(userId="me", body={"raw": raw}).execute()
+    send_gmail.users().messages().send(userId="me", body={"raw": raw}).execute(num_retries=API_RETRIES)
+    return True
+
+
+# ── manual-review notifications: private digest to Minh (inbox only) ────────
+# When a booking fails qc_check (or its email failed), it must NOT vanish into a
+# bare count in the public Action log — someone has to know to process it by hand.
+# This sends ONE private digest per run to the cs@ inbox. Because it stays in the
+# inbox (never the public repo/log), it can safely carry the subject + message_id
+# needed to locate and fix each booking.
+def email_flags(send_gmail, sender, flagged):
+    if not flagged:
+        return False
+    to = os.environ.get("NOTIFY_TO") or sender
+    lines = [f"{len(flagged)} booking(s) need manual review:", ""]
+    for f in flagged:
+        lines.append(f"• Portal:     {f.get('portal')}")
+        lines.append(f"  Reason:     {f.get('reason')}")
+        if f.get("subject"):
+            lines.append(f"  Subject:    {f.get('subject')}")
+        lines.append(f"  Source Ref: {f.get('id')}")
+        lines.append("")
+    lines.append("Find each in the cs@ inbox by its Source Ref (Gmail message id) "
+                 "and process it manually.")
+    lines.append("(Automated — PIVOT AUTOMATED ITINERARY)")
+    m = EmailMessage()
+    m["Subject"] = f"Itinerary — {len(flagged)} booking(s) need manual review"
+    m["From"] = sender
+    m["To"] = to
+    m.set_content("\n".join(lines))
+    raw = base64.urlsafe_b64encode(m.as_bytes()).decode("ascii")
+    send_gmail.users().messages().send(userId="me", body={"raw": raw}).execute(num_retries=API_RETRIES)
     return True
 
 
@@ -378,7 +412,7 @@ def main():
                 skipped.append(mid)
                 continue
             try:
-                msg = gmail.users().messages().get(userId="me", id=mid, format="full").execute()
+                msg = gmail.users().messages().get(userId="me", id=mid, format="full").execute(num_retries=API_RETRIES)
                 subj = _header(msg, "Subject").lower()
                 frm = _header(msg, "From").lower()
                 if portal["subject"].lower() not in subj or portal["from"].lower() not in frm:
@@ -407,20 +441,38 @@ def main():
                 pdf_path = build_pdf(data, os.path.join(OUT_DIR, date_sub), project_dir=PROJECT_DIR)
 
                 link = upload_to_drive(drive, pdf_path, date_sub)
-                emailed = email_pdf(send_gmail, sender, pdf_path, data, source_ref=mid)
 
-                # PRIVACY: this file is committed to a PUBLIC repo. Persist ONLY the
-                # opaque Gmail message_id (used for de-dup). PNR / passenger data /
-                # Drive links stay private — they travel in the emailed confirmation
-                # (search cs@ for the message_id via the email's "Source Ref" line).
+                # IDEMPOTENCY: record the booking as processed the moment its PDF is
+                # on Drive — BEFORE emailing — and checkpoint the log to disk. If the
+                # email send then fails (or the process dies), the next run will NOT
+                # re-upload the PDF or re-send the email; the failed send is retried
+                # best-effort and, if it still fails, surfaces as a manual-review flag.
+                #
+                # PRIVACY: this file is committed to a PUBLIC repo, so persist ONLY the
+                # opaque Gmail message_id. PNR / passenger data / Drive links stay
+                # private — they travel in the emailed confirmation (search cs@ for the
+                # message_id via the email's "Source Ref" line).
                 log["processed"].append({"message_id": mid})
                 done_ids.add(mid)
+                save_log(log)                                   # checkpoint per booking
+                try:
+                    email_pdf(send_gmail, sender, pdf_path, data, source_ref=mid)
+                except Exception as e:
+                    flagged.append({"id": mid, "portal": portal["name"],
+                                    "reason": f"email-failed: {e}",
+                                    "subject": _header(msg, "Subject")})
                 created.append({"pnr": data["pnr"], "portal": data["portal"], "link": link})
             except Exception as e:
                 flagged.append({"id": mid, "portal": portal["name"],
                                 "reason": f"error: {e}", "trace": traceback.format_exc()[-500:]})
 
     save_log(log)
+    # Privately notify Minh of anything needing manual review (inbox only, never
+    # the public log). A failure here must not break the run summary.
+    try:
+        email_flags(send_gmail, sender, flagged)
+    except Exception as e:
+        print(json.dumps({"flag_email_error": str(e)[:120]}))
     # PUBLIC-SAFE LOG: print COUNTS only — never PNRs, passenger names, Drive
     # links, message ids, subjects, or tracebacks (Action logs are world-readable
     # on a public repo). Per-portal tallies + generic flag reasons are enough to
