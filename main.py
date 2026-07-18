@@ -53,9 +53,28 @@ OUT_DIR = os.path.join(PROJECT_DIR, "out")
 # Transient 5xx / rate-limit responses from Google get retried with exponential
 # backoff by googleapiclient when num_retries is passed to each API execute call.
 API_RETRIES = 4
-# Static India health-declaration guide, attached when a booking is an
-# international arrival into India (see extractors.india_arrival).
+# Static India health-declaration guide, appended as extra page(s) to the
+# itinerary PDF when a booking is an international arrival into India
+# (see extractors.india_arrival).
 AIR_SUVIDHA_PDF = os.path.join(PROJECT_DIR, "air_suvidha", "air_suvidha_guide.pdf")
+
+
+def _append_air_suvidha(pdf_path):
+    """Append the Air Suvidha guide's page(s) onto the itinerary PDF IN PLACE,
+    so the single file (Drive + email) carries both. No-op if the guide asset
+    is missing (fails safe — the itinerary still ships on its own)."""
+    if not os.path.exists(AIR_SUVIDHA_PDF):
+        return
+    from pypdf import PdfReader, PdfWriter
+    writer = PdfWriter()
+    for page in PdfReader(pdf_path).pages:
+        writer.add_page(page)
+    for page in PdfReader(AIR_SUVIDHA_PDF).pages:
+        writer.add_page(page)
+    tmp_path = pdf_path + ".tmp"
+    with open(tmp_path, "wb") as f:
+        writer.write(f)
+    os.replace(tmp_path, pdf_path)
 
 
 # ── auth ──────────────────────────────────────────────────────────────────
@@ -335,7 +354,8 @@ def _build_email_body(data, source_ref=""):
 
     if extractors.india_arrival(data):
         lines.append("")
-        lines.append("India arrival — Air Suvidha 2.0 health-declaration guide also attached.")
+        lines.append("India arrival — the Air Suvidha 2.0 health-declaration guide is "
+                     "included as extra page(s) in the attached PDF.")
     if source_ref:
         lines.append("")
         lines.append(f"Source Ref: {source_ref}")
@@ -351,14 +371,12 @@ def email_pdf(send_gmail, sender, pdf_path, data, source_ref=""):
     m["From"] = sender                                     # SENDER_USER or cs@
     m["To"] = to
     m.set_content(_build_email_body(data, source_ref))
+    # pdf_path is a single file by this point — main() already merged the Air
+    # Suvidha guide's page(s) into it (via _append_air_suvidha) for India-arrival
+    # bookings, so there is only ever one attachment here.
     with open(pdf_path, "rb") as f:
         m.add_attachment(f.read(), maintype="application", subtype="pdf",
                          filename=os.path.basename(pdf_path))
-    # Attach the static Air Suvidha guide for international arrivals into India.
-    if extractors.india_arrival(data) and os.path.exists(AIR_SUVIDHA_PDF):
-        with open(AIR_SUVIDHA_PDF, "rb") as f:
-            m.add_attachment(f.read(), maintype="application", subtype="pdf",
-                             filename="Air_Suvidha_2.0_Passenger_Guide.pdf")
     raw = base64.urlsafe_b64encode(m.as_bytes()).decode("ascii")
     send_gmail.users().messages().send(userId="me", body={"raw": raw}).execute(num_retries=API_RETRIES)
     return True
@@ -450,6 +468,8 @@ def main():
                 pnr = "".join(c for c in str(data["pnr"]) if c.isalnum() or c in "_-") or "UNKNOWN"
                 date_sub = datetime.now().strftime("%Y-%m-%d")
                 pdf_path = build_pdf(data, os.path.join(OUT_DIR, date_sub), project_dir=PROJECT_DIR)
+                if extractors.india_arrival(data):
+                    _append_air_suvidha(pdf_path)   # single merged PDF: itinerary + guide
 
                 link = upload_to_drive(drive, pdf_path, date_sub)
 
