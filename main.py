@@ -282,16 +282,70 @@ def upload_to_drive(drive, pdf_path, date_sub):
 # message is ever touched, replied to, forwarded, or deleted). It additionally
 # holds gmail.send for exactly ONE purpose — emailing the finished PDF back to
 # itself so the confirmation "arrives in gmail inbox" alongside the source email.
-def email_pdf(send_gmail, sender, pdf_path, data):
+def _b(v):
+    """Body-safe field: blank/None -> 'N/A' (same convention as the PDF)."""
+    v = (str(v).strip() if v is not None else "")
+    return v or "N/A"
+
+
+def _build_email_body(data, source_ref=""):
+    """Full-detail internal summary for the cs@ inbox. Reads ONLY fields already
+    present on `data` (no extra extraction). Every missing value renders 'N/A'.
+    The confirmation PDF itself is attached; this body is the at-a-glance copy."""
+    lines = []
+    lines.append(f"PNR: {_b(data.get('pnr'))}")
+    booking_ref = (data.get("booking_ref") or "").strip()
+    if booking_ref and booking_ref != (data.get("pnr") or "").strip():
+        lines.append(f"Booking Ref: {booking_ref}")
+    crs_ref = (data.get("crs_ref") or "").strip()
+    if crs_ref and crs_ref != (data.get("pnr") or "").strip():
+        lines.append(f"CRS Ref: {crs_ref}")
+    lines.append(f"Portal: {_b(data.get('portal'))}")
+    lines.append(f"Journey: {_b(data.get('journey_type'))}")
+    lines.append(f"Booked On: {_b(data.get('booked_on'))}")
+    # Total Fare — shown ONLY when a price was actually extracted (Stage B).
+    price = (str(data.get("price") or "")).strip()
+    if price:
+        lines.append(f"Total Fare: {price}")
+
+    passengers = data.get("passengers", [])
+    lines.append("")
+    lines.append(f"Passengers ({len(passengers)}):")
+    for p in passengers:
+        lines.append(f"  • {_b(p.get('name'))}  — Ticket: {_b(p.get('ticket_no'))} | "
+                     f"Seat: {_b(p.get('seat'))}")
+
+    lines.append("")
+    lines.append("Itinerary:")
+    for seg in data.get("segments", []):
+        flights = seg.get("flights", [])
+        if not flights:
+            continue
+        stype = seg.get("type", "FLIGHT")
+        first, last = flights[0], flights[-1]
+        lines.append(f"  {stype}  {_b(first.get('dep_iata'))} → {_b(last.get('arr_iata'))}   "
+                     f"{_b(first.get('dep_date'))}")
+        for f in flights:
+            extra = "   ".join(x for x in [f"({f.get('duration')})" if f.get('duration') else "",
+                                           (f.get("cabin") or "")] if x)
+            lines.append(f"    {_b(f.get('flight_no'))}   {_b(f.get('dep_time'))} → "
+                         f"{_b(f.get('arr_time'))}   {extra}".rstrip())
+
+    if source_ref:
+        lines.append("")
+        lines.append(f"Source Ref: {source_ref}")
+    lines.append("")
+    lines.append("PDF attached. (Automated — PIVOT AUTOMATED ITINERARY)")
+    return "\n".join(lines)
+
+
+def email_pdf(send_gmail, sender, pdf_path, data, source_ref=""):
     to = os.environ.get("NOTIFY_TO") or sender             # default recipient = sender
     m = EmailMessage()
     m["Subject"] = f"Booking Confirmation — {data.get('pnr')} ({data.get('portal')})"
     m["From"] = sender                                     # SENDER_USER or cs@
     m["To"] = to
-    pax = ", ".join(p["name"] for p in data.get("passengers", []))
-    m.set_content(f"PNR: {data.get('pnr')}\nPortal: {data.get('portal')}\n"
-                  f"Passenger(s): {pax}\nBooked On: {data.get('booked_on')}\n\n"
-                  f"PDF attached. (Automated — PIVOT AI AUTOMATED ITINERARY)")
+    m.set_content(_build_email_body(data, source_ref))
     with open(pdf_path, "rb") as f:
         m.add_attachment(f.read(), maintype="application", subtype="pdf",
                          filename=os.path.basename(pdf_path))
@@ -357,12 +411,13 @@ def main():
                 pdf_path = build_pdf(data, os.path.join(OUT_DIR, date_sub), project_dir=PROJECT_DIR)
 
                 link = upload_to_drive(drive, pdf_path, date_sub)
-                emailed = email_pdf(send_gmail, sender, pdf_path, data)
+                emailed = email_pdf(send_gmail, sender, pdf_path, data, source_ref=mid)
 
-                log["processed"].append({
-                    "message_id": mid, "pnr": data["pnr"], "portal": data["portal"],
-                    "processed_at": date_sub, "drive_link": link, "emailed": emailed,
-                })
+                # PRIVACY: this file is committed to a PUBLIC repo. Persist ONLY the
+                # opaque Gmail message_id (used for de-dup). PNR / passenger data /
+                # Drive links stay private — they travel in the emailed confirmation
+                # (search cs@ for the message_id via the email's "Source Ref" line).
+                log["processed"].append({"message_id": mid})
                 done_ids.add(mid)
                 created.append({"pnr": data["pnr"], "portal": data["portal"], "link": link})
             except Exception as e:
