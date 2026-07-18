@@ -1,0 +1,17 @@
+{
+  "portal": "aJet",
+  "pnr": "",
+  "booked_on": "14 Jul 2026",
+  "passengers": [
+    {
+      "name": "JOHN DOE",
+      "ticket_no": "9990000000001",
+      "checked_bag": "20 kg Maximum",
+      "cabin_bag": "8 kg",
+      "seat": ""
+    }
+  ],
+  "status": "Confirmed",
+  "segments": [],
+  "journey_type": "One-Way"
+}

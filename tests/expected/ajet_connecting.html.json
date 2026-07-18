@@ -1,0 +1,63 @@
+{
+  "portal": "aJet",
+  "pnr": "TESTAJ",
+  "booked_on": "14 Jul 2026",
+  "passengers": [
+    {
+      "name": "JOHN DOE",
+      "ticket_no": "9990000000001",
+      "checked_bag": "20 kg Maximum",
+      "cabin_bag": "8 kg",
+      "seat": "12A"
+    }
+  ],
+  "status": "Confirmed",
+  "segments": [
+    {
+      "type": "FLIGHT",
+      "flights": [
+        {
+          "dep_date": "18 Jul 2026",
+          "arr_date": "18 Jul 2026",
+          "dep_city": "Testcity",
+          "dep_iata": "TST",
+          "dep_time": "21:45",
+          "arr_city": "Othercity",
+          "arr_iata": "OTH",
+          "arr_time": "23:35",
+          "duration": "1H 50M",
+          "flight_no": "VF 5218",
+          "airline": "aJet",
+          "cabin": "Economy",
+          "dep_airport": "",
+          "arr_airport": "",
+          "terminal": ""
+        },
+        {
+          "dep_date": "18 Jul 2026",
+          "arr_date": "18 Jul 2026",
+          "dep_city": "Othercity",
+          "dep_iata": "OTH",
+          "dep_time": "01:00",
+          "arr_city": "Finalcity",
+          "arr_iata": "FIN",
+          "arr_time": "04:55",
+          "duration": "3H 55M",
+          "flight_no": "VF 191",
+          "airline": "aJet",
+          "cabin": "Economy",
+          "dep_airport": "",
+          "arr_airport": "",
+          "terminal": ""
+        }
+      ],
+      "layovers": [
+        {
+          "airport": "OTH",
+          "duration": "1H 25M"
+        }
+      ]
+    }
+  ],
+  "journey_type": "One-Way"
+}
