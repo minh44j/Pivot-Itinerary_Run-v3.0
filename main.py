@@ -478,33 +478,130 @@ def scan_disruptions(gmail, alerted_ids):
     return alerts
 
 
-def email_disruptions(send_gmail, sender, alerts):
-    """Send ONE private ACTION-REQUIRED digest listing possible cancellation /
-    schedule-change emails, so they stop getting buried. Inbox-only (like
-    email_flags), so it can safely name the subject + message id to locate each."""
-    if not alerts:
-        return False
-    to = os.environ.get("DISRUPTION_NOTIFY_TO") or os.environ.get("NOTIFY_TO") or sender
-    lines = [f"⚠️ ACTION REQUIRED — {len(alerts)} possible cancellation / schedule-change "
+# Colour + label per disruption category (extractors.disruption_category):
+#   cancellation -> red · schedule_change -> orange · delay -> amber.
+# `rank` sorts the most urgent (cancellations) to the top of the digest.
+_DISRUPTION_STYLE = {
+    "cancellation":    {"label": "CANCELLATION",    "emoji": "🔴",
+                        "accent": "#C62828", "bg": "#FDECEA", "rank": 0},
+    "schedule_change": {"label": "SCHEDULE CHANGE", "emoji": "🟠",
+                        "accent": "#E65100", "bg": "#FDF1E5", "rank": 1},
+    "delay":           {"label": "DELAY",           "emoji": "🟡",
+                        "accent": "#B7791F", "bg": "#FBF6E4", "rank": 2},
+}
+
+
+def _disruption_enrich(alerts):
+    """Attach the category + its style to each alert and sort most-urgent first."""
+    out = []
+    for a in alerts:
+        cat = extractors.disruption_category(
+            a.get("subject", ""), a.get("snippet", ""), a.get("keyword", ""))
+        style = _DISRUPTION_STYLE[cat]
+        out.append({**a, "category": cat, "style": style})
+    out.sort(key=lambda a: a["style"]["rank"])
+    return out
+
+
+def _disruption_text(alerts):
+    """Plain-text fallback body (for clients that don't render HTML)."""
+    n = len(alerts)
+    lines = [f"ACTION REQUIRED — {n} possible cancellation / schedule-change "
              f"email(s) found in the mailbox:", ""]
     for a in alerts:
-        lines.append(f"• From:       {a.get('from')}")
+        st = a["style"]
+        lines.append(f"[{st['label']}]  {a.get('from')}")
         lines.append(f"  Subject:    {a.get('subject')}")
         lines.append(f"  Received:   {a.get('date')}")
-        lines.append(f"  Matched on: \"{a.get('keyword')}\"")
         if a.get("snippet"):
             lines.append(f"  Preview:    {a['snippet']}")
         lines.append(f"  Source Ref: {a.get('id')}")
         lines.append("")
-    lines.append("Open each in the cs@ inbox (search its Source Ref or subject), confirm whether")
-    lines.append("it is a genuine cancellation or schedule change, and forward it to the affected")
-    lines.append("client so it is never missed.")
+    lines.append("Open each in the cs@ inbox (search its Source Ref or subject), confirm")
+    lines.append("whether it is a genuine cancellation / schedule change, and forward it to")
+    lines.append("the affected client so it is never missed.")
     lines.append("(Automated watch — PIVOT AUTOMATED ITINERARY)")
+    return "\n".join(lines)
+
+
+def _disruption_html(alerts):
+    """Structured HTML digest — one colour-coded card per alert. Uses table +
+    inline styles only (Gmail / Outlook / Apple Mail safe; no <style>/flexbox)."""
+    import html as _html
+
+    def esc(v):
+        return _html.escape(str(v).strip()) if v is not None and str(v).strip() else "N/A"
+
+    n = len(alerts)
+    cards = []
+    for a in alerts:
+        st = a["style"]
+        row = ('<tr><td style="color:#6b7280;font-size:12px;vertical-align:top;'
+               'padding:3px 10px 3px 0;white-space:nowrap;">{k}</td>'
+               '<td style="color:#111827;font-size:13px;padding:3px 0;">{v}</td></tr>')
+        details = "".join([
+            row.format(k="From",    v=f'<b>{esc(a.get("from"))}</b>'),
+            row.format(k="Subject", v=esc(a.get("subject"))),
+            row.format(k="Received", v=esc(a.get("date"))),
+            row.format(k="Preview",  v=f'<span style="color:#4b5563;">{esc(a.get("snippet"))}</span>'),
+            row.format(k="Ref",      v=f'<span style="color:#9ca3af;font-family:monospace;'
+                                       f'font-size:12px;">{esc(a.get("id"))}</span>'),
+        ])
+        cards.append(f'''
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;border-collapse:separate;">
+        <tr><td style="background:{st['bg']};border-left:6px solid {st['accent']};border-radius:10px;padding:14px 18px;">
+          <div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:{st['accent']};margin:0 0 10px;">
+            {st['emoji']}&nbsp; {st['label']}
+          </div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-family:Arial,Helvetica,sans-serif;line-height:1.5;">
+            {details}
+          </table>
+        </td></tr>
+      </table>''')
+
+    return f'''<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f3f4f6;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:20px 0;">
+    <tr><td align="center">
+      <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;">
+        <tr><td style="background:#111827;border-radius:10px;padding:18px 22px;">
+          <div style="font-family:Arial,Helvetica,sans-serif;font-size:19px;font-weight:bold;color:#ffffff;">
+            ⚠️ ACTION REQUIRED
+          </div>
+          <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#d1d5db;margin-top:4px;">
+            {n} possible cancellation / schedule-change email(s) found in the mailbox
+          </div>
+        </td></tr>
+        <tr><td style="height:18px;"></td></tr>
+        <tr><td>{''.join(cards)}</td></tr>
+        <tr><td style="background:#eef2ff;border-radius:10px;padding:14px 18px;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#374151;line-height:1.6;">
+          <b>Next step:</b> open each in the cs@ inbox (search its <i>Ref</i> or subject), confirm it is a
+          genuine cancellation / schedule change, then <b>forward it to the affected client</b> so it is never missed.
+        </td></tr>
+        <tr><td style="padding:14px 4px 0;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#9ca3af;">
+          Automated watch — PIVOT AUTOMATED ITINERARY
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>'''
+
+
+def email_disruptions(send_gmail, sender, alerts):
+    """Send ONE private ACTION-REQUIRED digest of possible cancellation /
+    schedule-change emails, so they stop getting buried. Colour-coded HTML
+    (cancellation=red, schedule change=orange, delay=amber) with a plain-text
+    fallback. Inbox-only (like email_flags), so it can safely name the subject +
+    message id to locate each."""
+    if not alerts:
+        return False
+    to = os.environ.get("DISRUPTION_NOTIFY_TO") or os.environ.get("NOTIFY_TO") or sender
+    enriched = _disruption_enrich(alerts)
     m = EmailMessage()
     m["Subject"] = f"⚠️ ACTION REQUIRED — {len(alerts)} flight cancellation/change alert(s)"
     m["From"] = sender
     m["To"] = to
-    m.set_content("\n".join(lines))
+    m.set_content(_disruption_text(enriched))          # text/plain fallback
+    m.add_alternative(_disruption_html(enriched), subtype="html")   # rich HTML
     raw = base64.urlsafe_b64encode(m.as_bytes()).decode("ascii")
     send_gmail.users().messages().send(userId="me", body={"raw": raw}).execute(num_retries=API_RETRIES)
     return True
