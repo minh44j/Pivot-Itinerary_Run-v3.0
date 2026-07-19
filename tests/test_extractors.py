@@ -86,9 +86,20 @@ def test_india_arrival(data, expected):
     ("FLIGHT CANCELLATION INFORMATION", True),          # Himalaya
     ("SCHEDULE CHANGE // X6Y18Z", True),               # Alhind B2B
     ("schedule change GY7G4P", True),                   # Akbar B2B
+    ("Important changes to your booking: Booking reference: GVBO9U", True),  # flydubai
+    ("Your flight schedule has changed", True),         # Qatar Airways
+    ("The departure time has changed for your flight to Jeddah", True),      # Emirates
+    ("Delay of your flight to Rome", True),            # ITA Airways
+    ("Gulf Air Flight Time Change", True),             # Gulf Air
+    ("Fly Jinnah Booking Change Notification", True),   # Fly Jinnah
+    ("RE: ALQ11072026094425106- FLIGHT DISRUPTED", True),   # Alhind B2B
     # REAL non-disruption subjects from the same mailbox -> must NOT flag.
     ("Update on your upcoming flight", False),          # Saudia marketing upsell
+    ("Update on your flight to Riyadh", False),         # flynas upgrade bid
     ("Next steps for your upcoming flight to Riyadh", False),   # marketing
+    ("Oman Air - Important Update", False),             # Oman Air upsell
+    ("PIA Contact Change", False),                       # contact info change, NOT the flight
+    ("Itinerary for the Reservation 4H9VD0", False),    # Air Arabia confirmation
     ("Check In for flight : XY-140", False),           # flynas check-in
     ("Check-in reminder", False),                       # aJet check-in
     ("Boarding Information", False),                     # aJet gate info
@@ -99,6 +110,12 @@ def test_india_arrival(data, expected):
     ("Ticket information", False),                       # aJet confirmation
     ("Booking Success", False),                          # Akbar confirmation
     ("Your booking is confirmed! View your ticket now", False),      # Pegasus confirmation
+    # Trickier real traps that must NOT flag (not client-facing flight disruptions):
+    ("Action Required: Submit Your Air Suvidha Self-Declaration Form", False),  # AI Express form
+    ("RE: ALQ06072026120450106- REISSUE REQUEST", False),   # B2B reissue chatter
+    ("Flight reissue request", False),                       # our own reissue request
+    ("Flyadeal Notification - Gate Change", False),          # gate change (airport-level, not schedule)
+    ("Action required for your Google Account", False),      # unrelated account mail
 ])
 def test_disruption_match(subject, should_match):
     hit = E.disruption_match(subject)

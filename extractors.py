@@ -915,16 +915,30 @@ def india_arrival(data):
 # Tuned broad on purpose (better a rare false alarm than a missed cancellation);
 # refine the lists as real false alarms surface.
 # NOTE: both lists were cross-checked (2026-07-19) against REAL disruption emails
-# in the cs@ inbox — aJet "Flight change information" / "Flight Schedule Change
-# Information", IndiGo "Your Revised IndiGo Itinerary", airblue "Flight Delayed
-# Notification", Turkish "Schedule Change", flydubai "Booking cancelled", Etihad
-# "Important: Flight change", Himalaya "FLIGHT CANCELLATION INFORMATION", and the
-# Akbar/Alhind B2B "SCHEDULE CHANGE // <PNR>" notices. Keep them in sync if new
-# templates appear.
+# across the whole cs@ mailbox. Confirmed templates the watch must catch:
+#   aJet      "Flight change information" / "Flight Schedule Change Information"
+#   IndiGo    "Your Revised IndiGo Itinerary"
+#   airblue   "Flight Delayed Notification"
+#   Turkish   "Schedule Change"
+#   flydubai  "Booking cancelled #..." / "Important changes to your booking: ..."
+#   Qatar     "Your flight schedule has changed"
+#   Emirates  "The departure time has changed for your flight to ..."
+#   Etihad    "Important: Flight change"
+#   ITA       "Delay of your flight to ..."
+#   Gulf Air  "Gulf Air Flight Time Change"
+#   Fly Jinnah"Fly Jinnah Booking Change Notification"
+#   Himalaya  "FLIGHT CANCELLATION INFORMATION" / "SCHEDULE CHANGE INFORMATION"
+#   Akbar/Alhind B2B  "SCHEDULE CHANGE // <PNR>" / "FLIGHT DISRUPTED"
+# Must NOT match (real noise in the same mailbox): "Update on your upcoming flight"
+# / "Update on your flight to <city>" (upsell), "Oman Air - Important Update",
+# "PIA Contact Change" (contact info, not the flight), and Air Arabia "Itinerary
+# for the Reservation <ref>" (a confirmation) — hence no bare "change"/"itinerary"
+# keyword. Keep the lists in sync if new templates appear.
 DISRUPTION_QUERY_TERMS = [
     "cancel", "cancelled", "canceled", "cancellation", "cancelling",
     "reschedule", "rescheduled", "rescheduling",
     "schedule change", "flight change", "time change", "timing change",
+    "changed", "changes", "booking change",
     "revised", "itinerary change", "updated itinerary",
     "delay", "delayed", "postponed",
     "disruption", "disrupted", "rebooked", "rebooking", "new departure",
@@ -934,8 +948,12 @@ DISRUPTION_KEYWORDS = [
     "cancel",              # cancelled / cancellation / canceled / cancelling
     "reschedul",           # reschedule(d) / rescheduling
     "schedule change", "change in schedule",
+    "schedule has changed",   # Qatar "Your flight schedule has changed"
     "flight change", "flight changed",
     "time change", "timing change",
+    "has changed",         # Emirates "departure time has changed" / generic
+    "booking change",      # Fly Jinnah "Booking Change Notification"
+    "change to your booking", "changes to your booking",   # flydubai
     "revised",             # "Your Revised IndiGo Itinerary" / revised departure
     "itinerary change", "updated itinerary",
     "delay",               # delayed / delay ("Flight Delayed Notification")
