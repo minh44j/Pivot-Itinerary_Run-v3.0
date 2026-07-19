@@ -899,6 +899,53 @@ def india_arrival(data):
     return False
 
 
+# ── disruption watch (cancellations / schedule changes) ─────────────────────
+# The PORTALS registry only ever matches NEW ticket CONFIRMATIONS. Cancellation
+# and schedule-change emails have different subjects and were slipping past the
+# automation entirely — buried in the cs@ inbox and missed by staff. The cloud
+# runner (main.scan_disruptions) does a subject-line keyword scan of the whole
+# inbox and raises ONE private ACTION-REQUIRED alert per new match.
+#
+# Two lists, on purpose:
+#   * DISRUPTION_QUERY_TERMS — the COARSE net handed to Gmail search (spelled-out
+#     words Gmail tokenises well).
+#   * DISRUPTION_KEYWORDS    — the AUTHORITATIVE substring stems checked here in
+#     Python (unit-tested offline, no Gmail needed). Gmail returns candidates;
+#     disruption_match() has the final say so the rule is testable and precise.
+# Tuned broad on purpose (better a rare false alarm than a missed cancellation);
+# refine the lists as real false alarms surface.
+DISRUPTION_QUERY_TERMS = [
+    "cancel", "cancelled", "canceled", "cancellation", "cancelling",
+    "reschedule", "rescheduled", "rescheduling",
+    "schedule change", "flight change", "time change", "timing change",
+    "revised itinerary", "itinerary change", "updated itinerary",
+    "disruption", "disrupted", "rebooked", "rebooking", "new departure",
+]
+
+DISRUPTION_KEYWORDS = [
+    "cancel",              # cancelled / cancellation / canceled / cancelling
+    "reschedul",           # reschedule(d) / rescheduling
+    "schedule change", "change in schedule",
+    "flight change", "flight changed",
+    "time change", "timing change",
+    "revised itinerary", "itinerary change", "updated itinerary",
+    "disrupt",             # disruption / disrupted
+    "rebook",              # rebook / rebooked / rebooking
+    "new departure", "departure change",
+]
+
+
+def disruption_match(subject):
+    """Return the first disruption keyword found in `subject` (case-insensitive
+    substring match), or "" if none. Pure/offline — the authoritative filter
+    behind main.scan_disruptions, so the exact rule is unit-tested without Gmail."""
+    s = (subject or "").lower()
+    for kw in DISRUPTION_KEYWORDS:
+        if kw in s:
+            return kw
+    return ""
+
+
 # ── registry ───────────────────────────────────────────────────────────────
 PORTALS = [
     {"name": "Alhind",        "from": "alhind@alhindsanchar.com",   "subject": "Air Ticket",                                      "source": "body",      "fn": extract_alhind},

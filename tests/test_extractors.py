@@ -74,6 +74,28 @@ def test_india_arrival(data, expected):
     assert E.india_arrival(data) is expected
 
 
+@pytest.mark.parametrize("subject,should_match", [
+    # real cancellation / schedule-change subjects -> flagged for an alert
+    ("Your flight has been CANCELLED", True),
+    ("Flight cancellation notice — PNR ABC123", True),
+    ("Schedule Change for your upcoming trip", True),
+    ("Important: your flight has been rescheduled", True),
+    ("Revised itinerary — please review new timings", True),
+    ("Time change on flight TK123", True),
+    ("We have rebooked you on an alternative flight", True),
+    ("Flight disruption — action required", True),
+    # ordinary confirmations / unrelated mail -> NOT flagged (no false alarm)
+    ("Air Ticket - Booking Confirmed", False),
+    ("Ticket information", False),
+    ("Your booking is confirmed! View your ticket now", False),
+    ("Booking Success", False),
+    ("Welcome to our loyalty programme", False),
+])
+def test_disruption_match(subject, should_match):
+    hit = E.disruption_match(subject)
+    assert bool(hit) is should_match, f"{subject!r} -> {hit!r}"
+
+
 @pytest.mark.parametrize("fixture", list(CASES))
 def test_snapshot(fixture):
     data = _run(fixture)

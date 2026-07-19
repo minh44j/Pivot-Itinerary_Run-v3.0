@@ -48,6 +48,9 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 LOG_FILE = "processed_ids.json"
+# Separate dedup log for the disruption watch (cancellation / schedule-change
+# alerts). Same public-safe convention as processed_ids.json: message_id only.
+DISRUPTION_LOG_FILE = "disruption_ids.json"
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.path.join(PROJECT_DIR, "out")
 # Transient 5xx / rate-limit responses from Google get retried with exponential
@@ -131,6 +134,19 @@ def save_log(log):
 
 def processed_ids(log):
     return {e["message_id"] for e in log["processed"]}
+
+
+# ── disruption-watch log (message ids only — same public-safe convention) ──
+def load_disruption_log():
+    if os.path.exists(DISRUPTION_LOG_FILE):
+        with open(DISRUPTION_LOG_FILE) as f:
+            return json.load(f)
+    return {"alerted": []}
+
+
+def save_disruption_log(log):
+    with open(DISRUPTION_LOG_FILE, "w") as f:
+        json.dump(log, f, indent=2)
 
 
 # ── gmail helpers ──────────────────────────────────────────────────────────
@@ -413,6 +429,77 @@ def email_flags(send_gmail, sender, flagged):
     return True
 
 
+# ── disruption watch: catch cancellations / schedule changes ────────────────
+# The confirmation flow above only matches NEW ticket confirmations from the 4
+# portals. Cancellation and schedule-change emails have different subjects, so
+# they were invisible to the automation and kept getting missed. This does a
+# READ-ONLY subject-keyword scan of the whole inbox (gmail.readonly — no message
+# is opened, replied to, forwarded, or modified) and returns any NEW match not
+# yet alerted. main() raises ONE private ACTION-REQUIRED digest to cs@ for them.
+def scan_disruptions(gmail, window, alerted_ids):
+    """Return alert dicts for NEW cancellation / schedule-change emails in the
+    inbox. Gmail's subject query is the coarse net; extractors.disruption_match()
+    is the authoritative filter. Never raises — a disruption-scan failure must not
+    break the confirmation run (caller wraps it too)."""
+    terms = " OR ".join(f'subject:({t})' for t in extractors.DISRUPTION_QUERY_TERMS)
+    q = f"in:inbox ({terms}) {window}"
+    res = gmail.users().messages().list(
+        userId="me", q=q, maxResults=50).execute(num_retries=API_RETRIES)
+    alerts = []
+    for m in res.get("messages", []):
+        mid = m["id"]
+        if mid in alerted_ids:
+            continue
+        msg = gmail.users().messages().get(
+            userId="me", id=mid, format="metadata",
+            metadataHeaders=["Subject", "From", "Date"]).execute(num_retries=API_RETRIES)
+        subject = _header(msg, "Subject")
+        kw = extractors.disruption_match(subject)   # authoritative — Gmail matches loosely
+        if not kw:
+            continue
+        alerts.append({
+            "id": mid,
+            "from": _header(msg, "From"),
+            "subject": subject,
+            "date": _header(msg, "Date"),
+            "keyword": kw,
+            "snippet": (msg.get("snippet") or "")[:200],
+        })
+    return alerts
+
+
+def email_disruptions(send_gmail, sender, alerts):
+    """Send ONE private ACTION-REQUIRED digest listing possible cancellation /
+    schedule-change emails, so they stop getting buried. Inbox-only (like
+    email_flags), so it can safely name the subject + message id to locate each."""
+    if not alerts:
+        return False
+    to = os.environ.get("DISRUPTION_NOTIFY_TO") or os.environ.get("NOTIFY_TO") or sender
+    lines = [f"ACTION REQUIRED — {len(alerts)} possible cancellation / schedule-change "
+             f"email(s) found in the cs@ inbox:", ""]
+    for a in alerts:
+        lines.append(f"• From:       {a.get('from')}")
+        lines.append(f"  Subject:    {a.get('subject')}")
+        lines.append(f"  Received:   {a.get('date')}")
+        lines.append(f"  Matched on: \"{a.get('keyword')}\"")
+        if a.get("snippet"):
+            lines.append(f"  Preview:    {a['snippet']}")
+        lines.append(f"  Source Ref: {a.get('id')}")
+        lines.append("")
+    lines.append("Open each in the cs@ inbox (search its Source Ref or subject), confirm whether")
+    lines.append("it is a genuine cancellation or schedule change, and forward it to the affected")
+    lines.append("client so it is never missed.")
+    lines.append("(Automated watch — PIVOT AUTOMATED ITINERARY)")
+    m = EmailMessage()
+    m["Subject"] = f"ACTION REQUIRED — {len(alerts)} flight cancellation/change alert(s)"
+    m["From"] = sender
+    m["To"] = to
+    m.set_content("\n".join(lines))
+    raw = base64.urlsafe_b64encode(m.as_bytes()).decode("ascii")
+    send_gmail.users().messages().send(userId="me", body={"raw": raw}).execute(num_retries=API_RETRIES)
+    return True
+
+
 # ── main ───────────────────────────────────────────────────────────────────
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
@@ -504,6 +591,27 @@ def main():
         email_flags(send_gmail, sender, flagged)
     except Exception as e:
         print(json.dumps({"flag_email_error": str(e)[:120]}))
+
+    # ── disruption watch ────────────────────────────────────────────────────
+    # Alert on NEW cancellation / schedule-change emails so they stop getting
+    # missed. Independent of the confirmation flow; de-duped by its own log
+    # (message_id only, public-safe). The alert is recorded only AFTER a
+    # successful send, so a failed send re-alerts next run rather than silently
+    # dropping the warning. Fully wrapped: a disruption-watch failure must never
+    # break the confirmation run or its summary.
+    disruption_alerts = 0
+    try:
+        dlog = load_disruption_log()
+        alerted_ids = {e["message_id"] for e in dlog["alerted"]}
+        new_alerts = scan_disruptions(gmail, window, alerted_ids)
+        if new_alerts:
+            email_disruptions(send_gmail, sender, new_alerts)
+            for a in new_alerts:
+                dlog["alerted"].append({"message_id": a["id"]})
+            save_disruption_log(dlog)
+            disruption_alerts = len(new_alerts)
+    except Exception as e:
+        print(json.dumps({"disruption_watch_error": str(e)[:120]}))
     # PUBLIC-SAFE LOG: print COUNTS only — never PNRs, passenger names, Drive
     # links, message ids, subjects, or tracebacks (Action logs are world-readable
     # on a public repo). Per-portal tallies + generic flag reasons are enough to
@@ -517,6 +625,7 @@ def main():
         "skipped": len(skipped),
         "flagged_total": len(flagged),
         "flagged_reasons": sorted({(f.get("reason") or "").split(":")[0] for f in flagged}),
+        "disruption_alerts": disruption_alerts,
     }
     print(json.dumps(summary, indent=2))
 
