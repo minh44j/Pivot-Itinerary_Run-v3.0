@@ -478,17 +478,37 @@ def scan_disruptions(gmail, alerted_ids):
     return alerts
 
 
-# Colour + label per disruption category (extractors.disruption_category):
-#   cancellation -> red · schedule_change -> orange · delay -> amber.
-# `rank` sorts the most urgent (cancellations) to the top of the digest.
+# Alert e-mail is skinned to the Pivot itinerary brand (Model B / dark luxury):
+# charcoal->black gradient chrome, gold #c9a84c hairline + accents, feather logo +
+# "PIVOT TRAVEL MANAGEMENT" wordmark, Cormorant Garamond (display) + Inter (body),
+# dark footer. Severity is kept as a small coloured PILL on each card's dark strip
+# so urgency still reads at a glance (cancellation=red, schedule change=orange,
+# delay=amber). `rank` sorts the most urgent (cancellations) to the top.
+_BRAND_GOLD = "#c9a84c"
+_BRAND_CHARCOAL_GRAD = "linear-gradient(135deg,#323234 0%,#1e1e20 55%,#0e0e0f 100%)"
+_FONT_SERIF = "'Cormorant Garamond',Georgia,'Times New Roman',serif"
+_FONT_SANS = "'Inter',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
 _DISRUPTION_STYLE = {
-    "cancellation":    {"label": "CANCELLATION",    "emoji": "🔴",
-                        "accent": "#C62828", "bg": "#FDECEA", "rank": 0},
-    "schedule_change": {"label": "SCHEDULE CHANGE", "emoji": "🟠",
-                        "accent": "#E65100", "bg": "#FDF1E5", "rank": 1},
-    "delay":           {"label": "DELAY",           "emoji": "🟡",
-                        "accent": "#B7791F", "bg": "#FBF6E4", "rank": 2},
+    "cancellation":    {"label": "CANCELLATION",    "emoji": "🔴", "accent": "#B23A3A", "rank": 0},
+    "schedule_change": {"label": "SCHEDULE CHANGE", "emoji": "🟠", "accent": "#C07A2B", "rank": 1},
+    "delay":           {"label": "DELAY",           "emoji": "🟡", "accent": "#C99A3A", "rank": 2},
 }
+
+_LOGO_DATA_URI = None
+
+
+def _logo_data_uri():
+    """Return the feather logo as an inline data: URI (embedded so it always shows,
+    no remote fetch / blocked-image issues). Cached; '' if the asset is missing —
+    the header then falls back to the wordmark alone."""
+    global _LOGO_DATA_URI
+    if _LOGO_DATA_URI is None:
+        try:
+            with open(os.path.join(PROJECT_DIR, "logo.png"), "rb") as f:
+                _LOGO_DATA_URI = "data:image/png;base64," + base64.b64encode(f.read()).decode("ascii")
+        except Exception:
+            _LOGO_DATA_URI = ""
+    return _LOGO_DATA_URI
 
 
 def _disruption_enrich(alerts):
@@ -525,60 +545,73 @@ def _disruption_text(alerts):
 
 
 def _disruption_html(alerts):
-    """Structured HTML digest — one colour-coded card per alert. Uses table +
-    inline styles only (Gmail / Outlook / Apple Mail safe; no <style>/flexbox)."""
+    """Structured HTML digest skinned to the Pivot itinerary brand — charcoal/gold
+    Model-B header with the feather logo + wordmark, one card per alert with a dark
+    segment-style strip carrying a coloured severity pill, and a dark footer. Uses
+    tables + inline styles only (Gmail / Outlook / Apple Mail safe)."""
     import html as _html
 
     def esc(v):
         return _html.escape(str(v).strip()) if v is not None and str(v).strip() else "N/A"
 
     n = len(alerts)
+    logo = _logo_data_uri()
+    logo_img = (f'<img src="{logo}" height="34" alt="Pivot" '
+                f'style="display:inline-block;border:0;margin:0 0 10px;">' if logo else "")
+
+    def row(k, v):
+        return (f'<tr><td style="font-family:{_FONT_SANS};font-size:11px;color:#9a8f77;'
+                f'text-transform:uppercase;letter-spacing:.5px;vertical-align:top;'
+                f'padding:5px 12px 5px 0;white-space:nowrap;">{k}</td>'
+                f'<td style="font-family:{_FONT_SANS};font-size:13px;color:#26241f;'
+                f'line-height:1.55;padding:5px 0;">{v}</td></tr>')
+
     cards = []
     for a in alerts:
         st = a["style"]
-        row = ('<tr><td style="color:#6b7280;font-size:12px;vertical-align:top;'
-               'padding:3px 10px 3px 0;white-space:nowrap;">{k}</td>'
-               '<td style="color:#111827;font-size:13px;padding:3px 0;">{v}</td></tr>')
         details = "".join([
-            row.format(k="From",    v=f'<b>{esc(a.get("from"))}</b>'),
-            row.format(k="Subject", v=esc(a.get("subject"))),
-            row.format(k="Received", v=esc(a.get("date"))),
-            row.format(k="Preview",  v=f'<span style="color:#4b5563;">{esc(a.get("snippet"))}</span>'),
-            row.format(k="Ref",      v=f'<span style="color:#9ca3af;font-family:monospace;'
-                                       f'font-size:12px;">{esc(a.get("id"))}</span>'),
+            row("From",     f'<b>{esc(a.get("from"))}</b>'),
+            row("Subject",  esc(a.get("subject"))),
+            row("Received", esc(a.get("date"))),
+            row("Preview",  f'<span style="color:#5a5344;">{esc(a.get("snippet"))}</span>'),
+            row("Ref",      f'<span style="color:#a99f8a;font-family:monospace;font-size:12px;">{esc(a.get("id"))}</span>'),
         ])
         cards.append(f'''
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;border-collapse:separate;">
-        <tr><td style="background:{st['bg']};border-left:6px solid {st['accent']};border-radius:10px;padding:14px 18px;">
-          <div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;color:{st['accent']};margin:0 0 10px;">
-            {st['emoji']}&nbsp; {st['label']}
-          </div>
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-family:Arial,Helvetica,sans-serif;line-height:1.5;">
-            {details}
-          </table>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;border:1px solid #e7e1d3;border-radius:12px;border-collapse:separate;overflow:hidden;">
+        <tr><td style="background:#1e1e20;background:{_BRAND_CHARCOAL_GRAD};padding:11px 16px;">
+          <span style="display:inline-block;background:{st['accent']};color:#ffffff;font-family:{_FONT_SANS};font-size:11px;font-weight:700;letter-spacing:1.2px;padding:5px 12px;border-radius:20px;">{st['emoji']}&nbsp; {st['label']}</span>
+        </td></tr>
+        <tr><td style="background:{_BRAND_GOLD};font-size:2px;line-height:2px;height:2px;">&nbsp;</td></tr>
+        <tr><td style="background:#ffffff;padding:14px 18px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">{details}</table>
         </td></tr>
       </table>''')
 
-    return f'''<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f3f4f6;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:20px 0;">
+    return f'''<!DOCTYPE html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600&display=swap');</style>
+</head><body style="margin:0;padding:0;background:#eae7e0;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eae7e0;padding:22px 0;">
     <tr><td align="center">
-      <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;">
-        <tr><td style="background:#111827;border-radius:10px;padding:18px 22px;">
-          <div style="font-family:Arial,Helvetica,sans-serif;font-size:19px;font-weight:bold;color:#ffffff;">
-            ⚠️ ACTION REQUIRED
-          </div>
-          <div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#d1d5db;margin-top:4px;">
-            {n} possible cancellation / schedule-change email(s) found in the mailbox
-          </div>
+      <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;border-radius:14px;overflow:hidden;background:#f6f4ef;">
+        <tr><td style="background:#1e1e20;background:{_BRAND_CHARCOAL_GRAD};padding:26px 24px 20px;text-align:center;">
+          {logo_img}
+          <div style="font-family:{_FONT_SERIF};font-size:21px;font-weight:600;letter-spacing:3px;color:#f2efe6;">PIVOT TRAVEL MANAGEMENT</div>
+          <div style="height:1px;background:{_BRAND_GOLD};line-height:1px;font-size:1px;max-width:170px;margin:15px auto;">&nbsp;</div>
+          <div style="font-family:{_FONT_SANS};font-size:15px;font-weight:600;letter-spacing:1.5px;color:{_BRAND_GOLD};">⚠️ ACTION REQUIRED</div>
+          <div style="font-family:{_FONT_SANS};font-size:13px;color:#b9b5ab;margin-top:6px;">{n} possible cancellation / schedule-change email(s)</div>
         </td></tr>
-        <tr><td style="height:18px;"></td></tr>
-        <tr><td>{''.join(cards)}</td></tr>
-        <tr><td style="background:#eef2ff;border-radius:10px;padding:14px 18px;font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#374151;line-height:1.6;">
-          <b>Next step:</b> open each in the cs@ inbox (search its <i>Ref</i> or subject), confirm it is a
-          genuine cancellation / schedule change, then <b>forward it to the affected client</b> so it is never missed.
+        <tr><td style="padding:22px 22px 6px;">
+          {''.join(cards)}
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:2px 0 4px;">
+            <tr><td style="background:#f7f2e4;border:1px solid #e6dcc0;border-radius:10px;padding:13px 16px;font-family:{_FONT_SANS};font-size:12.5px;color:#4a4436;line-height:1.6;">
+              <b style="color:#8a6d1f;">Next step:</b> open each in the cs@ inbox (search its <i>Ref</i> or subject), confirm it is a genuine cancellation / schedule change, then <b>forward it to the affected client</b> so it is never missed.
+            </td></tr>
+          </table>
         </td></tr>
-        <tr><td style="padding:14px 4px 0;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#9ca3af;">
-          Automated watch — PIVOT AUTOMATED ITINERARY
+        <tr><td style="background:#1e1e20;background:{_BRAND_CHARCOAL_GRAD};padding:16px 20px;text-align:center;">
+          <div style="height:1px;background:{_BRAND_GOLD};opacity:.6;line-height:1px;font-size:1px;max-width:130px;margin:0 auto 12px;">&nbsp;</div>
+          <div style="font-family:{_FONT_SANS};font-size:10px;letter-spacing:1.5px;color:#8f8b81;text-transform:uppercase;">PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; WWW.PIVOT-TRAVELS.COM</div>
         </td></tr>
       </table>
     </td></tr>
