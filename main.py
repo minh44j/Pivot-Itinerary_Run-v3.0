@@ -536,6 +536,10 @@ def _disruption_text(alerts):
         if a.get("snippet"):
             lines.append(f"  Preview:    {a['snippet']}")
         lines.append(f"  Source Ref: {a.get('id')}")
+        if a.get("revised_pdf"):
+            lines.append(f"  >> Auto-draft REVISED itinerary attached "
+                         f"({os.path.basename(a['revised_pdf'])}) — VERIFY against the "
+                         f"airline email before sending to the client.")
         lines.append("")
     lines.append("Open each in the cs@ inbox (search its Source Ref or subject), confirm")
     lines.append("whether it is a genuine cancellation / schedule change, and forward it to")
@@ -576,6 +580,14 @@ def _disruption_html(alerts):
             row("Preview",  f'<span style="color:#5a5344;">{esc(a.get("snippet"))}</span>'),
             row("Ref",      f'<span style="color:#a99f8a;font-family:monospace;font-size:12px;">{esc(a.get("id"))}</span>'),
         ])
+        revised_note = ""
+        if a.get("revised_pdf"):
+            revised_note = (
+                f'<div style="margin-top:12px;background:#eaf6ee;border:1px solid #bfe2cb;'
+                f'border-radius:8px;padding:9px 12px;font-family:{_FONT_SANS};font-size:12px;color:#1f6b3b;">'
+                f'📎 <b>Auto-draft revised itinerary attached</b> '
+                f'({esc(os.path.basename(a["revised_pdf"]))}) — verify against the airline '
+                f'email, then forward to the client.</div>')
         cards.append(f'''
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;border:1px solid #e7e1d3;border-radius:12px;border-collapse:separate;overflow:hidden;">
         <tr><td style="background:#1e1e20;background:{_BRAND_CHARCOAL_GRAD};padding:11px 16px;">
@@ -584,6 +596,7 @@ def _disruption_html(alerts):
         <tr><td style="background:{_BRAND_GOLD};font-size:2px;line-height:2px;height:2px;">&nbsp;</td></tr>
         <tr><td style="background:#ffffff;padding:14px 18px;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0">{details}</table>
+          {revised_note}
         </td></tr>
       </table>''')
 
@@ -635,9 +648,78 @@ def email_disruptions(send_gmail, sender, alerts):
     m["To"] = to
     m.set_content(_disruption_text(enriched))          # text/plain fallback
     m.add_alternative(_disruption_html(enriched), subtype="html")   # rich HTML
+    # Attach any auto-drafted REVISED itinerary PDFs (aJet schedule changes we
+    # could rebuild). Best-effort: a bad path never blocks the alert.
+    for a in enriched:
+        path = a.get("revised_pdf")
+        if path and os.path.exists(path):
+            try:
+                with open(path, "rb") as f:
+                    m.add_attachment(f.read(), maintype="application", subtype="pdf",
+                                     filename=os.path.basename(path))
+            except Exception:
+                pass
     raw = base64.urlsafe_b64encode(m.as_bytes()).decode("ascii")
     send_gmail.users().messages().send(userId="me", body={"raw": raw}).execute(num_retries=API_RETRIES)
     return True
+
+
+# ── auto-draft a REVISED itinerary on an aJet schedule change / cancellation ──
+# When a disruption alert is an aJet change we can parse, rebuild the ORIGINAL
+# booking (find its ticket email in cs@ by PNR, re-extract full pax/baggage/
+# segments), patch ONLY the affected leg with the new flight/times, and render a
+# fresh branded PDF for staff to VERIFY and forward. Safe-by-default: ANY
+# uncertainty — can't parse the change, can't find the original booking, no leg
+# matches, or QC fails — returns None and the alert ships with no draft. The
+# draft is a convenience for the human who already reviews every alert; it is
+# never sent to a client automatically.
+def _find_original_ajet_booking(gmail, pnr):
+    """Locate the original aJet ticket email for `pnr` in cs@ and re-extract it to
+    a full finalised booking dict. Returns None if not found / not confidently the
+    same PNR."""
+    q = (f'from:onlineticket@mail.ajet.com subject:"Ticket information" {pnr} '
+         f'-in:sent -in:trash')
+    res = gmail.users().messages().list(
+        userId="me", q=q, maxResults=5).execute(num_retries=API_RETRIES)
+    for m in res.get("messages", []):
+        msg = gmail.users().messages().get(
+            userId="me", id=m["id"], format="full").execute(num_retries=API_RETRIES)
+        booking = extractors.extract_ajet(_plain_body(msg), {"date": _email_date_ddmon(msg)})
+        if (booking.get("pnr") or "").upper() == pnr.upper():
+            booking["portal"] = "aJet"
+            return booking
+    return None
+
+
+def build_revised_itinerary(gmail, alert):
+    """Return a path to a freshly rendered REVISED itinerary PDF for a disruption
+    `alert`, or None if one can't be produced confidently. aJet only for now."""
+    if "onlineticket@mail.ajet.com" not in (alert.get("from") or "").lower():
+        return None
+    try:
+        msg = gmail.users().messages().get(
+            userId="me", id=alert["id"], format="full").execute(num_retries=API_RETRIES)
+        change = extractors.extract_ajet_change(_plain_body(msg))
+        if not change or not change.get("pnr"):
+            return None
+        booking = _find_original_ajet_booking(gmail, change["pnr"])
+        if not booking:
+            return None
+        if not extractors.apply_flight_change(booking, change):
+            return None                        # no leg matched — don't guess
+        if extractors.qc_check(booking):
+            return None                        # patched booking failed QC — abort
+        pnr = "".join(c for c in str(booking["pnr"]) if c.isalnum() or c in "_-") or "UNKNOWN"
+        out_dir = os.path.join(OUT_DIR, "revised", datetime.now().strftime("%Y-%m-%d"))
+        os.makedirs(out_dir, exist_ok=True)
+        pdf_path = build_pdf(booking, out_dir, project_dir=PROJECT_DIR)
+        revised = os.path.join(out_dir, f"REVISED-{pnr}.pdf")
+        os.replace(pdf_path, revised)
+        if extractors.india_arrival(booking):
+            _append_air_suvidha(revised)       # keep the guide on India arrivals
+        return revised
+    except Exception:
+        return None                            # fail safe — alert still ships
 
 
 # ── main ───────────────────────────────────────────────────────────────────
@@ -740,11 +822,19 @@ def main():
     # dropping the warning. Fully wrapped: a disruption-watch failure must never
     # break the confirmation run or its summary.
     disruption_alerts = 0
+    revised_drafts = 0
     try:
         dlog = load_disruption_log()
         alerted_ids = {e["message_id"] for e in dlog["alerted"]}
         new_alerts = scan_disruptions(gmail, alerted_ids)
         if new_alerts:
+            # Try to auto-draft a REVISED itinerary for each alert (aJet only for
+            # now; None whenever it can't be produced confidently). Attached to the
+            # digest for the human to verify + forward.
+            for a in new_alerts:
+                a["revised_pdf"] = build_revised_itinerary(gmail, a)
+                if a["revised_pdf"]:
+                    revised_drafts += 1
             email_disruptions(send_gmail, sender, new_alerts)
             for a in new_alerts:
                 dlog["alerted"].append({"message_id": a["id"]})
@@ -766,6 +856,7 @@ def main():
         "flagged_total": len(flagged),
         "flagged_reasons": sorted({(f.get("reason") or "").split(":")[0] for f in flagged}),
         "disruption_alerts": disruption_alerts,
+        "revised_drafts": revised_drafts,
     }
     print(json.dumps(summary, indent=2))
 

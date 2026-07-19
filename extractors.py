@@ -713,6 +713,80 @@ def extract_ajet(src, ctx=None):
     return _finalize(d, ctx)
 
 
+# aJet DISRUPTION emails (subjects "Flight change information" / "Flight Schedule
+# Change Information" / "Flight delay information") carry a blue "New Flight
+# Information" panel whose field order is IDENTICAL to a ticket segment, so we
+# reuse the same segment shape to read the NEW flight. The intro line names the
+# OLD flight ("your flight <date>, <VFxxx>, has been ...") which is the key we
+# match against the original booking. Returns a change dict or None (never gates
+# the disruption alert — used only to auto-draft a REVISED itinerary for review).
+_AJET_NEW_SEG = re.compile(
+    r"(\d{1,2}\s+[A-Za-z]+\s+\d{4})\s*\n\s*([^\n]+?)\s*\n\s*([A-Z]{3})\s*\n\s*(\d{1,2}:\d{2})\s*\n\s*"
+    r"([^\n]+?)\s*\n\s*([A-Z]{3})\s*\n\s*(\d{1,2}:\d{2})\s*\n\s*(?:Connecting|Non[ -]?Stop|Direct)?\s*\n?\s*"
+    r"(?:(\d+\s*[Hh]\s*\d+\s*[Mm]))?\s*\n?\s*(VF\s?\d{2,4})\s*\n\s*(ECOJET|BIZJET|PREMIUM)?")
+
+
+def extract_ajet_change(src, ctx=None):
+    text = _html_to_text(src)
+    # aJet splits the panel date across two lines ("18 July\n2026"); rejoin so the
+    # shared segment pattern (which expects the date on one line) still matches.
+    text = re.sub(r"([A-Za-z]+)\n(\d{4})\b", r"\1 \2", text)
+    pnr = _m(text, r"Reservation\s*Code\s*\n?\s*([A-Z0-9]{5,7})")
+    # Case-SENSITIVE (not _m, which forces re.I) so the all-caps name doesn't run
+    # on into the following "Your flight ..." sentence.
+    _nm = re.search(r"Dear\s*\n\s*([A-Z][A-Z'’.\-]+(?:\s+[A-Z][A-Z'’.\-]+)+)", text)
+    name = _nm.group(1).strip() if _nm else ""
+    intro = _m(text, r"your\s+flight\s+[^,\n]+,\s*(VF\s?\d{2,4})\s*,\s*has\s+been")
+    old_flight_no = re.sub(r"(VF)\s?", r"\1 ", intro).strip() if intro else ""
+    low = text.lower()
+    status = ("cancelled" if "cancel" in low
+              else "delayed" if ("delay" in low or "estimated departure time" in low)
+              else "rescheduled")
+    # New flight = the LAST "New Flight Information" panel (the first hit is the
+    # intro heading; on change/cancel emails an "Old Flight Information" panel
+    # precedes it with struck-through times we deliberately ignore).
+    idx = low.rfind("new flight information")
+    seg = _AJET_NEW_SEG.search(text[idx:] if idx != -1 else text)
+    if not (pnr and seg):
+        return None
+    brand = (seg.group(10) or "").upper()
+    new_flight = {
+        "dep_date": to_ddmon(seg.group(1)), "arr_date": to_ddmon(seg.group(1)),
+        "dep_city": seg.group(2).strip(), "dep_iata": seg.group(3), "dep_time": seg.group(4),
+        "arr_city": seg.group(5).strip(), "arr_iata": seg.group(6), "arr_time": seg.group(7),
+        "duration": _norm_dur(seg.group(8) or ""),
+        "flight_no": re.sub(r"(VF)\s?", r"\1 ", seg.group(9)).strip(), "airline": "aJet",
+        "cabin": ("Business" if brand == "BIZJET" else "Economy" if brand == "ECOJET"
+                  else "Premium Economy" if brand == "PREMIUM" else "Not specified"),
+        "dep_airport": "", "arr_airport": "", "terminal": "", "arr_terminal": "",
+    }
+    return {"portal": "aJet", "pnr": pnr, "passenger_name": name,
+            "old_flight_no": old_flight_no, "status": status, "new_flight": new_flight}
+
+
+def apply_flight_change(booking, change):
+    """Overwrite the affected leg of `booking` (a finalised booking dict with
+    segments[].flights[]) with the disruption's new flight. Matches by OLD flight
+    number first (e.g. a cancel that re-numbers VF191->VF189), else by route
+    (dep/arr IATA of the new flight). Returns True iff exactly one leg was patched.
+    Pure — no I/O — so the cloud runner's revised-itinerary path is unit-tested."""
+    new = (change or {}).get("new_flight") or {}
+    def norm(x): return "".join((x or "").split()).upper()
+    old_no = norm(change.get("old_flight_no"))
+    dep, arr = norm(new.get("dep_iata")), norm(new.get("arr_iata"))
+    for seg in booking.get("segments", []):
+        for fl in seg.get("flights", []):
+            by_number = old_no and norm(fl.get("flight_no")) == old_no
+            by_route = dep and arr and norm(fl.get("dep_iata")) == dep and norm(fl.get("arr_iata")) == arr
+            if by_number or by_route:
+                for k in ("flight_no", "dep_time", "arr_time", "dep_date",
+                          "arr_date", "duration", "cabin"):
+                    if new.get(k):
+                        fl[k] = new[k]
+                return True
+    return False
+
+
 # ═════════════════════════════════════════════════════════════════════════
 # 4. PEGASUS — HTML email; handles BOTH simple and connecting layouts.
 # ═════════════════════════════════════════════════════════════════════════
