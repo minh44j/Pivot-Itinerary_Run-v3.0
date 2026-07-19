@@ -142,6 +142,58 @@ def test_disruption_category(subject, preview, keyword, expected):
     assert E.disruption_category(subject, preview, keyword) == expected
 
 
+def test_extract_ajet_change():
+    src = (FIX / "ajet_change.html").read_text(encoding="utf-8")
+    c = E.extract_ajet_change(src, dict(CTX))
+    assert c is not None
+    assert c["pnr"] == "AJ4X9Z"
+    assert c["passenger_name"] == "JOHN DOE"       # not run-on into "Your flight"
+    assert c["old_flight_no"] == "VF 100"          # cancel re-numbers VF100 -> VF200
+    assert c["status"] == "cancelled"
+    nf = c["new_flight"]
+    assert (nf["dep_iata"], nf["dep_time"]) == ("LHR", "22:10")
+    assert (nf["arr_iata"], nf["arr_time"]) == ("CDG", "02:05")
+    assert nf["flight_no"] == "VF 200"
+    assert nf["cabin"] == "Economy"
+
+
+def test_extract_ajet_change_none_on_nonchange():
+    # A normal (non-aJet-change) blob has no Reservation Code / New Flight panel.
+    assert E.extract_ajet_change("<p>hello world, nothing here</p>") is None
+
+
+def test_apply_flight_change_by_number():
+    booking = {"pnr": "AJ4X9Z", "segments": [{"type": "Outbound", "flights": [
+        {"flight_no": "VF 100", "dep_iata": "LHR", "arr_iata": "CDG",
+         "dep_time": "01:00", "arr_time": "04:55", "cabin": "Economy"}]}]}
+    change = {"old_flight_no": "VF 100", "new_flight": {
+        "flight_no": "VF 200", "dep_iata": "LHR", "arr_iata": "CDG",
+        "dep_time": "22:10", "arr_time": "02:05", "cabin": "Economy"}}
+    assert E.apply_flight_change(booking, change) is True
+    f = booking["segments"][0]["flights"][0]
+    assert (f["flight_no"], f["dep_time"], f["arr_time"]) == ("VF 200", "22:10", "02:05")
+
+
+def test_apply_flight_change_by_route_when_number_kept():
+    # Delay: same flight number, only times change -> match by route still works.
+    booking = {"segments": [{"flights": [
+        {"flight_no": "VF 5218", "dep_iata": "HTY", "arr_iata": "SAW",
+         "dep_time": "20:10", "arr_time": "21:55"}]}]}
+    change = {"old_flight_no": "VF 5218", "new_flight": {
+        "flight_no": "VF 5218", "dep_iata": "HTY", "arr_iata": "SAW",
+        "dep_time": "22:40", "arr_time": "00:30"}}
+    assert E.apply_flight_change(booking, change) is True
+    assert booking["segments"][0]["flights"][0]["dep_time"] == "22:40"
+
+
+def test_apply_flight_change_no_match():
+    booking = {"segments": [{"flights": [
+        {"flight_no": "VF 999", "dep_iata": "AAA", "arr_iata": "BBB"}]}]}
+    change = {"old_flight_no": "VF 100", "new_flight": {
+        "flight_no": "VF 200", "dep_iata": "LHR", "arr_iata": "CDG"}}
+    assert E.apply_flight_change(booking, change) is False
+
+
 @pytest.mark.parametrize("fixture", list(CASES))
 def test_snapshot(fixture):
     data = _run(fixture)

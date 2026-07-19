@@ -91,6 +91,20 @@ flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
 
+- **2026-07-19 — auto-draft REVISED itinerary on aJet schedule change:**
+  - When the disruption watch flags an **aJet** change/cancel/delay, the runner
+    now rebuilds the affected booking and attaches a **revised branded PDF** to
+    the alert for staff to verify + forward. Flow: `extractors.extract_ajet_change`
+    parses the blue "New Flight Information" panel (reuses the ticket segment
+    shape) → `main._find_original_ajet_booking` finds the original ticket email in
+    cs@ by PNR and re-extracts the full booking → `extractors.apply_flight_change`
+    patches ONLY the affected leg (match by old flight-no, else route) →
+    `main.build_revised_itinerary` renders `REVISED-<PNR>.pdf` (QC-gated; India
+    guide re-appended). **Safe-by-default:** can't parse / can't find original /
+    no leg matches / QC fails → returns None and the alert ships with no draft.
+    The draft is a convenience for the human who already reviews every alert —
+    never auto-sent to a client. Summary gains `revised_drafts`. aJet only for
+    now (dominant disruption source); other airlines follow the same pattern.
 - **2026-07-19 — disruption watch + brand-matched alert + wordmark case:**
   - **Disruption watch:** cloud runner now also raises ONE private, colour-coded
     ⚠️ ACTION-REQUIRED digest to cs@ for NEW cancellation / schedule-change /
