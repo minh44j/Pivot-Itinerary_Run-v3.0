@@ -711,6 +711,89 @@ def notify_pivot_os(booking, pdf_url="", event="itinerary.created", source_ref="
         return "error"
 
 
+# ── one-off backfill: re-send every processed booking to Pivot OS ───────────
+# processed_ids.json holds ONLY message ids (privacy), so the backfill rebuilds
+# each booking from its source email (fetch → detect portal → re-extract), then
+# POSTs itinerary.created. Idempotent (upsert by idempotency_key = the same
+# "<pnr>:confirmed:<message_id>" a normal send uses), so re-runs and overlap with
+# the live poll never duplicate; PNRs already SAVED in Pivot OS are auto-hidden
+# on their side. Set PIVOT_OS_DRY_RUN=1 to preview without persisting. Runs from
+# CI (needs Google creds + egress). Public-safe summary: counts only.
+def _portal_for(msg):
+    subj = _header(msg, "Subject").lower()
+    frm = _header(msg, "From").lower()
+    for p in extractors.PORTALS:
+        if p["subject"].lower() in subj and p["from"].lower() in frm:
+            return p
+    return None
+
+
+def _find_drive_pdf(drive, pnr):
+    """Best-effort: the branded PDF is uploaded as '<PNR>.pdf'. Return its Drive
+    webViewLink (newest match), or '' if not found."""
+    name = "".join(c for c in str(pnr) if c.isalnum() or c in "_-") + ".pdf"
+    try:
+        files = drive.files().list(
+            q=f"name='{name}' and mimeType='application/pdf' and trashed=false",
+            fields="files(id,webViewLink,modifiedTime)", orderBy="modifiedTime desc",
+            pageSize=5).execute(num_retries=API_RETRIES).get("files", [])
+    except Exception:
+        return ""
+    return files[0].get("webViewLink", "") if files else ""
+
+
+def backfill_pivot_os():
+    if not (os.environ.get("PIVOT_OS_SYNC_URL") and os.environ.get("PIVOT_OS_SYNC_SECRET")):
+        print(json.dumps({"backfill": "skipped", "reason": "PIVOT_OS_SYNC_URL/SECRET not set"}))
+        return
+    gmail, drive = _services()
+    dry = bool(os.environ.get("PIVOT_OS_DRY_RUN"))
+    ids = [e["message_id"] for e in load_log()["processed"]]
+    try:
+        cap = int(os.environ.get("BACKFILL_LIMIT") or "0")   # 0 = all (for a small test run)
+    except ValueError:
+        cap = 0
+    if cap:
+        ids = ids[:cap]
+    t = {"total": len(ids), "sent": 0, "duplicate": 0, "skipped": 0, "error": 0, "dry_run": dry}
+    for mid in ids:
+        try:
+            msg = gmail.users().messages().get(
+                userId="me", id=mid, format="full").execute(num_retries=API_RETRIES)
+        except Exception:
+            t["skipped"] += 1                     # email gone / inaccessible
+            continue
+        portal = _portal_for(msg)
+        if not portal:
+            t["skipped"] += 1
+            continue
+        try:
+            if portal["source"] == "drive_pdf":
+                src = akbar_attachment_text(gmail, msg)
+                if not src:
+                    epoch = int(msg["internalDate"]) / 1000
+                    date_str = datetime.fromtimestamp(epoch, timezone.utc).strftime("%Y-%m-%d")
+                    src = akbar_pdf_text(drive, date_str, msg_epoch=epoch)
+            else:
+                src = _plain_body(msg)
+            data = portal["fn"](src, {"date": _email_date_ddmon(msg)})
+            data["portal"] = data.get("portal") or portal["name"]
+            if extractors.qc_check(data):
+                t["skipped"] += 1                 # can't rebuild cleanly — don't guess
+                continue
+            res = notify_pivot_os(data, _find_drive_pdf(drive, data.get("pnr", "")),
+                                  "itinerary.created", mid, dry_run=dry)
+            if res == "ok":
+                t["sent"] += 1
+            elif res == "duplicate":
+                t["duplicate"] += 1
+            else:
+                t["error"] += 1
+        except Exception:
+            t["error"] += 1
+    print(json.dumps({"pivot_os_backfill": t}, indent=2))
+
+
 # ── auto-draft a REVISED itinerary on an aJet schedule change / cancellation ──
 # When a disruption alert is an aJet change we can parse, rebuild the ORIGINAL
 # booking (find its ticket email in cs@ by PNR, re-extract full pax/baggage/
@@ -933,4 +1016,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    if "--backfill-pivot-os" in sys.argv:
+        backfill_pivot_os()          # one-off: re-send all processed bookings
+    else:
+        main()
