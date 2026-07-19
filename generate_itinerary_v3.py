@@ -489,8 +489,7 @@ body {{
   font-family: 'Cormorant Garamond', serif;
   font-size: 22px;
   font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: #f0ead8;
 }}
 .logo-fallback {{ display: flex; align-items: center; }}
@@ -498,8 +497,7 @@ body {{
   font-family: 'Cormorant Garamond', serif;
   font-size: 22px;
   font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: #f0ead8;
 }}
 .header-divider {{

@@ -480,7 +480,7 @@ def scan_disruptions(gmail, alerted_ids):
 
 # Alert e-mail is skinned to the Pivot itinerary brand (Model B / dark luxury):
 # charcoal->black gradient chrome, gold #c9a84c hairline + accents, feather logo +
-# "PIVOT TRAVEL MANAGEMENT" wordmark, Cormorant Garamond (display) + Inter (body),
+# "Pivot Travel Management" wordmark, Cormorant Garamond (display) + Inter (body),
 # dark footer. Severity is kept as a small coloured PILL on each card's dark strip
 # so urgency still reads at a glance (cancellation=red, schedule change=orange,
 # delay=amber). `rank` sorts the most urgent (cancellations) to the top.
@@ -596,7 +596,7 @@ def _disruption_html(alerts):
       <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;border-radius:14px;overflow:hidden;background:#f6f4ef;">
         <tr><td style="background:#1e1e20;background:{_BRAND_CHARCOAL_GRAD};padding:26px 24px 20px;text-align:center;">
           {logo_img}
-          <div style="font-family:{_FONT_SERIF};font-size:21px;font-weight:600;letter-spacing:3px;color:#f2efe6;">PIVOT TRAVEL MANAGEMENT</div>
+          <div style="font-family:{_FONT_SERIF};font-size:22px;font-weight:600;letter-spacing:.8px;color:#f2efe6;">Pivot Travel Management</div>
           <div style="height:1px;background:{_BRAND_GOLD};line-height:1px;font-size:1px;max-width:170px;margin:15px auto;">&nbsp;</div>
           <div style="font-family:{_FONT_SANS};font-size:15px;font-weight:600;letter-spacing:1.5px;color:{_BRAND_GOLD};">⚠️ ACTION REQUIRED</div>
           <div style="font-family:{_FONT_SANS};font-size:13px;color:#b9b5ab;margin-top:6px;">{n} possible cancellation / schedule-change email(s)</div>
