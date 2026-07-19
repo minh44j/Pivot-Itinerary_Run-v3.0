@@ -488,7 +488,7 @@ body {{
 .company-name {{
   font-family: 'Cormorant Garamond', serif;
   font-size: 22px;
-  font-weight: 600;
+  font-weight: 400;
   letter-spacing: 0.04em;
   color: #f0ead8;
 }}
@@ -496,7 +496,7 @@ body {{
 .logo-text-main {{
   font-family: 'Cormorant Garamond', serif;
   font-size: 22px;
-  font-weight: 600;
+  font-weight: 400;
   letter-spacing: 0.04em;
   color: #f0ead8;
 }}
