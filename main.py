@@ -664,6 +664,46 @@ def email_disruptions(send_gmail, sender, alerts):
     return True
 
 
+# ── Pivot OS sync: push each produced itinerary to "Entries to Be Done" ─────
+# Producer side of PIVOT_OS_INTEGRATION.md. Best-effort HTTPS POST (stdlib only,
+# no new dependency). INERT until BOTH env vars are set, so it never affects runs
+# until Minhaj configures the secret. PII travels only to the configured endpoint
+# over TLS with a Bearer token; it is NEVER printed to the public Action log.
+#   PIVOT_OS_SYNC_URL     e.g. https://<pivot-os-host>/api/itinerary-sync
+#   PIVOT_OS_SYNC_SECRET  shared Bearer secret (== ITINERARY_SYNC_SECRET on their side)
+def notify_pivot_os(booking, pdf_url="", event="itinerary.created", source_ref=""):
+    """POST one itinerary event to Pivot OS. Returns a short outcome string
+    ('ok' | 'duplicate' | 'http-<code>' | 'error'), or None if not configured.
+    Never raises — a sync failure must not affect the itinerary run."""
+    url = os.environ.get("PIVOT_OS_SYNC_URL")
+    secret = os.environ.get("PIVOT_OS_SYNC_SECRET")
+    if not url or not secret:
+        return None
+    import urllib.request
+    import urllib.error
+    payload = extractors.pivot_os_payload(booking, pdf_url, event, source_ref)
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=body, method="POST", headers={
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {secret}",
+        "Idempotency-Key": payload["idempotency_key"],
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            try:
+                data = json.loads(resp.read().decode("utf-8") or "{}")
+            except Exception:
+                data = {}
+            if isinstance(data, dict) and data.get("status") == "duplicate":
+                return "duplicate"       # PNR already a saved booking — expected, not an error
+            code = resp.getcode()
+            return "ok" if 200 <= code < 300 else f"http-{code}"
+    except urllib.error.HTTPError as e:
+        return f"http-{e.code}"          # 400/401/503/500 — retried next run if transient
+    except Exception:
+        return "error"
+
+
 # ── auto-draft a REVISED itinerary on an aJet schedule change / cancellation ──
 # When a disruption alert is an aJet change we can parse, rebuild the ORIGINAL
 # booking (find its ticket email in cs@ by PNR, re-extract full pax/baggage/
@@ -721,6 +761,12 @@ def build_revised_itinerary(gmail, alert):
         os.replace(pdf_path, revised)
         if extractors.india_arrival(booking):
             _append_air_suvidha(revised)       # keep the guide on India arrivals
+        # Notify Pivot OS this booking changed (event=revised; best-effort, no-op
+        # if unconfigured). The saved-booking side surfaces it as "review".
+        try:
+            notify_pivot_os(booking, "", "itinerary.revised", alert.get("id", ""))
+        except Exception:
+            pass
         return revised
     except Exception:
         return None                            # fail safe — alert still ships
@@ -743,6 +789,13 @@ def main():
     log = load_log()
     done_ids = processed_ids(log)
     created, skipped, flagged = [], [], []
+    pivot_os = {"ok": 0, "duplicate": 0, "error": 0}   # Pivot OS sync tallies (public-safe)
+
+    def _bump(outcome):
+        if outcome in ("ok", "duplicate"):
+            pivot_os[outcome] += 1
+        elif outcome:                                  # http-4xx/5xx / error (None = not configured)
+            pivot_os["error"] += 1
 
     for portal in extractors.PORTALS:
         if len(created) >= max_per_run:
@@ -806,6 +859,12 @@ def main():
                                     "reason": f"email-failed: {e}",
                                     "subject": _header(msg, "Subject")})
                 created.append({"pnr": data["pnr"], "portal": data["portal"], "link": link})
+                # Push to Pivot OS "Entries to Be Done" (best-effort; inert until
+                # configured; failure never affects the booking that already shipped).
+                try:
+                    _bump(notify_pivot_os(data, link, "itinerary.created", mid))
+                except Exception:
+                    _bump("error")
             except Exception as e:
                 flagged.append({"id": mid, "portal": portal["name"],
                                 "reason": f"error: {e}", "trace": traceback.format_exc()[-500:]})
@@ -861,6 +920,7 @@ def main():
         "flagged_reasons": sorted({(f.get("reason") or "").split(":")[0] for f in flagged}),
         "disruption_alerts": disruption_alerts,
         "revised_drafts": revised_drafts,
+        "pivot_os_sync": pivot_os,
     }
     print(json.dumps(summary, indent=2))
 

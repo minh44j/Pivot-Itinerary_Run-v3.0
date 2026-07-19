@@ -194,6 +194,51 @@ def test_apply_flight_change_no_match():
     assert E.apply_flight_change(booking, change) is False
 
 
+def _sample_booking():
+    return {
+        "portal": "aJet", "pnr": "AJ4X9Z", "booking_ref": "AJ4X9Z", "crs_ref": "AJ4X9Z",
+        "booked_on": "14 Jul 2026", "journey_type": "RETURN",
+        "passengers": [{"name": "John Doe", "ticket_no": "6060000000001",
+                        "cabin_bag": "7kg", "checked_bag": "20kg", "seat": "12A"}],
+        "segments": [{"type": "Outbound", "flights": [
+            {"airline": "aJet", "flight_no": "VF 200", "cabin": "Economy",
+             "dep_iata": "LHR", "arr_iata": "CDG", "dep_city": "London", "arr_city": "Paris",
+             "dep_date": "19 Jul 2026", "dep_time": "22:10",
+             "arr_date": "19 Jul 2026", "arr_time": "02:05", "duration": "3H 55M"}], "layovers": []}],
+    }
+
+
+def test_iso_date():
+    assert E._iso_date("19 Jul 2026") == "2026-07-19"
+    assert E._iso_date("") is None
+    assert E._iso_date("N/A") is None
+
+
+def test_pivot_os_payload():
+    p = E.pivot_os_payload(_sample_booking(), pdf_url="https://drive/x", source_ref="MID123")
+    assert p["event"] == "itinerary.created"
+    assert p["idempotency_key"] == "AJ4X9Z:confirmed:MID123"   # default status=confirmed
+    assert p["reference"]["match_key"] == "AJ4X9Z:aJet"        # composite dup key
+    assert p["reference"]["crs_ref"] is None                   # dropped when == pnr
+    assert p["reference"]["portal"] == "aJet"
+    assert p["journey_type"] == "ROUND TRIP"                   # normalised from RETURN
+    assert p["segments"][0]["flights"][0]["dep_date"] == "2026-07-19"   # ISO
+    assert p["segments"][0]["flights"][0]["dep_time"] == "22:10"        # time unchanged
+    assert p["segments"][0]["flights"][0]["flight_no"] == "VF 200"      # flight-no unchanged
+    assert p["route_summary"] == "LHR → CDG"
+    assert p["first_dep_date"] == "2026-07-19"
+    assert p["financials"] is None                             # always null
+
+
+def test_pivot_os_payload_status_and_event():
+    b = _sample_booking()
+    b["doc_status"] = "rebooked"
+    p = E.pivot_os_payload(b, event="itinerary.revised", source_ref="MID9")
+    assert p["event"] == "itinerary.revised"
+    assert p["status"] == "rebooked"
+    assert p["idempotency_key"] == "AJ4X9Z:rebooked:MID9"
+
+
 @pytest.mark.parametrize("fixture", list(CASES))
 def test_snapshot(fixture):
     data = _run(fixture)

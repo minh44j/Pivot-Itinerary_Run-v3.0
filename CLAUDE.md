@@ -91,6 +91,21 @@ flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
 
+- **2026-07-19 — Pivot OS sync (Producer) + scenario status pill:**
+  - **Pivot OS sync:** each produced itinerary is pushed to Pivot OS's "Entries
+    to Be Done" via a best-effort webhook (`main.notify_pivot_os` → `POST
+    /api/itinerary-sync`, Bearer auth). Payload built by
+    `extractors.pivot_os_payload` (contract in `PIVOT_OS_INTEGRATION.md`, v1.0):
+    ISO dates, `idempotency_key` = `<pnr>:<status>:<source_ref>`, composite
+    `match_key` = `<pnr>:<portal>`, `financials: null`. Fires
+    `itinerary.created` on new bookings and `itinerary.revised` on revised
+    drafts. INERT until `PIVOT_OS_SYNC_URL` + `PIVOT_OS_SYNC_SECRET` GitHub
+    Secrets are set; PII only over TLS, never in the public Action log. Summary
+    gains `pivot_os_sync` tallies.
+  - **Scenario status pill:** revised itineraries show a coloured pill matching
+    the disruption (`rebooked`=red / `rescheduled`=orange / `delayed`=amber /
+    `revised`=gold) via `data["doc_status"]`; default `confirmed` (green) is
+    byte-identical to the locked original.
 - **2026-07-19 — auto-draft REVISED itinerary on aJet schedule change:**
   - When the disruption watch flags an **aJet** change/cancel/delay, the runner
     now rebuilds the affected booking and attaches a **revised branded PDF** to

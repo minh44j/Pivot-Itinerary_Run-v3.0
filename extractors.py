@@ -1067,6 +1067,90 @@ def disruption_category(subject="", preview="", keyword=""):
     return "schedule_change"
 
 
+# ── Pivot OS sync payload (Producer side of PIVOT_OS_INTEGRATION.md) ─────────
+# Build the JSON event that main.notify_pivot_os() POSTs to Pivot OS's
+# /api/itinerary-sync when an itinerary is produced. Pure (no I/O) so the exact
+# shape is unit-tested. Contract v1.0 agreed with the Pivot OS session:
+#   * departure/arrival DATES converted to ISO YYYY-MM-DD (their one ask; times &
+#     flight_no stay as-is — display-only on their side);
+#   * idempotency_key = "<pnr>:<status>:<source_ref>" (they upsert on it);
+#   * reference.match_key = "<pnr>:<portal>" (their duplicate lookup is composite);
+#   * financials ALWAYS null (this system has no fare data — the user fills it in).
+def _iso_date(s):
+    """'19 Jul 2026' -> '2026-07-19'; blank / unparseable -> None."""
+    s = (s or "").strip()
+    if not s:
+        return None
+    try:
+        return datetime.strptime(s, "%d %b %Y").strftime("%Y-%m-%d")
+    except Exception:
+        return None
+
+
+def pivot_os_payload(booking, pdf_url="", event="itinerary.created", source_ref=""):
+    pnr = (booking.get("pnr") or "").strip()
+    portal = (booking.get("portal") or "").strip()
+    status = (booking.get("doc_status") or "confirmed").strip().lower()
+    crs = (booking.get("crs_ref") or "").strip()
+    first_iata = last_iata = ""
+    first_dep = None
+    segments = []
+    for seg in booking.get("segments", []):
+        flights = []
+        for f in seg.get("flights", []):
+            iso = _iso_date(f.get("dep_date"))
+            if first_dep is None and iso:
+                first_dep = iso
+            if not first_iata and f.get("dep_iata"):
+                first_iata = f.get("dep_iata")
+            if f.get("arr_iata"):
+                last_iata = f.get("arr_iata")
+            flights.append({
+                "airline": f.get("airline", ""), "flight_no": f.get("flight_no", ""),
+                "cabin": f.get("cabin", ""),
+                "dep_iata": f.get("dep_iata", ""), "dep_city": f.get("dep_city", ""),
+                "dep_airport": f.get("dep_airport", ""), "terminal": f.get("terminal", ""),
+                "dep_date": iso, "dep_time": f.get("dep_time", ""),
+                "arr_iata": f.get("arr_iata", ""), "arr_city": f.get("arr_city", ""),
+                "arr_airport": f.get("arr_airport", ""), "arr_terminal": f.get("arr_terminal", ""),
+                "arr_date": _iso_date(f.get("arr_date")), "arr_time": f.get("arr_time", ""),
+                "duration": f.get("duration", ""),
+            })
+        segments.append({"type": seg.get("type", ""), "flights": flights,
+                         "layovers": seg.get("layovers", [])})
+    passengers = [{
+        "name": p.get("name", ""), "ticket_no": p.get("ticket_no", ""),
+        "cabin_bag": p.get("cabin_bag", ""), "checked_bag": p.get("checked_bag", ""),
+        "seat": p.get("seat", ""),
+    } for p in booking.get("passengers", [])]
+    jt = (booking.get("journey_type") or "ONE-WAY").upper()
+    journey = "ROUND TRIP" if ("ROUND" in jt or "RETURN" in jt) else "ONE-WAY"
+    return {
+        "schema_version": "1.0",
+        "event": event,
+        "idempotency_key": f"{pnr}:{status}:{source_ref}",
+        "source": "itinerary-automation",
+        "reference": {
+            "pnr": pnr,
+            "booking_ref": (booking.get("booking_ref") or "").strip() or None,
+            "crs_ref": crs if (crs and crs.upper() != pnr.upper()) else None,
+            "portal": portal,
+            "source_ref": source_ref,
+            "match_key": f"{pnr}:{portal}",
+        },
+        "status": status,
+        "journey_type": journey,
+        "booked_on": booking.get("booked_on", ""),
+        "passengers": passengers,
+        "segments": segments,
+        "route_summary": f"{first_iata} → {last_iata}" if (first_iata and last_iata) else "",
+        "first_dep_date": first_dep,
+        "india_arrival": india_arrival(booking),
+        "pdf_url": pdf_url or None,
+        "financials": None,
+    }
+
+
 # ── registry ───────────────────────────────────────────────────────────────
 PORTALS = [
     {"name": "Alhind",        "from": "alhind@alhindsanchar.com",   "subject": "Air Ticket",                                      "source": "body",      "fn": extract_alhind},
