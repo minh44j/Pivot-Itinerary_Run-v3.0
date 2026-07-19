@@ -44,6 +44,8 @@ jobs:
           AKBAR_FOLDER_NAME: ${{ secrets.AKBAR_FOLDER_NAME }}
           NOTIFY_TO: ${{ secrets.NOTIFY_TO }}
           SEARCH_WINDOW: ${{ secrets.SEARCH_WINDOW }}
+          PIVOT_OS_SYNC_URL: ${{ secrets.PIVOT_OS_SYNC_URL }}
+          PIVOT_OS_SYNC_SECRET: ${{ secrets.PIVOT_OS_SYNC_SECRET }}
           DEBUG_VERBOSE: ${{ vars.DEBUG_VERBOS }}
         run: python main.py
 
