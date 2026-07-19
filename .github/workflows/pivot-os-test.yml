@@ -1,0 +1,22 @@
+name: Pivot OS wire test
+
+# Manual only. Fires ONE synthetic dry-run event to Pivot OS and prints the echoed
+# mapping — nothing is persisted (sentinel PNR TEST0001, X-Dry-Run header). Use it
+# to verify the connection + field mapping before the live poll starts syncing.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  wire-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Dry-run one event to Pivot OS
+        env:
+          PIVOT_OS_SYNC_URL: ${{ secrets.PIVOT_OS_SYNC_URL }}
+          PIVOT_OS_SYNC_SECRET: ${{ secrets.PIVOT_OS_SYNC_SECRET }}
+        run: python tools/pivot_os_selftest.py

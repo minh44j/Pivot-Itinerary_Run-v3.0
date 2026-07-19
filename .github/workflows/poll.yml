@@ -46,6 +46,7 @@ jobs:
           SEARCH_WINDOW: ${{ secrets.SEARCH_WINDOW }}
           PIVOT_OS_SYNC_URL: ${{ secrets.PIVOT_OS_SYNC_URL }}
           PIVOT_OS_SYNC_SECRET: ${{ secrets.PIVOT_OS_SYNC_SECRET }}
+          PIVOT_OS_DRY_RUN: ${{ vars.PIVOT_OS_DRY_RUN }}   # set repo var to "1" to dry-run the live poll
           DEBUG_VERBOSE: ${{ vars.DEBUG_VERBOS }}
         run: python main.py
 
