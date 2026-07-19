@@ -37,6 +37,16 @@ The Pivot OS session answered §7; the Producer is now built to this locked cont
 `PIVOT_OS_SYNC_URL` (the production Vercel host + `/api/itinerary-sync`) and
 `PIVOT_OS_SYNC_SECRET` (the shared Bearer value, matching Pivot OS's `ITINERARY_SYNC_SECRET`).
 
+**✅ VERIFIED LIVE (2026-07-19):** the "Pivot OS wire test" workflow fired a dry-run event
+and got `HTTP 200` with the full echoed `row` mapping correct (pnr, portal, `supplier:null`
+for the direct-airline aJet, `routeSummary`, `leadPax`, ISO `firstDepDate`, status, eventType).
+Auth, endpoint, payload shape and field mapping all confirmed.
+
+**PDF access (was item D) — RESOLVED:** the `pdf_url` is a `cs@` Google Drive link. The Drive
+output folder is shared to the **pivot-travels.com Workspace domain** (Viewer, internal — never
+"anyone with link", it's passenger PII). Operators open the link while signed into their
+`@pivot-travels.com` account; subfolders/future PDFs inherit the share. No producer change.
+
 The reference schema below is unchanged except the date format (now ISO). Historical detail retained.
 
 ---
