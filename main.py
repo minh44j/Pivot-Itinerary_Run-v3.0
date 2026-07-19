@@ -671,23 +671,30 @@ def email_disruptions(send_gmail, sender, alerts):
 # over TLS with a Bearer token; it is NEVER printed to the public Action log.
 #   PIVOT_OS_SYNC_URL     e.g. https://<pivot-os-host>/api/itinerary-sync
 #   PIVOT_OS_SYNC_SECRET  shared Bearer secret (== ITINERARY_SYNC_SECRET on their side)
-def notify_pivot_os(booking, pdf_url="", event="itinerary.created", source_ref=""):
+def notify_pivot_os(booking, pdf_url="", event="itinerary.created", source_ref="", dry_run=None):
     """POST one itinerary event to Pivot OS. Returns a short outcome string
     ('ok' | 'duplicate' | 'http-<code>' | 'error'), or None if not configured.
-    Never raises — a sync failure must not affect the itinerary run."""
+    Never raises — a sync failure must not affect the itinerary run.
+    dry_run=True (or env PIVOT_OS_DRY_RUN) adds the X-Dry-Run header so Pivot OS
+    validates + echoes the mapping WITHOUT persisting — for a cautious first run."""
     url = os.environ.get("PIVOT_OS_SYNC_URL")
     secret = os.environ.get("PIVOT_OS_SYNC_SECRET")
     if not url or not secret:
         return None
+    if dry_run is None:
+        dry_run = bool(os.environ.get("PIVOT_OS_DRY_RUN"))
     import urllib.request
     import urllib.error
     payload = extractors.pivot_os_payload(booking, pdf_url, event, source_ref)
     body = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(url, data=body, method="POST", headers={
+    headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {secret}",
         "Idempotency-Key": payload["idempotency_key"],
-    })
+    }
+    if dry_run:
+        headers["X-Dry-Run"] = "1"
+    req = urllib.request.Request(url, data=body, method="POST", headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             try:
