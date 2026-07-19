@@ -259,7 +259,7 @@ body {{ font-family: 'Inter', Helvetica, Arial, sans-serif; background: #fff; co
   border-bottom: 2px solid var(--gold);
   padding: 22px var(--pg) 18px;
 }}
-.brand-row {{ display: flex; align-items: center; justify-content: center; gap: 14px; }}
+.brand-row {{ display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; }}
 .logo-img {{ height: 46px; width: auto; object-fit: contain; display: block; }}
 .company-name {{ font-family: 'Cormorant Garamond', Georgia, serif; font-size: 22px; font-weight: 400;
   letter-spacing: 0.04em; color: #f0ead8; }}
