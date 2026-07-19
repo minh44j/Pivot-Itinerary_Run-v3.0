@@ -709,6 +709,10 @@ def build_revised_itinerary(gmail, alert):
             return None                        # no leg matched — don't guess
         if extractors.qc_check(booking):
             return None                        # patched booking failed QC — abort
+        # Scenario-based header pill (colour matches the alert coding): a cancelled
+        # flight was rebooked onto a new one; else reschedule / delay; else generic.
+        booking["doc_status"] = {"cancelled": "rebooked", "rescheduled": "rescheduled",
+                                 "delayed": "delayed"}.get(change.get("status"), "revised")
         pnr = "".join(c for c in str(booking["pnr"]) if c.isalnum() or c in "_-") or "UNKNOWN"
         out_dir = os.path.join(OUT_DIR, "revised", datetime.now().strftime("%Y-%m-%d"))
         os.makedirs(out_dir, exist_ok=True)

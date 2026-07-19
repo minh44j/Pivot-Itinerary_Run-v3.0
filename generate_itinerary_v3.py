@@ -272,6 +272,26 @@ def _terms_block() -> str:
 
 
 # ── HTML Builder ──────────────────────────────────────────────────────────────
+# Header status pill. Default "confirmed" (emerald) is IDENTICAL to the locked
+# original — a normal confirmation renders byte-for-byte as before. The other
+# states are used ONLY by revised itineraries (main.build_revised_itinerary sets
+# data["doc_status"]) so a revised document is instantly distinguishable and its
+# colour matches the alert e-mail's coding (cancellation→red, schedule→orange,
+# delay→amber). Colours are inline-overridden on the existing pill geometry.
+_STATUS_PILL = {
+    "confirmed":   {"label": "Confirmed",   "sub": "Official Travel Document",
+                    "fg": "#7fd0a6", "dot": "#4ea87a", "border": "#4ea87a", "bg": "rgba(78,168,122,0.12)"},
+    "rebooked":    {"label": "Rebooked",    "sub": "Updated Travel Document",
+                    "fg": "#e79a95", "dot": "#c0392b", "border": "#c0392b", "bg": "rgba(192,57,43,0.14)"},
+    "rescheduled": {"label": "Rescheduled", "sub": "Updated Travel Document",
+                    "fg": "#e6a86a", "dot": "#d17a2a", "border": "#d17a2a", "bg": "rgba(209,122,42,0.14)"},
+    "delayed":     {"label": "Delayed",     "sub": "Updated Travel Document",
+                    "fg": "#e0c675", "dot": "#c9a84c", "border": "#c9a84c", "bg": "rgba(201,168,76,0.14)"},
+    "revised":     {"label": "Revised",     "sub": "Updated Travel Document",
+                    "fg": "#e0c675", "dot": "#c9a84c", "border": "#c9a84c", "bg": "rgba(201,168,76,0.14)"},
+}
+
+
 def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
     pnr          = data.get("pnr", "N/A")
     booking_ref  = data.get("booking_ref") or ""
@@ -352,6 +372,9 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
     footer_html  = f'<div class="footer"><span class="footer-line">{footer_line}</span></div>'
     terms_html   = _terms_block()
 
+    # Status pill — "confirmed" default (identical to the locked original);
+    # revised itineraries pass data["doc_status"] (rebooked/rescheduled/delayed).
+    _pill = _STATUS_PILL.get((data.get("doc_status") or "confirmed").lower(), _STATUS_PILL["confirmed"])
     header_html = f"""
   <div class="header">
     <div class="brand-row">
@@ -361,11 +384,11 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
     <div class="header-divider"></div>
     <div class="header-row2">
       <div class="doc-block">
-        <div class="confirmed-pill">
-          <span class="pill-dot"></span>
-          <span class="pill-text">Confirmed</span>
+        <div class="confirmed-pill" style="border-color:{_pill['border']};background:{_pill['bg']};">
+          <span class="pill-dot" style="background:{_pill['dot']};box-shadow:0 0 5px {_pill['dot']};"></span>
+          <span class="pill-text" style="color:{_pill['fg']};">{_pill['label']}</span>
         </div>
-        <div class="doc-label">Official Travel Document</div>
+        <div class="doc-label">{_pill['sub']}</div>
       </div>
       <div class="pnr-block">
         <div class="pnr-value">{pnr}</div>
