@@ -436,13 +436,23 @@ def email_flags(send_gmail, sender, flagged):
 # READ-ONLY subject-keyword scan of the whole inbox (gmail.readonly — no message
 # is opened, replied to, forwarded, or modified) and returns any NEW match not
 # yet alerted. main() raises ONE private ACTION-REQUIRED digest to cs@ for them.
-def scan_disruptions(gmail, window, alerted_ids):
-    """Return alert dicts for NEW cancellation / schedule-change emails in the
-    inbox. Gmail's subject query is the coarse net; extractors.disruption_match()
-    is the authoritative filter. Never raises — a disruption-scan failure must not
-    break the confirmation run (caller wraps it too)."""
+def scan_disruptions(gmail, alerted_ids):
+    """Return alert dicts for NEW cancellation / schedule-change emails anywhere in
+    the mailbox. Gmail's subject query is the coarse net; extractors.disruption_match()
+    is the authoritative filter.
+
+    NOT restricted to in:inbox on purpose — real schedule-change emails (e.g. IndiGo
+    "Your Revised IndiGo Itinerary") are auto-labelled "Airline Updates" and skip the
+    inbox, which is a big part of why they get missed. We exclude our OWN sent mail
+    and automation sender (pivot-travels.com) so the alert can never trigger on itself
+    or on a cancellation request WE sent to a portal. Window is dedicated + a little
+    wider (default 2d) since missing a disruption is worse than reprocessing.
+
+    Never breaks the confirmation run — the caller wraps this in try/except."""
+    window = os.environ.get("DISRUPTION_WINDOW") or "newer_than:2d"
     terms = " OR ".join(f'subject:({t})' for t in extractors.DISRUPTION_QUERY_TERMS)
-    q = f"in:inbox ({terms}) {window}"
+    q = (f"({terms}) {window} -in:sent -in:trash -in:spam -in:drafts "
+         f"-from:pivot-travels.com")
     res = gmail.users().messages().list(
         userId="me", q=q, maxResults=50).execute(num_retries=API_RETRIES)
     alerts = []
@@ -475,8 +485,8 @@ def email_disruptions(send_gmail, sender, alerts):
     if not alerts:
         return False
     to = os.environ.get("DISRUPTION_NOTIFY_TO") or os.environ.get("NOTIFY_TO") or sender
-    lines = [f"ACTION REQUIRED — {len(alerts)} possible cancellation / schedule-change "
-             f"email(s) found in the cs@ inbox:", ""]
+    lines = [f"⚠️ ACTION REQUIRED — {len(alerts)} possible cancellation / schedule-change "
+             f"email(s) found in the mailbox:", ""]
     for a in alerts:
         lines.append(f"• From:       {a.get('from')}")
         lines.append(f"  Subject:    {a.get('subject')}")
@@ -491,7 +501,7 @@ def email_disruptions(send_gmail, sender, alerts):
     lines.append("client so it is never missed.")
     lines.append("(Automated watch — PIVOT AUTOMATED ITINERARY)")
     m = EmailMessage()
-    m["Subject"] = f"ACTION REQUIRED — {len(alerts)} flight cancellation/change alert(s)"
+    m["Subject"] = f"⚠️ ACTION REQUIRED — {len(alerts)} flight cancellation/change alert(s)"
     m["From"] = sender
     m["To"] = to
     m.set_content("\n".join(lines))
@@ -603,7 +613,7 @@ def main():
     try:
         dlog = load_disruption_log()
         alerted_ids = {e["message_id"] for e in dlog["alerted"]}
-        new_alerts = scan_disruptions(gmail, window, alerted_ids)
+        new_alerts = scan_disruptions(gmail, alerted_ids)
         if new_alerts:
             email_disruptions(send_gmail, sender, new_alerts)
             for a in new_alerts:

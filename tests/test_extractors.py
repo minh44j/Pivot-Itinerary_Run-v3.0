@@ -75,21 +75,30 @@ def test_india_arrival(data, expected):
 
 
 @pytest.mark.parametrize("subject,should_match", [
-    # real cancellation / schedule-change subjects -> flagged for an alert
-    ("Your flight has been CANCELLED", True),
-    ("Flight cancellation notice — PNR ABC123", True),
-    ("Schedule Change for your upcoming trip", True),
-    ("Important: your flight has been rescheduled", True),
-    ("Revised itinerary — please review new timings", True),
-    ("Time change on flight TK123", True),
-    ("We have rebooked you on an alternative flight", True),
-    ("Flight disruption — action required", True),
-    # ordinary confirmations / unrelated mail -> NOT flagged (no false alarm)
-    ("Air Ticket - Booking Confirmed", False),
-    ("Ticket information", False),
-    ("Your booking is confirmed! View your ticket now", False),
-    ("Booking Success", False),
-    ("Welcome to our loyalty programme", False),
+    # REAL disruption subjects seen in the cs@ mailbox -> must flag for an alert.
+    ("Flight change information", True),                 # aJet
+    ("Flight Schedule Change Information", True),        # aJet
+    ("Your Revised IndiGo Itinerary", True),            # IndiGo (note: "Revised"..."Itinerary" non-adjacent)
+    ("Flight Delayed Notification", True),              # airblue
+    ("Schedule Change", True),                          # Turkish Airlines
+    ("✈ Booking cancelled #GVBO9U", True),         # flydubai
+    ("Important: Flight change", True),                 # Etihad
+    ("FLIGHT CANCELLATION INFORMATION", True),          # Himalaya
+    ("SCHEDULE CHANGE // X6Y18Z", True),               # Alhind B2B
+    ("schedule change GY7G4P", True),                   # Akbar B2B
+    # REAL non-disruption subjects from the same mailbox -> must NOT flag.
+    ("Update on your upcoming flight", False),          # Saudia marketing upsell
+    ("Next steps for your upcoming flight to Riyadh", False),   # marketing
+    ("Check In for flight : XY-140", False),           # flynas check-in
+    ("Check-in reminder", False),                       # aJet check-in
+    ("Boarding Information", False),                     # aJet gate info
+    ("Manage My Booking Activation Code", False),       # aJet OTP
+    ("Pegasus Airlines Activation Code", False),        # Pegasus OTP
+    ("Important Travel Information for Your Upcoming Flight", False),  # IndiGo check-in
+    ("Air Ticket", False),                              # Alhind confirmation
+    ("Ticket information", False),                       # aJet confirmation
+    ("Booking Success", False),                          # Akbar confirmation
+    ("Your booking is confirmed! View your ticket now", False),      # Pegasus confirmation
 ])
 def test_disruption_match(subject, should_match):
     hit = E.disruption_match(subject)

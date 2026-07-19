@@ -914,11 +914,19 @@ def india_arrival(data):
 #     disruption_match() has the final say so the rule is testable and precise.
 # Tuned broad on purpose (better a rare false alarm than a missed cancellation);
 # refine the lists as real false alarms surface.
+# NOTE: both lists were cross-checked (2026-07-19) against REAL disruption emails
+# in the cs@ inbox — aJet "Flight change information" / "Flight Schedule Change
+# Information", IndiGo "Your Revised IndiGo Itinerary", airblue "Flight Delayed
+# Notification", Turkish "Schedule Change", flydubai "Booking cancelled", Etihad
+# "Important: Flight change", Himalaya "FLIGHT CANCELLATION INFORMATION", and the
+# Akbar/Alhind B2B "SCHEDULE CHANGE // <PNR>" notices. Keep them in sync if new
+# templates appear.
 DISRUPTION_QUERY_TERMS = [
     "cancel", "cancelled", "canceled", "cancellation", "cancelling",
     "reschedule", "rescheduled", "rescheduling",
     "schedule change", "flight change", "time change", "timing change",
-    "revised itinerary", "itinerary change", "updated itinerary",
+    "revised", "itinerary change", "updated itinerary",
+    "delay", "delayed", "postponed",
     "disruption", "disrupted", "rebooked", "rebooking", "new departure",
 ]
 
@@ -928,7 +936,10 @@ DISRUPTION_KEYWORDS = [
     "schedule change", "change in schedule",
     "flight change", "flight changed",
     "time change", "timing change",
-    "revised itinerary", "itinerary change", "updated itinerary",
+    "revised",             # "Your Revised IndiGo Itinerary" / revised departure
+    "itinerary change", "updated itinerary",
+    "delay",               # delayed / delay ("Flight Delayed Notification")
+    "postponed", "brought forward",
     "disrupt",             # disruption / disrupted
     "rebook",              # rebook / rebooked / rebooking
     "new departure", "departure change",
@@ -938,7 +949,8 @@ DISRUPTION_KEYWORDS = [
 def disruption_match(subject):
     """Return the first disruption keyword found in `subject` (case-insensitive
     substring match), or "" if none. Pure/offline — the authoritative filter
-    behind main.scan_disruptions, so the exact rule is unit-tested without Gmail."""
+    behind main.scan_disruptions, so the exact rule is unit-tested without Gmail.
+    Cross-checked against real airline/B2B disruption subjects (see note above)."""
     s = (subject or "").lower()
     for kw in DISRUPTION_KEYWORDS:
         if kw in s:
