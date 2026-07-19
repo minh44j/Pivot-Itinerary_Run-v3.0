@@ -122,6 +122,26 @@ def test_disruption_match(subject, should_match):
     assert bool(hit) is should_match, f"{subject!r} -> {hit!r}"
 
 
+@pytest.mark.parametrize("subject,preview,keyword,expected", [
+    # cancellation wins even when the SUBJECT only says "flight change" — the real
+    # aJet case: subject "Flight change information", body "has been canceled".
+    ("Flight change information",
+     "Your flight 19 July 2026, VF191, has been canceled due to operational reasons",
+     "flight change", "cancellation"),
+    ("Booking cancelled #GVBO9U", "Your booking has been cancelled", "cancel", "cancellation"),
+    ("FLIGHT CANCELLATION INFORMATION", "flight is canceled", "cancel", "cancellation"),
+    # delay
+    ("Flight delay information", "estimated departure time ... has been changed", "delay", "delay"),
+    ("Delay of your flight to Rome", "Your flight is delayed", "delay", "delay"),
+    # everything else -> schedule_change
+    ("Schedule Change", "There has been a change in your flight", "schedule change", "schedule_change"),
+    ("Your Revised IndiGo Itinerary", "has been rescheduled", "revised", "schedule_change"),
+    ("Your flight schedule has changed", "we've got flexible options", "has changed", "schedule_change"),
+])
+def test_disruption_category(subject, preview, keyword, expected):
+    assert E.disruption_category(subject, preview, keyword) == expected
+
+
 @pytest.mark.parametrize("fixture", list(CASES))
 def test_snapshot(fixture):
     data = _run(fixture)

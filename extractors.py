@@ -976,6 +976,23 @@ def disruption_match(subject):
     return ""
 
 
+def disruption_category(subject="", preview="", keyword=""):
+    """Classify a disruption into 'cancellation' | 'delay' | 'schedule_change'
+    from its subject + preview (keyword as a fallback signal). Used only to
+    colour/label the alert e-mail — it never gates whether an alert is sent.
+
+    CANCELLATION wins over everything: an email whose subject is only "Flight
+    change information" but whose body says "has been canceled" IS a cancellation
+    (this is the real aJet case), so we look at the preview text too, not just the
+    subject/keyword."""
+    text = f"{subject} {preview} {keyword}".lower()
+    if "cancel" in text:
+        return "cancellation"
+    if "delay" in text or "postpone" in text:
+        return "delay"
+    return "schedule_change"
+
+
 # ── registry ───────────────────────────────────────────────────────────────
 PORTALS = [
     {"name": "Alhind",        "from": "alhind@alhindsanchar.com",   "subject": "Air Ticket",                                      "source": "body",      "fn": extract_alhind},
