@@ -475,9 +475,10 @@ body {{
 }}
 .brand-row {{
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
+  gap: 9px;
 }}
 .logo-img {{
   height: 46px;
