@@ -91,6 +91,22 @@ flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
 
+- **2026-07-21 — self-healing "medic" loop (flag → diagnosed PR, human merges):**
+  A scheduled Claude session turns a manual-review flag into a reviewed pull
+  request so the diagnose→fix→test toil runs on its own while a human keeps the
+  final gate before anything touches a client document. Flow (full runbook in
+  **`MEDIC.md`**): the medic computes the *unresolved* flag set (in
+  `flagged_ids.json`, not in `processed_ids.json`, not in `medic_ids.json`) →
+  dispatches **`medic-diagnose.yml`** per flag (redacted, any-portal diagnosis via
+  `tools/medic_diagnose.py`, so the real PDF/body never leaves CI) → reads the
+  `VERDICT:` → classifies **resolved** (record & skip) / **needs-human** (open a
+  short issue, no code change) / **parser-bug** (patch the matching `extract_*` +
+  add a zero-PII fixture, verify tests, open a PR). Deliberately **never
+  auto-merges** — an AI-written regex could ship a factually wrong document (§7),
+  so `main` only changes on a human merge. `medic_ids.json` (message_id only,
+  public-safe) dedupes so each flag is worked once; poll.yml persists it beside
+  the other logs. `_IATA_DESIG` and the §9 diagnosis method are what the medic
+  reuses to fix parser misses.
 - **2026-07-21 — Akbar Flyadeal (F3) missing-flight-number flag fixed:**
   A real Akbar "Booking Success" (Flyadeal DMM→JED) kept failing `qc_check`
   ("A segment is missing flight number / airport / time") and re-flagging every
