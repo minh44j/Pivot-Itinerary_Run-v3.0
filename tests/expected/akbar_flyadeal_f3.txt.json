@@ -1,0 +1,43 @@
+{
+  "portal": "Akbar Travels",
+  "pnr": "AKF3TS",
+  "crs_ref": "AKF3TS",
+  "booking_ref": "AS999999999",
+  "booked_on": "21 Jul 2026",
+  "status": "Confirmed",
+  "passengers": [
+    {
+      "name": "Mr. TEST TRAVELER",
+      "ticket_no": "9990000000002",
+      "cabin_bag": "Adult 7 Kg",
+      "checked_bag": "0 Kg",
+      "seat": ""
+    }
+  ],
+  "segments": [
+    {
+      "type": "FLIGHT",
+      "flights": [
+        {
+          "flight_no": "F3 310",
+          "airline": "Flyadeal",
+          "dep_iata": "DMM",
+          "arr_iata": "JED",
+          "dep_city": "Dammam",
+          "arr_city": "Jeddah",
+          "dep_airport": "",
+          "arr_airport": "",
+          "terminal": "",
+          "dep_time": "15:45",
+          "dep_date": "23 Jul 2026",
+          "arr_time": "17:55",
+          "arr_date": "23 Jul 2026",
+          "cabin": "Economy",
+          "duration": "2H 10M"
+        }
+      ],
+      "layovers": []
+    }
+  ],
+  "journey_type": "One-Way"
+}

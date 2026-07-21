@@ -91,6 +91,25 @@ flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
 
+- **2026-07-21 — Akbar Flyadeal (F3) missing-flight-number flag fixed:**
+  A real Akbar "Booking Success" (Flyadeal DMM→JED) kept failing `qc_check`
+  ("A segment is missing flight number / airport / time") and re-flagging every
+  poll. Diagnosed per §9 against the *actual* PDF's pdfplumber text (redacted
+  debug run in CI, not the HTML body): everything parsed except `flight_no`,
+  which came back `""`. Root cause — every flight-code pattern in
+  `extract_akbar._flight_no_for` used `[0-9]?[A-Z]{1,2}`, which matches LL (SV)
+  and DL (9P) designators but **not the LD (letter-then-digit) shape** like
+  Flyadeal **`F3`** / Air Arabia `G9` / easyJet `U2` when the code appears
+  singly (`F3 310`, not the doubled `G9 G9148` the earlier fix handled). Fix:
+  new module constant **`_IATA_DESIG`** = `(?:[A-Z]{2}|[A-Z][0-9]|[0-9][A-Z])`
+  used in all four `_flight_no_for` patterns. Also fixed the **operating
+  carrier** for this layout: pdfplumber splits the cell as `Operated …\nby:Flyadeal`,
+  so the contiguous `Operated by:` match missed it and the airline silently fell
+  back to the "IndiGo" default (a Flyadeal booking labelled IndiGo — a factual
+  error on a client doc); the pattern now tolerates up to a line of junk between
+  `Operated` and `by:`. New zero-PII regression fixture `akbar_flyadeal_f3.txt`
+  (74 tests pass). Cleared the `flagged_ids.json` seed so the now-fixed booking
+  processes normally next poll and any genuine future failure still surfaces.
 - **2026-07-19 — Pivot OS sync (Producer) + scenario status pill:**
   - **Pivot OS sync:** each produced itinerary is pushed to Pivot OS's "Entries
     to Be Done" via a best-effort webhook (`main.notify_pivot_os` → `POST
@@ -199,8 +218,10 @@ flight-no / airport / time; non-Confirmed status).
 times for Saudia (SV) business-class layouts and once for Air Arabia (G9). If an Akbar booking flags
 "missing flight number / airport / time", pull the **real PDF attachment** and run the live
 `extract_akbar()` against it directly — do NOT diagnose from the email HTML body (not equivalent to
-the PDF's pdfplumber text). Airline IATA codes come in three shapes: LL (SV, TK, XY), LD (G9, U2),
-DL (9P, 6E) — any flight-no regex must handle all three.
+the PDF's pdfplumber text). Airline IATA codes come in three shapes: LL (SV, TK, XY), LD (F3, G9, U2),
+DL (9P, 6E) — any flight-no regex must handle all three. Use the `_IATA_DESIG` constant
+(`(?:[A-Z]{2}|[A-Z][0-9]|[0-9][A-Z])`); the old `[0-9]?[A-Z]{1,2}` silently drops the LD
+(letter-then-digit) shape (Flyadeal F3 flag, 2026-07-21).
 
 ## 10. Rendering
 

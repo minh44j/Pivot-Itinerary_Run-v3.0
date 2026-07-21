@@ -1,0 +1,26 @@
+Name : PIVOT TRAVEL MANAGEMENT
+Ref. No: Date of Booking: Status:
+AS999999999 21 July 2026 CONFIRMED
+ONWARD Dammam Jeddah
+Airline Ref : AKF3TS CRS Ref : AKF3TS
+23 Jul 2026 | Non Stop | 02 hrs 10 mins
+Travel Class Check-In Baggage Cabin Baggage
+Flyadeal
+Economy Adult - 0 Kg Adult 7 Kg
+Departure date &
+Flight Number From (Terminal) Stops To (Terminal) Arrival date & time
+time
+Jeddah [JED]
+Dammam [DMM]
+F3 310 King Abdulaziz International
+King Fahad International Airport 15:45 Non Stop , 17:55
+Airport ,
+Operated , Thu, 23 Jul 26 (02h:10m) Thu, 23 Jul 26
+by:Flyadeal Saudi Arabia,
+Saudi Arabia,
+Terminal 1
+Traveler(s) Information
+ONWARD
+Code Name
+Mr. TEST TRAVELER 9990000000002
+Carry-On :Adult 7 Kg
