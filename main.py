@@ -494,21 +494,25 @@ _DISRUPTION_STYLE = {
     "delay":           {"label": "DELAY",           "emoji": "🟡", "accent": "#C99A3A", "rank": 2},
 }
 
-_LOGO_DATA_URI = None
+_EMAIL_LOGO = None
 
 
-def _logo_data_uri():
-    """Return the feather logo as an inline data: URI (embedded so it always shows,
-    no remote fetch / blocked-image issues). Cached; '' if the asset is missing —
-    the header then falls back to the wordmark alone."""
-    global _LOGO_DATA_URI
-    if _LOGO_DATA_URI is None:
-        try:
-            with open(os.path.join(PROJECT_DIR, "logo.png"), "rb") as f:
-                _LOGO_DATA_URI = "data:image/png;base64," + base64.b64encode(f.read()).decode("ascii")
-        except Exception:
-            _LOGO_DATA_URI = ""
-    return _LOGO_DATA_URI
+def _email_logo_bytes():
+    """Feather logo bytes for the alert email, embedded as an inline CID part (NOT
+    a data: URI — Outlook strips data: images from the body and dumps them as a
+    junk attachment). Prefers the small 'logo_email.png' (~11KB) over the 1.7MB
+    print logo. Cached; b'' if missing (header falls back to the wordmark alone)."""
+    global _EMAIL_LOGO
+    if _EMAIL_LOGO is None:
+        _EMAIL_LOGO = b""
+        for name in ("logo_email.png", "logo.png"):
+            try:
+                with open(os.path.join(PROJECT_DIR, name), "rb") as f:
+                    _EMAIL_LOGO = f.read()
+                    break
+            except Exception:
+                pass
+    return _EMAIL_LOGO
 
 
 def _disruption_enrich(alerts):
@@ -548,7 +552,7 @@ def _disruption_text(alerts):
     return "\n".join(lines)
 
 
-def _disruption_html(alerts):
+def _disruption_html(alerts, logo_cid=None):
     """Structured HTML digest skinned to the Pivot itinerary brand — charcoal/gold
     Model-B header with the feather logo + wordmark, one card per alert with a dark
     segment-style strip carrying a coloured severity pill, and a dark footer. Uses
@@ -559,9 +563,10 @@ def _disruption_html(alerts):
         return _html.escape(str(v).strip()) if v is not None and str(v).strip() else "N/A"
 
     n = len(alerts)
-    logo = _logo_data_uri()
-    logo_img = (f'<img src="{logo}" height="34" alt="Pivot" '
-                f'style="display:inline-block;border:0;margin:0 0 10px;">' if logo else "")
+    # Inline CID reference (the image is attached by email_disruptions). Outlook
+    # renders cid: images in-body; data: URIs it strips into a junk attachment.
+    logo_img = (f'<img src="cid:{logo_cid}" width="40" height="40" alt="Pivot" '
+                f'style="display:inline-block;border:0;margin:0 0 10px;">' if logo_cid else "")
 
     def row(k, v):
         return (f'<tr><td style="font-family:{_FONT_SANS};font-size:11px;color:#9a8f77;'
@@ -647,7 +652,14 @@ def email_disruptions(send_gmail, sender, alerts):
     m["From"] = sender
     m["To"] = to
     m.set_content(_disruption_text(enriched))          # text/plain fallback
-    m.add_alternative(_disruption_html(enriched), subtype="html")   # rich HTML
+    logo = _email_logo_bytes()
+    m.add_alternative(_disruption_html(enriched, logo_cid=("pivotlogo" if logo else None)),
+                      subtype="html")                  # rich HTML
+    # Embed the feather logo as an INLINE cid: image on the HTML part (renders
+    # in-body in Outlook; a data: URI would be stripped into a junk attachment).
+    if logo:
+        m.get_payload()[-1].add_related(
+            logo, "image", "png", cid="<pivotlogo>", disposition="inline")
     # Attach any auto-drafted REVISED itinerary PDFs (aJet schedule changes we
     # could rebuild). Best-effort: a bad path never blocks the alert.
     for a in enriched:
