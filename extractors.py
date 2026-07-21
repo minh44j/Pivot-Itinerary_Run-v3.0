@@ -373,6 +373,16 @@ def extract_alhind(html, ctx=None):
 # ═════════════════════════════════════════════════════════════════════════
 # 2. AKBAR TRAVELS — Drive PDF text (best-effort; tune with a real PDF)
 # ═════════════════════════════════════════════════════════════════════════
+# A 2-character IATA airline designator comes in exactly three shapes:
+#   LL  (SV, TK, XY)   LD  (F3, G9, U2)   DL  (9P, 6E)
+# The flight-number regexes below MUST accept all three. The historical
+# `[0-9]?[A-Z]{1,2}` group silently missed the LD (letter-then-digit) shape —
+# it matched only the leading letter and then failed on the digit — so codes
+# like Air Arabia "G9" and Flyadeal "F3 310" came back empty and the segment
+# was flagged "missing flight number". Use this constant everywhere instead.
+_IATA_DESIG = r"(?:[A-Z]{2}|[A-Z][0-9]|[0-9][A-Z])"
+
+
 def extract_akbar(pdf_text, ctx=None):
     """Akbar Travels. Source is read PRIMARILY from the PDF attached directly
     to the 'Booking Success' email ('Ticket Copy' layout — ONWARD/RETURN
@@ -513,7 +523,7 @@ def extract_akbar(pdf_text, ctx=None):
     def _flight_no_for(detail):
         # Primary: Ticket-Copy layout labels the value explicitly, value on
         # the very next line.
-        cand = _m(detail, r"Flight\s*Number\s*:?\s*\n?\s*([0-9]?[A-Z]{1,2}\s?-?\s?\d{2,4})")
+        cand = _m(detail, r"Flight\s*Number\s*:?\s*\n?\s*(" + _IATA_DESIG + r"\s?-?\s?\d{2,4})")
         # 2026-06-22 fix (<ref>, Saudia Business Class layout): this
         # layout's "Flight Number" label is followed by a run of column
         # headers ("From (Terminal)", "Departure date & time", "Stops",
@@ -523,7 +533,7 @@ def extract_akbar(pdf_text, ctx=None):
         # at the START of a line immediately before that segment's
         # "Operated by:" line, so anchor on that instead.
         if not cand:
-            m = re.search(r"\n\s*([0-9]?[A-Z]{1,2}\s?-?\s?\d{2,4})\b[^\n]*\n(?:[^\n]*\n){0,6}?\s*Operated\s*by",
+            m = re.search(r"\n\s*(" + _IATA_DESIG + r"\s?-?\s?\d{2,4})\b[^\n]*\n(?:[^\n]*\n){0,6}?\s*Operated\s*by",
                            detail, re.I)
             cand = m.group(1) if m else None
         # Fallback: legacy Drive layout 'FlightNo (Aircraft)'. Case-SENSITIVE
@@ -531,7 +541,7 @@ def extract_akbar(pdf_text, ctx=None):
         # 2026') can never match — that case-insensitive match was the root
         # cause of the corrupted flight number in the 2026-06-18 bug.
         if not cand:
-            cand = _m(detail, r"\b(\d?[A-Z]{1,2}\s?\d{2,4})\s*\(", flags=0)
+            cand = _m(detail, r"\b(" + _IATA_DESIG + r"\s?\d{2,4})\s*\(", flags=0)
         # 2026-07-06 fix (Fly Jinnah / Ticket-Copy non-Saudia layout): some
         # carriers (e.g. Fly Jinnah 9P) produce a flight cell that shows the
         # IATA carrier code twice: "9P 9P700". Handle by matching the doubled-
@@ -552,7 +562,7 @@ def extract_akbar(pdf_text, ctx=None):
                 cand = f"{m.group(1)} {m.group(2)}"
         if not cand:
             m = re.search(
-                r"Flight\s*Number[^\n]*\n(?:[^\n]*\n){0,8}?\s*([0-9]?[A-Z]{1,2}\s?[0-9]{2,4})\b",
+                r"Flight\s*Number[^\n]*\n(?:[^\n]*\n){0,8}?\s*(" + _IATA_DESIG + r"\s?[0-9]{2,4})\b",
                 detail, re.I
             )
             cand = m.group(1) if m else None
@@ -616,7 +626,14 @@ def extract_akbar(pdf_text, ctx=None):
             # Minh to review before that already-shipped file is touched).
             # Leave it "" on failure so qc_check() flags it for manual review.
             "flight_no": fl,
-            "airline": _m(detail, r"Operated by\s*:?\s*([A-Za-z]+)") or "IndiGo",
+            # Operating carrier. pdfplumber often splits the "Operated by :"
+            # cell across lines — e.g. the Flyadeal Ticket-Copy renders
+            # "Operated , <date> (dur) <date>\nby:Flyadeal Saudi Arabia," so a
+            # contiguous "Operated by:" match misses it and the airline silently
+            # fell back to the IndiGo default (a Flyadeal booking labelled
+            # "IndiGo" — a factual error on a client-facing document). Allow the
+            # label and value to be separated by up to a line of junk.
+            "airline": _m(detail, r"Operated\b[\s\S]{0,80}?\bby\s*:?\s*([A-Za-z]+)") or "IndiGo",
             "dep_iata": dep_iata, "arr_iata": arr_iata,
             "dep_city": city2disp.get(dep_c, ""), "arr_city": city2disp.get(arr_c, ""),
             "dep_airport": "", "arr_airport": "",
