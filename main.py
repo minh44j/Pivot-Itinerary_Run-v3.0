@@ -529,6 +529,67 @@ def email_pdf(send_gmail, sender, pdf_path, data, source_ref=""):
 # This sends ONE private digest per run to the cs@ inbox. Because it stays in the
 # inbox (never the public repo/log), it can safely carry the subject + message_id
 # needed to locate and fix each booking.
+def _flags_html(flagged, logo_cid=None):
+    """Ops-only manual-review digest — same TECHNICAL monospace readout as the
+    confirmation (brand chrome + Cormorant wordmark; everything else monospace),
+    with an amber MANUAL REVIEW header. Lists each flagged booking's portal,
+    reason, subject and Source Ref so staff can locate + process it by hand."""
+    import html as _html
+
+    def esc(v):
+        v = (str(v).strip() if v is not None else "")
+        return _html.escape(v) if v else "N/A"
+
+    def sect(title):
+        return (f'<tr><td colspan="2" style="padding:18px 0 6px;border-bottom:1px solid #d9d2c0;">'
+                f'<span style="font-family:{_FONT_MONO};font-size:12px;font-weight:700;'
+                f'letter-spacing:2px;color:{_BRAND_GOLD};">{title}</span></td></tr>')
+
+    def kv(k, v, vcolor="#1e1c17"):
+        return (f'<tr><td valign="top" width="110" style="font-family:{_FONT_MONO};font-size:12px;'
+                f'color:#8a8266;padding:3px 14px 3px 0;white-space:nowrap;">{k}</td>'
+                f'<td style="font-family:{_FONT_MONO};font-size:12px;color:{vcolor};'
+                f'padding:3px 0;line-height:1.5;">{v}</td></tr>')
+
+    n = len(flagged)
+    logo_img = (f'<img src="cid:{logo_cid}" width="34" height="34" alt="Pivot" '
+                f'style="display:inline-block;border:0;margin:0 0 8px;">' if logo_cid else "")
+    rows = ""
+    for i, f in enumerate(flagged, 1):
+        rows += sect(f"[{i}] {esc(f.get('portal')).upper()}")
+        rows += kv("REASON", esc(f.get("reason")), vcolor="#b0592a")
+        if f.get("subject"):
+            rows += kv("SUBJECT", esc(f.get("subject")))
+        rows += kv("SOURCE REF", esc(f.get("id")))
+    rows += (f'<tr><td colspan="2" style="font-family:{_FONT_MONO};font-size:11px;color:#8a8266;'
+             f'padding:16px 0 0;line-height:1.6;">Locate each in the cs@ inbox by its SOURCE REF '
+             f'(Gmail message id) and process it manually.</td></tr>')
+
+    return f'''<!DOCTYPE html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&display=swap');</style>
+</head><body style="margin:0;padding:0;background:#e7e4dd;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#e7e4dd;padding:20px 0;">
+    <tr><td align="center">
+      <table role="presentation" width="620" cellpadding="0" cellspacing="0" style="max-width:620px;width:100%;border-radius:10px;overflow:hidden;background:#faf9f5;border:1px solid #ddd6c4;">
+        <tr><td style="background:#1e1e20;background:{_BRAND_CHARCOAL_GRAD};padding:20px 22px 16px;text-align:center;">
+          {logo_img}
+          <div style="font-family:{_FONT_SERIF};font-size:20px;font-weight:400;letter-spacing:.8px;color:#f2efe6;">Pivot Travel Management</div>
+          <div style="height:1px;background:{_BRAND_GOLD};line-height:1px;font-size:1px;max-width:150px;margin:12px auto 10px;">&nbsp;</div>
+          <div style="font-family:{_FONT_MONO};font-size:11px;letter-spacing:1px;color:#d99a2e;">⚠ MANUAL REVIEW REQUIRED &nbsp;&middot;&nbsp; {n}</div>
+        </td></tr>
+        <tr><td style="padding:6px 24px 20px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">{rows}</table>
+        </td></tr>
+        <tr><td style="background:#1e1e20;background:{_BRAND_CHARCOAL_GRAD};padding:12px 20px;text-align:center;">
+          <div style="font-family:{_FONT_MONO};font-size:10px;letter-spacing:1px;color:#8f8b81;">PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; MANUAL REVIEW &nbsp;|&nbsp; WWW.PIVOT-TRAVELS.COM</div>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>'''
+
+
 def email_flags(send_gmail, sender, flagged):
     if not flagged:
         return False
@@ -548,7 +609,12 @@ def email_flags(send_gmail, sender, flagged):
     m["Subject"] = f"Itinerary — {len(flagged)} booking(s) need manual review"
     m["From"] = sender
     m["To"] = to
-    m.set_content("\n".join(lines))
+    m.set_content("\n".join(lines))                # plain-text fallback
+    logo = _email_logo_bytes()
+    m.add_alternative(_flags_html(flagged, logo_cid=("pivotlogo" if logo else None)),
+                      subtype="html")              # branded technical HTML
+    if logo:                                       # inline feather (cid, not data:)
+        m.get_payload()[-1].add_related(logo, "image", "png", cid="<pivotlogo>", disposition="inline")
     raw = base64.urlsafe_b64encode(m.as_bytes()).decode("ascii")
     send_gmail.users().messages().send(userId="me", body={"raw": raw}).execute(num_retries=API_RETRIES)
     return True
