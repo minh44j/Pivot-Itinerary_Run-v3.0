@@ -51,6 +51,9 @@ LOG_FILE = "processed_ids.json"
 # Separate dedup log for the disruption watch (cancellation / schedule-change
 # alerts). Same public-safe convention as processed_ids.json: message_id only.
 DISRUPTION_LOG_FILE = "disruption_ids.json"
+# Dedup log for manual-review flags (message_id only) so a booking that keeps
+# failing extraction is emailed ONCE, not on every poll.
+FLAGGED_LOG_FILE = "flagged_ids.json"
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.path.join(PROJECT_DIR, "out")
 # Transient 5xx / rate-limit responses from Google get retried with exponential
@@ -146,6 +149,23 @@ def load_disruption_log():
 
 def save_disruption_log(log):
     with open(DISRUPTION_LOG_FILE, "w") as f:
+        json.dump(log, f, indent=2)
+
+
+# ── manual-review dedup log (message ids only — same public-safe convention) ──
+# A booking that fails qc_check is NOT marked processed (only successes are), so
+# without this log the same failing email would be re-flagged and re-emailed on
+# every poll. This records which message_ids have already been flagged so each is
+# emailed exactly ONCE.
+def load_flagged_log():
+    if os.path.exists(FLAGGED_LOG_FILE):
+        with open(FLAGGED_LOG_FILE) as f:
+            return json.load(f)
+    return {"flagged": []}
+
+
+def save_flagged_log(log):
+    with open(FLAGGED_LOG_FILE, "w") as f:
         json.dump(log, f, indent=2)
 
 
@@ -1166,8 +1186,18 @@ def main():
     save_log(log)
     # Privately notify Minh of anything needing manual review (inbox only, never
     # the public log). A failure here must not break the run summary.
+    # DEDUP: a flagged booking is never marked processed, so email ONLY the ones
+    # not already flagged in a previous run — otherwise the same failing email is
+    # re-sent every poll. Recorded only after a successful send.
     try:
-        email_flags(send_gmail, sender, flagged)
+        flog = load_flagged_log()
+        already = {e["message_id"] for e in flog["flagged"]}
+        new_flags = [f for f in flagged if f.get("id") and f["id"] not in already]
+        if new_flags:
+            email_flags(send_gmail, sender, new_flags)
+            for f in new_flags:
+                flog["flagged"].append({"message_id": f["id"]})
+            save_flagged_log(flog)
     except Exception as e:
         print(json.dumps({"flag_email_error": str(e)[:120]}))
 
