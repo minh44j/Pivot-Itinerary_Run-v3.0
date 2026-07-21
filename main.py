@@ -380,13 +380,166 @@ def _build_email_body(data, source_ref=""):
     return "\n".join(lines)
 
 
+def _confirmation_html(data, source_ref="", logo_cid=None):
+    """Branded HTML confirmation body — Model B charcoal/gold header (feather logo
+    + wordmark, CONFIRMED pill, PNR), then the booking at a glance (references,
+    passengers, itinerary) as white cards, and a dark footer. The full PDF is
+    attached; this is the scannable in-inbox copy. Brand constants + _email_logo_bytes
+    are module-level (defined below) — resolved at call time. Email-safe: tables +
+    inline styles only. Mirrors _build_email_body's content, so both stay in sync."""
+    import html as _html
+
+    def esc(v):
+        v = (str(v).strip() if v is not None else "")
+        return _html.escape(v) if v else "N/A"
+
+    def row(k, v):
+        return (f'<tr><td style="font-family:{_FONT_SANS};font-size:11px;color:#9a8f77;'
+                f'text-transform:uppercase;letter-spacing:.5px;vertical-align:top;'
+                f'padding:4px 12px 4px 0;white-space:nowrap;">{k}</td>'
+                f'<td style="font-family:{_FONT_SANS};font-size:13px;color:#26241f;'
+                f'line-height:1.5;padding:4px 0;">{v}</td></tr>')
+
+    def card(label, inner_rows):
+        return f'''
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;border:1px solid #e7e1d3;border-radius:12px;border-collapse:separate;overflow:hidden;">
+        <tr><td style="background:#1e1e20;background:{_BRAND_CHARCOAL_GRAD};padding:10px 16px;">
+          <span style="font-family:{_FONT_SANS};font-size:11px;font-weight:700;letter-spacing:1.5px;color:{_BRAND_GOLD};text-transform:uppercase;">{label}</span>
+        </td></tr>
+        <tr><td style="background:{_BRAND_GOLD};font-size:2px;line-height:2px;height:2px;">&nbsp;</td></tr>
+        <tr><td style="background:#ffffff;padding:13px 18px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">{inner_rows}</table>
+        </td></tr>
+      </table>'''
+
+    pnr_raw = (data.get("pnr") or "").strip()
+    logo_img = (f'<img src="cid:{logo_cid}" width="40" height="40" alt="Pivot" '
+                f'style="display:inline-block;border:0;margin:0 0 10px;">' if logo_cid else "")
+
+    # Booking references
+    ref_rows = []
+    booking_ref = (data.get("booking_ref") or "").strip()
+    if booking_ref and booking_ref != pnr_raw:
+        ref_rows.append(row("Booking Ref", esc(booking_ref)))
+    crs = (data.get("crs_ref") or "").strip()
+    if crs and crs != pnr_raw:
+        ref_rows.append(row("CRS Ref", esc(crs)))
+    ref_rows.append(row("Journey", esc(data.get("journey_type"))))
+    ref_rows.append(row("Booked On", esc(data.get("booked_on"))))
+    ref_rows.append(row("Portal", esc(data.get("portal"))))
+    booking_card = card("Booking", "".join(ref_rows))
+
+    # Passengers
+    pax = data.get("passengers", [])
+    pax_rows = ""
+    for i, p in enumerate(pax):
+        if i:
+            pax_rows += ('<tr><td colspan="2" style="border-top:1px solid #eee7d8;'
+                         'font-size:6px;line-height:6px;">&nbsp;</td></tr>')
+        pax_rows += row("Name", f'<b style="font-size:14px;">{esc(p.get("name"))}</b>')
+        pax_rows += row("Ticket", esc(p.get("ticket_no")))
+        detail = " &nbsp;·&nbsp; ".join(x for x in [
+            f'Seat {esc(p.get("seat"))}' if (p.get("seat") or "").strip() else "",
+            f'Cabin {esc(p.get("cabin_bag"))}' if (p.get("cabin_bag") or "").strip() else "",
+            f'Checked {esc(p.get("checked_bag"))}' if (p.get("checked_bag") or "").strip() else "",
+        ] if x)
+        if detail:
+            pax_rows += row("Baggage", f'<span style="color:#5a5344;">{detail}</span>')
+    pax_card = card(f"Passengers ({len(pax)})", pax_rows or row("Name", "N/A"))
+
+    # Itinerary
+    seg_html = ""
+    for seg in data.get("segments", []):
+        flights = seg.get("flights", [])
+        if not flights:
+            continue
+        first, last = flights[0], flights[-1]
+        head = (f'{esc(seg.get("type", "Flight")).upper()} &nbsp;·&nbsp; '
+                f'{esc(first.get("dep_iata"))} → {esc(last.get("arr_iata"))} &nbsp;·&nbsp; '
+                f'{esc(first.get("dep_date"))}')
+        seg_html += (f'<tr><td colspan="2" style="font-family:{_FONT_SANS};font-size:11px;'
+                     f'font-weight:700;letter-spacing:1px;color:{_BRAND_GOLD};'
+                     f'text-transform:uppercase;padding:10px 0 4px;">{head}</td></tr>')
+        for f in flights:
+            line1 = (f'<b style="font-family:{_FONT_SERIF};font-size:16px;color:#1e1e20;">'
+                     f'{esc(f.get("dep_iata"))} {esc(f.get("dep_time"))}</b> '
+                     f'<span style="color:{_BRAND_GOLD};">→</span> '
+                     f'<b style="font-family:{_FONT_SERIF};font-size:16px;color:#1e1e20;">'
+                     f'{esc(f.get("arr_iata"))} {esc(f.get("arr_time"))}</b>')
+            meta = " &nbsp;·&nbsp; ".join(x for x in [
+                esc(f.get("flight_no")), esc(f.get("airline")),
+                (f.get("cabin") or "").strip(), (f.get("duration") or "").strip()] if x and x != "N/A")
+            seg_html += (f'<tr><td colspan="2" style="padding:2px 0 8px;">{line1}'
+                         f'<div style="font-family:{_FONT_SANS};font-size:12px;color:#6b6355;'
+                         f'margin-top:2px;">{meta}</div></td></tr>')
+    itin_card = card("Itinerary", seg_html or row("", "N/A"))
+
+    india_note = ""
+    if extractors.india_arrival(data):
+        india_note = (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;">'
+                      f'<tr><td style="background:#f7f2e4;border:1px solid #e6dcc0;border-radius:10px;'
+                      f'padding:12px 16px;font-family:{_FONT_SANS};font-size:12.5px;color:#4a4436;line-height:1.6;">'
+                      f'🇮🇳 <b>India arrival</b> — the Air Suvidha 2.0 health-declaration guide is included '
+                      f'as extra page(s) in the attached PDF.</td></tr></table>')
+
+    src = (f'<div style="font-family:{_FONT_SANS};font-size:11px;color:#9a8f77;margin:2px 0 0;">'
+           f'Source Ref: <span style="font-family:monospace;">{esc(source_ref)}</span></div>' if source_ref else "")
+
+    return f'''<!DOCTYPE html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600&display=swap');</style>
+</head><body style="margin:0;padding:0;background:#eae7e0;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eae7e0;padding:22px 0;">
+    <tr><td align="center">
+      <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;border-radius:14px;overflow:hidden;background:#f6f4ef;">
+        <tr><td style="background:#1e1e20;background:{_BRAND_CHARCOAL_GRAD};padding:26px 24px 18px;text-align:center;">
+          {logo_img}
+          <div style="font-family:{_FONT_SERIF};font-size:22px;font-weight:400;letter-spacing:.8px;color:#f2efe6;">Pivot Travel Management</div>
+          <div style="height:1px;background:{_BRAND_GOLD};line-height:1px;font-size:1px;max-width:170px;margin:15px auto;">&nbsp;</div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+            <td style="text-align:left;vertical-align:middle;">
+              <span style="display:inline-block;border:1.5px solid #4ea87a;background:rgba(78,168,122,0.12);border-radius:20px;padding:4px 13px;font-family:{_FONT_SANS};font-size:11px;font-weight:700;letter-spacing:1.5px;color:#7fd0a6;">● CONFIRMED</span>
+              <div style="font-family:{_FONT_SANS};font-size:9px;letter-spacing:2px;color:rgba(201,168,76,.8);text-transform:uppercase;margin-top:7px;">Official Travel Document</div>
+            </td>
+            <td style="text-align:right;vertical-align:middle;">
+              <div style="font-family:{_FONT_SERIF};font-size:20px;font-weight:600;color:#ffffff;letter-spacing:1px;">{esc(data.get("pnr"))}</div>
+              <div style="font-family:{_FONT_SANS};font-size:8px;letter-spacing:2px;color:rgba(201,168,76,.65);text-transform:uppercase;margin-top:2px;">PNR Reference</div>
+            </td>
+          </tr></table>
+        </td></tr>
+        <tr><td style="padding:22px 22px 6px;">
+          {booking_card}
+          {pax_card}
+          {itin_card}
+          {india_note}
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:2px 0 6px;">
+            <tr><td style="background:#eef2ff;border:1px solid #d9e0f5;border-radius:10px;padding:12px 16px;font-family:{_FONT_SANS};font-size:12.5px;color:#374151;line-height:1.6;">
+              📎 The full booking confirmation is <b>attached as a PDF</b>.{('  ' + src) if src else ''}
+            </td></tr>
+          </table>
+        </td></tr>
+        <tr><td style="background:#1e1e20;background:{_BRAND_CHARCOAL_GRAD};padding:16px 20px;text-align:center;">
+          <div style="height:1px;background:{_BRAND_GOLD};opacity:.6;line-height:1px;font-size:1px;max-width:130px;margin:0 auto 12px;">&nbsp;</div>
+          <div style="font-family:{_FONT_SANS};font-size:10px;letter-spacing:1.5px;color:#8f8b81;text-transform:uppercase;">PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; {esc(data.get("pnr"))} &nbsp;|&nbsp; WWW.PIVOT-TRAVELS.COM</div>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>'''
+
+
 def email_pdf(send_gmail, sender, pdf_path, data, source_ref=""):
     to = os.environ.get("NOTIFY_TO") or sender             # default recipient = sender
     m = EmailMessage()
     m["Subject"] = f"Booking Confirmation — {data.get('pnr')} ({data.get('portal')})"
     m["From"] = sender                                     # SENDER_USER or cs@
     m["To"] = to
-    m.set_content(_build_email_body(data, source_ref))
+    m.set_content(_build_email_body(data, source_ref))     # text/plain fallback
+    logo = _email_logo_bytes()
+    m.add_alternative(_confirmation_html(data, source_ref, logo_cid=("pivotlogo" if logo else None)),
+                      subtype="html")                      # branded HTML
+    if logo:                                               # inline feather (cid, not data:)
+        m.get_payload()[-1].add_related(logo, "image", "png", cid="<pivotlogo>", disposition="inline")
     # pdf_path is a single file by this point — main() already merged the Air
     # Suvidha guide's page(s) into it (via _append_air_suvidha) for India-arrival
     # bookings, so there is only ever one attachment here.
