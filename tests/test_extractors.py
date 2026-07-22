@@ -146,6 +146,40 @@ def test_disruption_category(subject, preview, keyword, expected):
     assert E.disruption_category(subject, preview, keyword) == expected
 
 
+# Booking-level dedup key for the disruption watch. Airlines re-send the same
+# disruption for a booking repeatedly (each a new message_id); the key collapses
+# those re-sends while still distinguishing a new booking / type / day.
+_TK_SUBJ = "Turkish Airlines Flight Delay Information"
+_TK_FROM = "onlineticket@mail.turkishairlines.com"
+
+
+def test_disruption_dedup_resends_collapse():
+    # Two real Turkish re-sends for the SAME booking (UCHMPF), 30 min apart.
+    k1 = E.disruption_dedup_key(_TK_SUBJ, "Reservation code UCHMPF Dear NEDIM GULASTI",
+                                _TK_FROM, "delay", "2026-07-22")
+    k2 = E.disruption_dedup_key(_TK_SUBJ, "Reservation code UCHMPF ... departure time of your",
+                                _TK_FROM, "delay", "2026-07-22")
+    assert k1 and k1 == k2
+
+
+def test_disruption_dedup_distinguishes():
+    base = E.disruption_dedup_key(_TK_SUBJ, "Reservation code UCHMPF", _TK_FROM, "delay", "2026-07-22")
+    # different booking, different day, and different disruption type all stay distinct
+    assert E.disruption_dedup_key(_TK_SUBJ, "Reservation code WB2WKB", _TK_FROM, "delay", "2026-07-22") != base
+    assert E.disruption_dedup_key(_TK_SUBJ, "Reservation code UCHMPF", _TK_FROM, "delay", "2026-07-23") != base
+    assert E.disruption_dedup_key(_TK_SUBJ, "Reservation code UCHMPF", _TK_FROM, "cancellation", "2026-07-22") != base
+
+
+@pytest.mark.parametrize("subject,preview", [
+    ("Schedule Change", "your flight time has moved"),   # no reservation code at all
+    ("PNR CHANGED", "your PNR CHANGED, please review"),  # stray uppercase word, not a code
+])
+def test_disruption_dedup_no_key_falls_back(subject, preview):
+    # No reliable booking reference -> "" so main() falls back to per-message_id
+    # alerting (never silently drops a warning).
+    assert E.disruption_dedup_key(subject, preview, _TK_FROM, "schedule_change", "2026-07-22") == ""
+
+
 def test_extract_ajet_change():
     src = (FIX / "ajet_change.html").read_text(encoding="utf-8")
     c = E.extract_ajet_change(src, dict(CTX))

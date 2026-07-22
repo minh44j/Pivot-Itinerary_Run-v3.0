@@ -1084,6 +1084,49 @@ def disruption_category(subject="", preview="", keyword=""):
     return "schedule_change"
 
 
+# A booking reference / PNR following a strong label. The code group is OUTSIDE
+# the case-insensitive scope so it only matches an UPPERCASE alnum token (a real
+# PNR shape like Turkish's "UCHMPF"), never the lowercase prose around it.
+_DISRUPTION_PNR_RE = re.compile(
+    r"(?i:reservation\s+code|reservation\s+number|reservation\s+no|"
+    r"booking\s+reference|booking\s+ref(?:erence)?|booking\s+code|booking\s+id|"
+    r"record\s+locator|file\s+key|\bPNR\b)"
+    r"[\s:#/\-]*([A-Z0-9]{5,7})\b")
+# Uppercase words that can follow "PNR"/"booking ..." but are NOT a code — keeps a
+# stray "PNR CHANGED" from becoming a bogus dedup key.
+_DISRUPTION_STOPWORDS = {
+    "CHANGE", "CHANGED", "CANCEL", "CANCELLED", "CANCELED", "FLIGHT", "UPDATE",
+    "UPDATED", "DELAY", "DELAYED", "BOOKING", "TICKET", "STATUS", "NUMBER",
+    "PLEASE", "REVISED", "INFORM", "NOTICE", "ALERT", "ACTION", "DETAILS",
+}
+
+
+def disruption_dedup_key(subject="", preview="", sender="", category="", day=""):
+    """Booking-level dedup key for the disruption watch, or "" if no reliable
+    booking reference can be extracted (caller then falls back to message_id).
+
+    Airlines re-send a disruption notice for the SAME booking repeatedly (e.g.
+    Turkish Airlines sends "Flight Delay Information" for reservation UCHMPF every
+    ~30 min, each a NEW message_id). De-duping on message_id alone re-alerts every
+    time; keying on <sender-domain>:<PNR>:<category>:<day> collapses those re-sends
+    to ONE alert, while still re-alerting for a genuinely new booking, a different
+    disruption type (a later cancellation after a delay), or a new day."""
+    text = f"{subject}  {preview}"
+    code = ""
+    for m in _DISRUPTION_PNR_RE.finditer(text):
+        c = m.group(1).upper()
+        if c not in _DISRUPTION_STOPWORDS:
+            code = c
+            break
+    if not code:
+        return ""
+    dom = ""
+    md = re.search(r"@([A-Za-z0-9.\-]+)", sender or "")
+    if md:
+        dom = md.group(1).lower()
+    return f"{dom}:{code}:{(category or '').lower()}:{day}"
+
+
 # ── Pivot OS sync payload (Producer side of PIVOT_OS_INTEGRATION.md) ─────────
 # Build the JSON event that main.notify_pivot_os() POSTs to Pivot OS's
 # /api/itinerary-sync when an itinerary is produced. Pure (no I/O) so the exact

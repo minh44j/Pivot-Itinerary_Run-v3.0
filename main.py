@@ -647,7 +647,7 @@ def email_flags(send_gmail, sender, flagged):
 # READ-ONLY subject-keyword scan of the whole inbox (gmail.readonly — no message
 # is opened, replied to, forwarded, or modified) and returns any NEW match not
 # yet alerted. main() raises ONE private ACTION-REQUIRED digest to cs@ for them.
-def scan_disruptions(gmail, alerted_ids):
+def scan_disruptions(gmail, alerted_ids, alerted_keys=None):
     """Return alert dicts for NEW cancellation / schedule-change emails anywhere in
     the mailbox. Gmail's subject query is the coarse net; extractors.disruption_match()
     is the authoritative filter.
@@ -664,9 +664,11 @@ def scan_disruptions(gmail, alerted_ids):
     terms = " OR ".join(f'subject:({t})' for t in extractors.DISRUPTION_QUERY_TERMS)
     q = (f"({terms}) {window} -in:sent -in:trash -in:spam -in:drafts "
          f"-from:pivot-travels.com")
+    alerted_keys = alerted_keys or set()
     res = gmail.users().messages().list(
         userId="me", q=q, maxResults=50).execute(num_retries=API_RETRIES)
     alerts = []
+    seen_keys = set()   # collapse re-sends that arrive within THIS same scan too
     for m in res.get("messages", []):
         mid = m["id"]
         if mid in alerted_ids:
@@ -678,13 +680,31 @@ def scan_disruptions(gmail, alerted_ids):
         kw = extractors.disruption_match(subject)   # authoritative — Gmail matches loosely
         if not kw:
             continue
+        sender = _header(msg, "From")
+        snippet = (msg.get("snippet") or "")[:200]
+        # Booking-level dedup: airlines re-send the SAME disruption for a booking
+        # repeatedly, each a new message_id. Collapse those to one alert by keying
+        # on <sender-domain>:<PNR>:<category>:<day>. No reliable PNR -> key is ""
+        # and we fall back to per-message alerting (never silently drop a warning).
+        try:
+            day = datetime.fromtimestamp(
+                int(msg.get("internalDate", "0")) / 1000, timezone.utc).strftime("%Y-%m-%d")
+        except Exception:
+            day = ""
+        category = extractors.disruption_category(subject, snippet, kw)
+        key = extractors.disruption_dedup_key(subject, snippet, sender, category, day)
+        if key and (key in alerted_keys or key in seen_keys):
+            continue
+        if key:
+            seen_keys.add(key)
         alerts.append({
             "id": mid,
-            "from": _header(msg, "From"),
+            "from": sender,
             "subject": subject,
             "date": _header(msg, "Date"),
             "keyword": kw,
-            "snippet": (msg.get("snippet") or "")[:200],
+            "snippet": snippet,
+            "dedup_key": key,
         })
     return alerts
 
@@ -1213,7 +1233,8 @@ def main():
     try:
         dlog = load_disruption_log()
         alerted_ids = {e["message_id"] for e in dlog["alerted"]}
-        new_alerts = scan_disruptions(gmail, alerted_ids)
+        alerted_keys = {e["key"] for e in dlog["alerted"] if e.get("key")}
+        new_alerts = scan_disruptions(gmail, alerted_ids, alerted_keys)
         if new_alerts:
             # Try to auto-draft a REVISED itinerary for each alert (aJet only for
             # now; None whenever it can't be produced confidently). Attached to the
@@ -1223,8 +1244,11 @@ def main():
                 if a["revised_pdf"]:
                     revised_drafts += 1
             email_disruptions(send_gmail, sender, new_alerts)
+            # Record BOTH the message_id (exact re-fetch dedup) and the booking-level
+            # key (collapses an airline's re-sends for the same booking) so neither
+            # the same email nor a fresh re-send of it re-alerts next poll.
             for a in new_alerts:
-                dlog["alerted"].append({"message_id": a["id"]})
+                dlog["alerted"].append({"message_id": a["id"], "key": a.get("dedup_key") or ""})
             save_disruption_log(dlog)
             disruption_alerts = len(new_alerts)
     except Exception as e:

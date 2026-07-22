@@ -91,6 +91,21 @@ flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
 
+- **2026-07-22 — disruption alert repeating (airline re-sends) fixed:**
+  Staff saw the ⚠️ ACTION REQUIRED digest repeat every poll. Cause (diagnosed
+  against the live cs@ mailbox): airlines **re-send the same disruption for a
+  booking repeatedly** — Turkish Airlines sent "Flight Delay Information" for
+  reservation UCHMPF (and WB2WKB) twice, ~30 min apart, each a **new
+  message_id** — and the watch de-duped only by message_id, so every re-send read
+  as brand-new. Fix: **booking-level dedup** — new pure `extractors.disruption_dedup_key`
+  keys on `<sender-domain>:<PNR>:<category>:<day>` (PNR pulled from a strong label
+  like "Reservation code", uppercase-only capture + stopword guard so "PNR CHANGED"
+  can't become a bogus code). `scan_disruptions` skips a candidate whose key was
+  already alerted (persisted in `disruption_ids.json` as `{"message_id","key"}`)
+  and collapses re-sends within a single scan too. No reliable PNR → key "" →
+  falls back to per-message alerting, so a warning is **never silently dropped**
+  (§7). Re-alerts still fire for a new booking, a new day, or a worse disruption
+  type (cancellation after delay). 78 tests pass.
 - **2026-07-21 — self-healing "medic" loop (flag → diagnosed PR, human merges):**
   A scheduled Claude session turns a manual-review flag into a reviewed pull
   request so the diagnose→fix→test toil runs on its own while a human keeps the
