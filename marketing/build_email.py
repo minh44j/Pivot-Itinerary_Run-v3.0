@@ -151,7 +151,7 @@ HTML = f"""<!--
           <tr>
             <td align="center" bgcolor="#1e1e20" style="background:linear-gradient(180deg,#323234 0%,#1e1e20 55%,#151517 100%); padding: 30px 30px 22px 30px;">
               <img src="{LOGO}" alt="Pivot Travel Management" width="150" style="display:block; width:150px; max-width:150px; height:auto; margin:0 auto 12px auto;">
-              <div style="font-family:Georgia,'Times New Roman',serif; font-size:21px; letter-spacing:3px; color:#ffffff;">PIVOT&nbsp;TRAVEL&nbsp;MANAGEMENT</div>
+              <div style="font-family:Georgia,'Times New Roman',serif; font-size:22px; letter-spacing:1px; color:#ffffff;">Pivot&nbsp;Travel&nbsp;Management</div>
               <div style="height:2px; width:64px; background:#c9a84c; margin:14px auto 6px auto; line-height:2px; font-size:0;">&nbsp;</div>
               <div style="font-family:Arial,Helvetica,sans-serif; font-size:10px; letter-spacing:4px; color:#c9a84c; text-transform:uppercase;">Corporate Travel &amp; Executive Transportation</div>
             </td>
@@ -302,7 +302,7 @@ HTML = f"""<!--
           <tr>
             <td bgcolor="#0e0e0f" style="background:linear-gradient(180deg,#1e1e20 0%,#0e0e0f 100%); padding: 34px 40px 30px 40px;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td align="center">
-                <div style="font-family:Georgia,'Times New Roman',serif; font-size:16px; letter-spacing:2px; color:#ffffff; margin-bottom:6px;">PIVOT&nbsp;TRAVEL&nbsp;MANAGEMENT</div>
+                <div style="font-family:Georgia,'Times New Roman',serif; font-size:17px; letter-spacing:1px; color:#ffffff; margin-bottom:6px;">Pivot&nbsp;Travel&nbsp;Management</div>
                 <div style="height:2px; width:48px; background:#c9a84c; margin:8px auto 16px auto; line-height:2px; font-size:0;">&nbsp;</div>
                 <div style="font-family:Arial,Helvetica,sans-serif; font-size:12px; line-height:20px; color:#9a9a9e;">
                   Suite 20, 2nd Floor, Mobco Building, 2762 Ibn Al Anbari Street,<br>
