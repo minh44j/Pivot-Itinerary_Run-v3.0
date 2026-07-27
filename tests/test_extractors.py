@@ -40,6 +40,8 @@ CASES = {
     "akbar_flyadeal_f3.txt":           (E.extract_akbar,   None),
     "neg_ajet_missing_pnr.html":       (E.extract_ajet,    "Missing PNR"),
     "neg_akbar_missing_flightno.txt":  (E.extract_akbar,   "missing flight number"),
+    "turkish_airlines_connecting.txt": (E.extract_turkish_airlines, None),
+    "neg_turkish_airlines_missing_flightno.txt": (E.extract_turkish_airlines, "No flight segments"),
 }
 
 

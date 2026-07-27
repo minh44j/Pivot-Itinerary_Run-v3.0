@@ -920,6 +920,136 @@ def extract_pegasus(src, ctx=None):
     return _finalize(d, ctx)
 
 
+# ═════════════════════════════════════════════════════════════════════════
+# 5. TURKISH AIRLINES — PDF attachment ("TicketDetails.pdf" on the
+#    "Turkish Airlines - Ticket Details" email). Added 2026-07-27 from 2 real
+#    bookings (TDYWK8, WENFE5) — both Gulf<->small-Turkish-city connections via
+#    Istanbul. Source is pdfplumber text of the attachment, NOT the email body
+#    (the body only shows an aggregate summary with no per-leg times).
+#
+#    Real pdfplumber quirks confirmed against both samples:
+#      * The header summary block ("01:15 09:55 / IST / DMM OGU / ...") is
+#        column-scrambled by pdfplumber — unusable. The DETAILED "Flight
+#        details" listing below it reads cleanly and linearly; that's the
+#        only thing this parses.
+#      * Stops come in DEPARTURE/ARRIVAL PAIRS per leg, not a continuous
+#        chain — e.g. 4 stops for a 1-stop connection: dep0, arr0(=IST),
+#        dep1(=IST), arr1. Zipping stops[i]/stops[i+1] consecutively is
+#        WRONG (would fabricate a 3rd "flight" out of the IST->IST layover
+#        gap); pair them (0,1), (2,3), ... instead.
+#      * The 3-column Fare-Rules table (Change / Refund / Baggage) gets
+#        interleaved by row, so "Check-in Baggage : 1 piece x 23" and its
+#        "kg" unit can land on DIFFERENT lines with an unrelated cell's text
+#        in between. Don't require "kg" immediately adjacent to the number.
+#      * "Aircraft type" can render as a broken template placeholder
+#        ("planetypelookup.D21 - planemodellookup.D21") — a bug in Turkish
+#        Airlines' own PDF, confirmed on TWO different real bookings. Not
+#        extracted (aircraft type isn't part of this project's data model).
+#      * Each direction's own "Journey duration" figure can be internally
+#        inconsistent with the sum of its own leg segments (off by ~10 min
+#        on one real sample) — Turkish Airlines' own rounding artifact, not
+#        ours to reconcile. Duration is always computed from the parsed
+#        dep/arr times (_diff_hm), never read from that summary figure.
+#
+#    A FLAT list of legs (outbound legs, then inbound legs, in booking order)
+#    is handed to `_finalize()` — the existing group_segments()/
+#    _layovers_for()/_mark_next_day() machinery correctly finds the
+#    Outbound/Inbound split and computes layovers on its own: the artificial
+#    week(s)-long "gap" between the last outbound leg and the first inbound
+#    leg is by far the largest connection gap, so group_segments() splits
+#    there naturally — verified against both real bookings.
+# ═════════════════════════════════════════════════════════════════════════
+_TA_DIR_RE = re.compile(
+    r"([A-Za-zÇĞİÖŞÜçğıöşü\-]+(?:\s[A-Za-zÇĞİÖŞÜçğıöşü\-]+)*)\s*\(([A-Z]{3})\)\s*-\s*"
+    r"([A-Za-zÇĞİÖŞÜçğıöşü\-]+(?:\s[A-Za-zÇĞİÖŞÜçğıöşü\-]+)*)\s*\(([A-Z]{3})\)\s+"
+    r"(\d{1,2}\s+[A-Za-z]+\s+\d{4})\s+\w+"
+)
+_TA_STOP_RE = re.compile(
+    r"(\d{1,2}:\d{2})\s+([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜ\-]+(?:\s[A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜ\-]*)*)"
+    r"\s*\(([A-ZÇĞİÖŞÜ\s]+)\)\s+([A-Za-zÇĞİÖŞÜçğıöşü .\-]+?)\s*\(([A-Z]{3})\)"
+)
+_TA_FNO_RE = re.compile(r"Airline\s*-\s*Flight\s*no:\s*TURKISH AIRLINES\s*-\s*([A-Z]{2}\d+)", re.I)
+
+
+def _ta_norm_flight(carrier_num):
+    m = re.match(r"([A-Z]{2})(\d+)", carrier_num)
+    return f"{m.group(1)} {m.group(2)}" if m else carrier_num
+
+
+def extract_turkish_airlines(pdf_text, ctx=None):
+    if not pdf_text:
+        raise ValueError("Turkish Airlines source document not found / unreadable")
+    t = pdf_text
+    d = {"portal": "Turkish Airlines"}
+    d["pnr"] = _m(t, r"(?:Mr|Mrs|Ms)\.?\s+[A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜ '\-]+\n([A-Z0-9]{5,7})\b")
+    d["booked_on"] = to_ddmon(_m(t, r"Transaction date:\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4})"))
+    d["status"] = "Confirmed" if re.search(r"ticket has been created", t, re.I) else ""
+
+    # passengers — "Passenger information" table: "NAME  TICKETNO  ..."
+    pax_block = t
+    sec = re.search(r"Passenger information(.*?)Passenger contact information", t, re.S)
+    if sec:
+        pax_block = sec.group(1)
+    passengers = [
+        {"name": nm.title(), "ticket_no": tkt, "seat": "", "cabin_bag": "", "checked_bag": ""}
+        for nm, tkt in re.findall(r"(?m)^([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜ '\-]+?)\s+(\d{10,})\b", pax_block)
+    ]
+    # baggage is per-booking in these samples (not per-passenger) — apply to all pax.
+    # See the "3-column table interleaving" note above for why "kg" isn't required
+    # immediately after the weight number.
+    cm = re.search(r"Check-?in Baggage\s*:\s*(\d+)\s*piece[s]?\s*x\s*(\d+)", t, re.I)
+    checked_str = f"{cm.group(1)} piece x {cm.group(2)} kg" if cm else ""
+    cam = re.search(r"Cabin Baggage\s*:\s*(\d+)\s*piece[s]?\s*x\s*(\d+)", t, re.I)
+    cabin_str = f"{cam.group(1)} piece x {cam.group(2)} kg" if cam else ""
+    for p in passengers:
+        p["checked_bag"], p["cabin_bag"] = checked_str, cabin_str
+    d["passengers"] = passengers or [{"name": "Not specified", "ticket_no": "Not specified",
+                                      "cabin_bag": "", "checked_bag": "", "seat": ""}]
+
+    headers = list(_TA_DIR_RE.finditer(t))
+    all_flights = []
+    for i, h in enumerate(headers):
+        start = h.end()
+        end = headers[i + 1].start() if i + 1 < len(headers) else len(t)
+        # Scope to this direction's own "Flight details" listing; cut before
+        # Fare Rules so the NEXT direction's stops can't bleed in.
+        scoped = t[start:end].split("Fare Rules")[0]
+        stops = list(_TA_STOP_RE.finditer(scoped))
+        fnos = _TA_FNO_RE.findall(scoped)
+        if len(stops) < 2 or len(stops) % 2 != 0 or len(fnos) != len(stops) // 2:
+            continue   # unexpected shape for this direction — leave it out; qc_check
+                       # will flag the booking for missing segments rather than guess
+        cabin = (_m(scoped, r"(Economy|Business|First|Premium\s*Economy)\s*Class") or "Economy").title()
+        base_date = to_ddmon(h.group(5))
+        # Walk the calendar date forward across the WHOLE stop chain on any
+        # time rollover (e.g. a 20:15 departure arriving 00:15 next day).
+        dates = [base_date]
+        for i2 in range(1, len(stops)):
+            prev_t, cur_t = stops[i2 - 1].group(1), stops[i2].group(1)
+            if cur_t < prev_t:
+                dt = datetime.strptime(dates[-1], "%d %b %Y") + timedelta(days=1)
+                dates.append(dt.strftime("%d %b %Y"))
+            else:
+                dates.append(dates[-1])
+        for i2 in range(0, len(stops), 2):
+            s0, s1 = stops[i2], stops[i2 + 1]
+            dep_time, dep_city, _dep_country, dep_ap, dep_iata = s0.groups()
+            arr_time, arr_city, _arr_country, arr_ap, arr_iata = s1.groups()
+            dep_date, arr_date = dates[i2], dates[i2 + 1]
+            all_flights.append({
+                "flight_no": _ta_norm_flight(fnos[i2 // 2]), "airline": "Turkish Airlines",
+                "dep_iata": dep_iata, "arr_iata": arr_iata,
+                "dep_city": dep_city.title(), "arr_city": arr_city.title(),
+                "dep_airport": dep_ap.strip(), "arr_airport": arr_ap.strip(),
+                "terminal": "", "arr_terminal": "",
+                "dep_date": dep_date, "dep_time": dep_time,
+                "arr_date": arr_date, "arr_time": arr_time,
+                "cabin": cabin, "duration": _diff_hm(dep_date, dep_time, arr_date, arr_time),
+            })
+    d["flights"] = all_flights
+    return _finalize(d, ctx)
+
+
 # ── generic segment parser (Akbar PDF fallback) ───────────────────────────
 def _parse_generic_segments(text):
     flights = []
@@ -1218,4 +1348,5 @@ PORTALS = [
     {"name": "Akbar Travels", "from": "sanoreply@akbartravels.com", "subject": "Ticket Copy",                                    "source": "drive_pdf", "fn": extract_akbar},
     {"name": "aJet",          "from": "onlineticket@mail.ajet.com", "subject": "Ticket information",                              "source": "body",      "fn": extract_ajet},
     {"name": "Pegasus",       "from": "pegasus@flypgs.com",         "subject": "Your booking is confirmed! View your ticket now", "source": "body",      "fn": extract_pegasus},
+    {"name": "Turkish Airlines", "from": "onlineticket@mail.turkishairlines.com", "subject": "Turkish Airlines - Ticket Details", "source": "drive_pdf", "fn": extract_turkish_airlines},
 ]

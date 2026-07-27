@@ -1,0 +1,37 @@
+Your ticket has been created. Reservation code
+Mr. TEST PASSENGER
+TESTA2
+As Turkish Airlines, we are very pleased to welcome you.
+Transaction date: 01 January 2026, 10:00 (GMT +03) (Istanbul Local Time) Manage booking
+Flight details
+Testcity (TST) - Othercity (OTH) 15 February 2026 Sunday
+01:15 09:55
+IST
+Journey duration
+TST OTH Economy Class (U) - EcoFly
+8h 30m
+Testcity Othercity
+Flight details
+01:15 TESTCITY (TESTLAND) Test International Airport (TST)
+Aircraft type: Narrow body - Airbus A321neo
+05:30 ISTANBUL (TÜRKİYE) Istanbul Airport (IST)
+Status: Transfer and flight change
+Airline: Istanbul, Istanbul Airport
+08:10 ISTANBUL (TÜRKİYE) Istanbul Airport (IST)
+Airline - Flight no: TURKISH AIRLINES - TK1000
+Aircraft type: Narrow-body - Airbus A320-200
+09:55 OTHERCITY (OTHERLAND) Other International Airport (OTH)
+Fare Rules
+Change Refund / Cancellation Baggage Allowance
+With 263,00 SAR penalty Not allowed - (In case of no-show) Check-in Baggage : 1 piece x 23
+With 789,00 SAR penalty - (In Not allowed kg
+case of no-show) Cabin Baggage : 1 piece x 8 kg
+Please view Manage booking page for detailed information regarding your flight.
+Flight rules
+Passenger information
+Passenger name Ticket numbers Frequent Flyer Program details
+TEST PASSENGER 9990000000002 The Frequent Flyer Program account has not been
+logged in for this passenger.
+Passenger contact information
+Passenger name Email address Telephone
+TEST PASSENGER CS@PIVOT-TRAVELS.COM +966500000000
