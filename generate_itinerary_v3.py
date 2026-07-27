@@ -357,6 +357,14 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
             if not fl.get("arr_airport")  and _ap_name.get(ai): fl["arr_airport"]  = _ap_name[ai]
             if not fl.get("arr_terminal") and _ap_term.get(ai): fl["arr_terminal"] = _ap_term[ai]
             if not fl.get("dep_airport")  and _ap_name.get(di): fl["dep_airport"]  = _ap_name[di]
+            # 2026-07-27: the DEPARTURE terminal was the one field this block never
+            # backfilled (airport names went both ways, arrival terminal was filled,
+            # departure terminal was not). On a round trip where the airline states a
+            # hub's terminal only once — e.g. only on the outbound ARRIVAL into IST —
+            # the inbound leg departing that same IST silently rendered no terminal.
+            # This only ever copies a terminal the document itself stated for that
+            # exact IATA; it never invents one (§7).
+            if not fl.get("terminal")     and _ap_term.get(di): fl["terminal"]     = _ap_term[di]
 
     segs_html = ""
     for grp in seg_groups:

@@ -31,7 +31,8 @@
           "cabin": "Economy",
           "dep_airport": "",
           "arr_airport": "",
-          "terminal": ""
+          "terminal": "",
+          "arr_terminal": ""
         },
         {
           "dep_date": "18 Jul 2026",
@@ -48,7 +49,8 @@
           "cabin": "Economy",
           "dep_airport": "",
           "arr_airport": "",
-          "terminal": ""
+          "terminal": "",
+          "arr_terminal": ""
         }
       ],
       "layovers": [
