@@ -637,7 +637,10 @@ def extract_akbar(pdf_text, ctx=None):
             "dep_iata": dep_iata, "arr_iata": arr_iata,
             "dep_city": city2disp.get(dep_c, ""), "arr_city": city2disp.get(arr_c, ""),
             "dep_airport": "", "arr_airport": "",
-            "terminal": terms[0] if terms else "",
+            # Akbar terminals stay blank on purpose (see the 2026-07-17 note above);
+            # arr_terminal is still emitted so every portal exposes the same keys and
+            # the generator's terminal backfill can populate it from another leg.
+            "terminal": terms[0] if terms else "", "arr_terminal": "",
             "dep_time": times[0] if times else "", "dep_date": to_ddmon(dates[0]) if dates else "",
             "arr_time": times[1] if len(times) > 1 else "", "arr_date": to_ddmon(dates[1]) if len(dates) > 1 else "",
             "cabin": default_class,
@@ -724,7 +727,9 @@ def extract_ajet(src, ctx=None):
                       else "Economy" if brand == "ECOJET"
                       else "Premium Economy" if brand == "PREMIUM"
                       else "Not specified"),
-            "dep_airport": "", "arr_airport": "", "terminal": "",
+            # aJet tickets carry no terminal data at all (verified against real
+            # emails) — both keys are emitted blank so the schema stays uniform.
+            "dep_airport": "", "arr_airport": "", "terminal": "", "arr_terminal": "",
         })
     d["flights"] = flights
     return _finalize(d, ctx)
@@ -824,7 +829,9 @@ def _pegasus_section_flights(sec, sec_date):
                 "dep_city": cities[0] if cities else "", "arr_city": cities[1] if len(cities) > 1 else "",
                 "dep_date": sec_date, "arr_date": sec_date,
                 "duration": dur, "airline": "Pegasus", "cabin": "Not specified",
-                "dep_airport": "", "arr_airport": "", "terminal": "",
+                # Pegasus tickets carry no terminal data — both keys emitted blank
+                # so every portal exposes the same flight-dict schema.
+                "dep_airport": "", "arr_airport": "", "terminal": "", "arr_terminal": "",
             })
     return flights
 
@@ -1061,7 +1068,8 @@ def _parse_generic_segments(text):
             "dep_iata": mo.group(1), "arr_iata": mo.group(2), "flight_no": re.sub(r"\s", "", mo.group(3)),
             "dep_date": to_ddmon(mo.group(4)), "arr_date": to_ddmon(mo.group(4)),
             "dep_time": mo.group(5), "arr_time": mo.group(6), "airline": "", "cabin": "Not specified",
-            "dep_city": "", "arr_city": "", "dep_airport": "", "arr_airport": "", "terminal": "", "duration": "",
+            "dep_city": "", "arr_city": "", "dep_airport": "", "arr_airport": "",
+            "terminal": "", "arr_terminal": "", "duration": "",
         })
     return flights
 

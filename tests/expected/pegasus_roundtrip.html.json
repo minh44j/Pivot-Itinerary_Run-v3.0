@@ -31,7 +31,8 @@
           "cabin": "Not specified",
           "dep_airport": "",
           "arr_airport": "",
-          "terminal": ""
+          "terminal": "",
+          "arr_terminal": ""
         }
       ],
       "layovers": []
@@ -54,7 +55,8 @@
           "cabin": "Not specified",
           "dep_airport": "",
           "arr_airport": "",
-          "terminal": ""
+          "terminal": "",
+          "arr_terminal": ""
         }
       ],
       "layovers": []

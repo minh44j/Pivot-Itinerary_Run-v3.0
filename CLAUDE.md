@@ -94,6 +94,32 @@ flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
 
+- **2026-07-27 — terminal audit + departure-terminal backfill fix:**
+  Cross-checked terminal handling across all 5 portals against REAL sources.
+  **Finding: mostly not a parsing bug** — 4 of 5 portals genuinely carry no
+  terminal data in the source, so `N/A` was correct: aJet (verified on a live
+  email — only boilerplate "…at some terminals"), Pegasus, Turkish Airlines
+  (verified on both real `TicketDetails.pdf` files — zero terminal fields), and
+  Akbar (From/To terminal columns render empty; stray "Terminal X" tokens are
+  unattributable — deliberately left blank since 2026-07-17). Alhind is the only
+  portal whose source sometimes carries terminals, and it already extracted both
+  correctly. Two REAL defects found and fixed:
+  1. **`generate_itinerary_v3.build_html` never backfilled the DEPARTURE
+     terminal.** Airport names propagated both ways and `arr_terminal` was
+     filled, but `terminal` was not — so on a round trip where the airline
+     stated a hub's terminal only once (e.g. only on the outbound ARRIVAL into
+     IST), the inbound leg departing that same IST silently rendered nothing.
+     One line added, mirroring the existing arrival-side backfill.
+  2. **`arr_terminal` was missing entirely** from Akbar / aJet / Pegasus (and
+     the generic fallback) flight dicts, so those portals structurally could
+     never carry an arrival terminal. All portals now emit both keys.
+  The backfill only ever copies a terminal the document itself stated for that
+  exact IATA — it never invents one (§7) and never copies across airports; both
+  guards are asserted in `tests/test_terminal_backfill.py`. 92 tests pass.
+  **Deliberately NOT done:** a static IATA→terminal lookup table. Terminals vary
+  by airline, route and season at hubs like IST/DXB, so a static map would print
+  confidently WRONG terminals on client documents — worse than N/A.
+
 - **2026-07-27 — 5th portal added: Turkish Airlines** (`extract_turkish_airlines`):
   Built from 2 real bookings (TDYWK8, WENFE5), both Gulf↔small-Turkish-city
   connections via Istanbul. **Source is the `TicketDetails.pdf` email

@@ -28,6 +28,7 @@
           "dep_airport": "",
           "arr_airport": "",
           "terminal": "",
+          "arr_terminal": "",
           "dep_time": "08:00",
           "dep_date": "08 Jul 2026",
           "arr_time": "10:30",
