@@ -1,0 +1,112 @@
+{
+  "portal": "Turkish Airlines",
+  "pnr": "TESTA1",
+  "booked_on": "01 Jan 2026",
+  "status": "Confirmed",
+  "passengers": [
+    {
+      "name": "Test Passenger",
+      "ticket_no": "9990000000001",
+      "seat": "",
+      "cabin_bag": "1 piece x 8 kg",
+      "checked_bag": "1 piece x 23 kg"
+    }
+  ],
+  "segments": [
+    {
+      "type": "OUTBOUND",
+      "flights": [
+        {
+          "flight_no": "TK 999",
+          "airline": "Turkish Airlines",
+          "dep_iata": "TST",
+          "arr_iata": "IST",
+          "dep_city": "Testcity",
+          "arr_city": "Istanbul",
+          "dep_airport": "Test International Airport",
+          "arr_airport": "Istanbul Airport",
+          "terminal": "",
+          "arr_terminal": "",
+          "dep_date": "15 Feb 2026",
+          "dep_time": "01:15",
+          "arr_date": "15 Feb 2026",
+          "arr_time": "05:30",
+          "cabin": "Economy",
+          "duration": "4H 15M"
+        },
+        {
+          "flight_no": "TK 1000",
+          "airline": "Turkish Airlines",
+          "dep_iata": "IST",
+          "arr_iata": "OTH",
+          "dep_city": "Istanbul",
+          "arr_city": "Othercity",
+          "dep_airport": "Istanbul Airport",
+          "arr_airport": "Other International Airport",
+          "terminal": "",
+          "arr_terminal": "",
+          "dep_date": "15 Feb 2026",
+          "dep_time": "08:10",
+          "arr_date": "15 Feb 2026",
+          "arr_time": "09:55",
+          "cabin": "Economy",
+          "duration": "1H 45M"
+        }
+      ],
+      "layovers": [
+        {
+          "airport": "IST",
+          "duration": "2H 40M"
+        }
+      ]
+    },
+    {
+      "type": "INBOUND",
+      "flights": [
+        {
+          "flight_no": "TK 1001",
+          "airline": "Turkish Airlines",
+          "dep_iata": "OTH",
+          "arr_iata": "IST",
+          "dep_city": "Othercity",
+          "arr_city": "Istanbul",
+          "dep_airport": "Other International Airport",
+          "arr_airport": "Istanbul Airport",
+          "terminal": "",
+          "arr_terminal": "",
+          "dep_date": "25 Feb 2026",
+          "dep_time": "14:40",
+          "arr_date": "25 Feb 2026",
+          "arr_time": "16:35",
+          "cabin": "Economy",
+          "duration": "1H 55M"
+        },
+        {
+          "flight_no": "TK 998",
+          "airline": "Turkish Airlines",
+          "dep_iata": "IST",
+          "arr_iata": "TST",
+          "dep_city": "Istanbul",
+          "arr_city": "Testcity",
+          "dep_airport": "Istanbul Airport",
+          "arr_airport": "Test International Airport",
+          "terminal": "",
+          "arr_terminal": "",
+          "dep_date": "25 Feb 2026",
+          "dep_time": "20:15",
+          "arr_date": "26 Feb 2026",
+          "arr_time": "00:15 (+1)",
+          "cabin": "Economy",
+          "duration": "4H 00M"
+        }
+      ],
+      "layovers": [
+        {
+          "airport": "IST",
+          "duration": "3H 40M"
+        }
+      ]
+    }
+  ],
+  "journey_type": "Round Trip"
+}

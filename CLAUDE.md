@@ -44,8 +44,11 @@ Two ways it runs:
 | **Akbar Travels** | sanoreply@akbartravels.com | `Booking Success` **or** `Ticket Copy` | **PDF attachment** (pdfplumber) — body unreliable |
 | **aJet** | onlineticket@mail.ajet.com | `Ticket information` | Email **body** |
 | **Pegasus** | pegasus@flypgs.com | `Your booking is confirmed! View your ticket now` | Email **body** |
+| **Turkish Airlines** | onlineticket@mail.turkishairlines.com | `Turkish Airlines - Ticket Details` | **PDF attachment** (`TicketDetails.pdf`, pdfplumber) — body is a scrambled summary only |
 
-Process only when sender AND subject both match. Ignore everything else.
+Process only when sender AND subject both match. Ignore everything else. Turkish Airlines sends
+several OTHER subjects from the same address (Gate Change Information, Flight Delay Information,
+Seat Selection Details) — none of those are booking confirmations; only the exact subject above is.
 
 ## 5. The design (LOCKED — Model B header, dark luxury)
 
@@ -91,6 +94,32 @@ flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
 
+- **2026-07-27 — 5th portal added: Turkish Airlines** (`extract_turkish_airlines`):
+  Built from 2 real bookings (TDYWK8, WENFE5), both Gulf↔small-Turkish-city
+  connections via Istanbul. **Source is the `TicketDetails.pdf` email
+  attachment, not the body** — the body only shows a scrambled aggregate
+  summary with no per-leg times; registered with `"source": "drive_pdf"`,
+  reusing `main.akbar_attachment_text()` (genuinely generic — grabs the
+  first PDF attachment regardless of filename, not Akbar-specific).
+  Confirmed pdfplumber quirks on real files (see extractors.py comments for
+  detail): (1) the header summary block is column-scrambled — only the
+  detailed "Flight details" listing below it is reliable; (2) stops come in
+  **departure/arrival PAIRS per leg**, not a continuous chain — zipping
+  consecutive stops would fabricate a phantom 3rd leg out of the
+  IST-arrival→IST-departure layover gap; (3) the 3-column Fare-Rules table
+  interleaves by row, so "Check-in Baggage : ... 23" and its "kg" unit can
+  land on different lines with an unrelated cell between them; (4) "Aircraft
+  type" can render as a broken template placeholder
+  (`planetypelookup.D21 - planemodellookup.D21`) — a real bug in Turkish
+  Airlines' own PDF, confirmed on two different bookings (not extracted;
+  aircraft type isn't part of this project's data model anyway). A **flat**
+  list of legs (outbound then inbound) is handed to the existing
+  `_finalize()` → `group_segments()` / `_layovers_for()` / `_mark_next_day()`
+  machinery, which correctly finds the Outbound/Inbound split on its own —
+  the week(s)-long gap between the last outbound leg and first inbound leg
+  is always the largest connection gap. Verified end-to-end (extract →
+  `qc_check` → `build_pdf`) against both real bookings before committing;
+  synthetic zero-PII fixtures added to `tests/`.
 - **2026-07-22 — disruption alert repeating (airline re-sends) fixed:**
   Staff saw the ⚠️ ACTION REQUIRED digest repeat every poll. Cause (diagnosed
   against the live cs@ mailbox): airlines **re-send the same disruption for a
