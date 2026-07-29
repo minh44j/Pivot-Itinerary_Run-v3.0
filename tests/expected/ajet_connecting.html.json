@@ -17,6 +17,15 @@
       "type": "FLIGHT",
       "flights": [
         {
+          "pax": [
+            {
+              "name": "JOHN DOE",
+              "ticket_no": "9990000000001",
+              "checked_bag": "20 kg Maximum",
+              "cabin_bag": "8 kg",
+              "seat": "12A"
+            }
+          ],
           "dep_date": "18 Jul 2026",
           "arr_date": "18 Jul 2026",
           "dep_city": "Testcity",
@@ -35,6 +44,15 @@
           "arr_terminal": ""
         },
         {
+          "pax": [
+            {
+              "name": "JOHN DOE",
+              "ticket_no": "9990000000001",
+              "checked_bag": "20 kg Maximum",
+              "cabin_bag": "8 kg",
+              "seat": "12A"
+            }
+          ],
           "dep_date": "18 Jul 2026",
           "arr_date": "18 Jul 2026",
           "dep_city": "Othercity",

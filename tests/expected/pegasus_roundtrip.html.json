@@ -32,7 +32,15 @@
           "dep_airport": "",
           "arr_airport": "",
           "terminal": "",
-          "arr_terminal": ""
+          "arr_terminal": "",
+          "pax": [
+            {
+              "name": "JOHN DOE",
+              "cabin_bag": "8 kg",
+              "checked_bag": "20 kg",
+              "seat": "14A"
+            }
+          ]
         }
       ],
       "layovers": []
@@ -56,7 +64,15 @@
           "dep_airport": "",
           "arr_airport": "",
           "terminal": "",
-          "arr_terminal": ""
+          "arr_terminal": "",
+          "pax": [
+            {
+              "name": "JOHN DOE",
+              "cabin_bag": "Not specified",
+              "checked_bag": "Not specified",
+              "seat": ""
+            }
+          ]
         }
       ],
       "layovers": []

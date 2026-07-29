@@ -32,7 +32,15 @@
           "arr_date": "15 Feb 2026",
           "arr_time": "05:30",
           "cabin": "Economy",
-          "duration": "4H 15M"
+          "duration": "4H 15M",
+          "pax": [
+            {
+              "name": "Test Passenger",
+              "cabin_bag": "1 piece x 8 kg",
+              "checked_bag": "1 piece x 23 kg",
+              "seat": ""
+            }
+          ]
         },
         {
           "flight_no": "TK 1000",
@@ -50,7 +58,15 @@
           "arr_date": "15 Feb 2026",
           "arr_time": "09:55",
           "cabin": "Economy",
-          "duration": "1H 45M"
+          "duration": "1H 45M",
+          "pax": [
+            {
+              "name": "Test Passenger",
+              "cabin_bag": "1 piece x 8 kg",
+              "checked_bag": "1 piece x 23 kg",
+              "seat": ""
+            }
+          ]
         }
       ],
       "layovers": [
@@ -79,7 +95,15 @@
           "arr_date": "25 Feb 2026",
           "arr_time": "16:35",
           "cabin": "Economy",
-          "duration": "1H 55M"
+          "duration": "1H 55M",
+          "pax": [
+            {
+              "name": "Test Passenger",
+              "cabin_bag": "1 piece x 8 kg",
+              "checked_bag": "1 piece x 23 kg",
+              "seat": ""
+            }
+          ]
         },
         {
           "flight_no": "TK 998",
@@ -97,7 +121,15 @@
           "arr_date": "26 Feb 2026",
           "arr_time": "00:15 (+1)",
           "cabin": "Economy",
-          "duration": "4H 00M"
+          "duration": "4H 00M",
+          "pax": [
+            {
+              "name": "Test Passenger",
+              "cabin_bag": "1 piece x 8 kg",
+              "checked_bag": "1 piece x 23 kg",
+              "seat": ""
+            }
+          ]
         }
       ],
       "layovers": [

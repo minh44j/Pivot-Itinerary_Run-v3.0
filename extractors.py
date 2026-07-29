@@ -261,6 +261,7 @@ def extract_alhind(html, ctx=None):
     # ── passenger table ──
     pax_tbody = _m(html, r'<tbody[^>]*id="seg_dt"[^>]*>(.*?)</tbody>', 1, re.S | re.I)
     passengers, seg_flightseq = [], []      # seg_flightseq: ordered (key, dep_iata, arr_iata, class)
+    seg_pax = {}                            # flight_key -> [ {name, cabin_bag, checked_bag, seat} ]
     seg_seen = set()
     cur = None
     name_re = re.compile(r"^(?:Mr|Mrs|Ms|Mstr|Master|Miss|Dr)\.?\s+[A-Z]", re.I)
@@ -283,11 +284,18 @@ def extract_alhind(html, ctx=None):
         seg = cells[si]
         flt = cells[si + 1] if si + 1 < len(cells) else ""
         tkt = cells[si + 2] if si + 2 < len(cells) else ""
-        cabin = cells[si + 4] if si + 4 < len(cells) else ""
-        # checked allowance: usually the Checkin column (si+5); some carriers
-        # (e.g. Air Arabia / Himalaya) put it in Extra-Checkin (si+6) instead.
+        # COLUMN OFFSETS DIFFER BY ROW TYPE. On a name row the FFNo cell is
+        # present (si+3), so Cabin is si+4. On a continuation row Name/Image/FFNo
+        # are rowspan'd away, so every field shifts one earlier and Cabin is si+3.
+        # The old code always used si+4 — harmless only because baggage was
+        # assigned once on the name row; reading per-SEGMENT baggage (2026-07-30)
+        # makes the distinction matter, so it is handled properly here.
+        _cab_i = (si + 4) if nm else (si + 3)
+        cabin = cells[_cab_i] if _cab_i < len(cells) else ""
+        # checked allowance: usually the Checkin column (next one along); some
+        # carriers (e.g. Air Arabia / Himalaya) put it in Extra-Checkin instead.
         checked = ""
-        for j in (si + 5, si + 6):
+        for j in (_cab_i + 1, _cab_i + 2):
             if j < len(cells) and cells[j].strip():
                 checked = cells[j]
                 break
@@ -315,6 +323,18 @@ def extract_alhind(html, ctx=None):
             cur["checked_bag"] = checked or "Not specified"
         dep_i, arr_i = re.split(r"\s*-\s*", seg)
         key = _flight_key(flt)
+        # PER-SEGMENT pax record for this row (2026-07-30). Alhind's passenger
+        # table has one row PER SEGMENT per passenger, so extra baggage bought on
+        # a single leg — or a different seat per leg — is right here in the source.
+        # Keyed by flight so the generator can attach it to the matching leg.
+        _row_seat = _valid_seat(cells[si + 9] if (nm and si + 9 < len(cells))
+                               else (cells[si + 8] if (not nm and si + 8 < len(cells)) else ""))
+        seg_pax.setdefault(key, []).append({
+            "name": (cur or {}).get("name", ""),
+            "cabin_bag": cabin or "",
+            "checked_bag": checked or "",
+            "seat": _row_seat,
+        })
         if key not in seg_seen:
             seg_seen.add(key)
             seg_flightseq.append((key, dep_i.strip(), arr_i.strip(),
@@ -365,6 +385,8 @@ def extract_alhind(html, ctx=None):
             "dep_time": times[0] if times else "", "dep_date": to_ddmon(dates[0]) if dates else "",
             "arr_time": times[1] if len(times) > 1 else "", "arr_date": to_ddmon(dates[1]) if len(dates) > 1 else (to_ddmon(dates[0]) if dates else ""),
             "cabin": cl, "duration": "",
+            # per-leg pax baggage/seat harvested from this flight's own row(s)
+            "pax": seg_pax.get(key, []),
         })
     d["flights"] = flights
     return _finalize(d, ctx)
@@ -681,19 +703,29 @@ def extract_ajet(src, ctx=None):
         r"((?:\d{1,3}[A-Za-z]|[A-Za-z]\d{1,3})"                         # first seat code ONLY
         r"(?:[ \t]*[/,][ \t]*(?:\d{1,3}[A-Za-z]|[A-Za-z]\d{1,3}))*))?)?",  # extra legs; never eats a name line
     )
+    # 2026-07-30: the repetition this used to dedupe away IS the per-segment data.
+    # aJet emits, in document order: Ticket-Information (segment N) then
+    # Passenger-Information (segment N, one block per passenger). So every pax
+    # match is recorded WITH ITS POSITION, and later assigned to the segment whose
+    # block most recently preceded it — giving true per-leg baggage/seat (extra
+    # baggage bought on one leg only shows on that leg). The booking-level
+    # passengers[] list is still built, deduped by ticket, for the passenger card.
     passengers, seen = [], set()
+    pax_hits = []                     # (position, {name, cabin_bag, checked_bag, seat})
     for mo in pax_re.finditer(text):
         tkt = mo.group(4)
-        if tkt in seen:
-            continue
-        seen.add(tkt)
-        passengers.append({
+        rec = {
             "name": re.sub(r"\s+", " ", mo.group(1)).strip(),
             "ticket_no": tkt,
             "checked_bag": re.sub(r"\s+", " ", mo.group(2)).strip() or "Not specified",
             "cabin_bag": re.sub(r"\s+", " ", mo.group(3)).strip() or "Not specified",
             "seat": _valid_seat(mo.group(5) or ""),
-        })
+        }
+        pax_hits.append((mo.start(), rec))
+        if tkt in seen:
+            continue
+        seen.add(tkt)
+        passengers.append(dict(rec))
     if not passengers:
         # Fallback — single passenger from the greeting / contact person.
         name = _m(text, r"Contact\s*Person\s*\n\s*([A-Z][A-Za-z' .\-]+)") or \
@@ -711,9 +743,15 @@ def extract_ajet(src, ctx=None):
         r"(\d{1,2}\s+[A-Za-z]+\s+\d{4})\s*\n\s*([^\n]+?)\s*\n\s*([A-Z]{3})\s*\n\s*(\d{1,2}:\d{2})\s*\n\s*"
         r"([^\n]+?)\s*\n\s*([A-Z]{3})\s*\n\s*(\d{1,2}:\d{2})\s*\n\s*(?:Connecting|Non[ -]?Stop|Direct)?\s*\n?\s*"
         r"(?:(\d+\s*[Hh]\s*\d+\s*[Mm]))?\s*\n?\s*(VF\s?\d{2,4})\s*\n\s*(ECOJET|BIZJET|PREMIUM)?")
-    for mo in seg_re.finditer(text):
+    seg_starts = [mo.start() for mo in seg_re.finditer(text)]
+    for si_, mo in enumerate(seg_re.finditer(text)):
         brand = (mo.group(10) or "").upper()
+        # per-leg pax: every pax block positioned AFTER this segment's block and
+        # BEFORE the next one belongs to this leg (see the note by pax_hits).
+        _nxt = seg_starts[si_ + 1] if si_ + 1 < len(seg_starts) else len(text)
+        _leg_pax = [dict(r) for pos, r in pax_hits if mo.start() <= pos < _nxt]
         flights.append({
+            "pax": _leg_pax,
             "dep_date": to_ddmon(mo.group(1)), "arr_date": to_ddmon(mo.group(1)),
             "dep_city": mo.group(2).strip(), "dep_iata": mo.group(3), "dep_time": mo.group(4),
             "arr_city": mo.group(5).strip(), "arr_iata": mo.group(6), "arr_time": mo.group(7),
@@ -920,9 +958,25 @@ def extract_pegasus(src, ctx=None):
     parts = re.split(r"Return\s+Flight\s+Information", text, maxsplit=1, flags=re.I)
     out_sec = parts[0]
     ret_sec = parts[1] if len(parts) > 1 else ""
-    flights = _pegasus_section_flights(out_sec, _pegasus_section_date(out_sec))
+
+    # 2026-07-30: Pegasus repeats the WHOLE "Passenger Information" block once per
+    # DIRECTION, so parsing each section separately yields that direction's own
+    # baggage/seat (the previous dedupe-by-name collapsed them into one). Pegasus
+    # gives no finer granularity than the direction, so every leg inside a
+    # direction correctly shares that direction's values.
+    def _attach(section, legs):
+        if not legs:
+            return legs
+        sec_pax = _pegasus_passengers(section, name)
+        for f in legs:
+            f["pax"] = [{"name": p.get("name", ""), "cabin_bag": p.get("cabin_bag", ""),
+                         "checked_bag": p.get("checked_bag", ""), "seat": p.get("seat", "")}
+                        for p in sec_pax]
+        return legs
+
+    flights = _attach(out_sec, _pegasus_section_flights(out_sec, _pegasus_section_date(out_sec)))
     if ret_sec:
-        flights += _pegasus_section_flights(ret_sec, _pegasus_section_date(ret_sec))
+        flights += _attach(ret_sec, _pegasus_section_flights(ret_sec, _pegasus_section_date(ret_sec)))
     d["flights"] = flights
     return _finalize(d, ctx)
 
@@ -1027,6 +1081,19 @@ def extract_turkish_airlines(pdf_text, ctx=None):
             continue   # unexpected shape for this direction — leave it out; qc_check
                        # will flag the booking for missing segments rather than guess
         cabin = (_m(scoped, r"(Economy|Business|First|Premium\s*Economy)\s*Class") or "Economy").title()
+        # 2026-07-30 per-leg pax: Turkish Airlines states baggage in a Fare-Rules
+        # block PER DIRECTION (not per leg), so read THIS direction's own figures
+        # from its full block (including the Fare Rules the `scoped` slice cuts
+        # off) and apply them to every leg in the direction. TA's PDF carries NO
+        # seat data at all (verified on both real files), so seat stays "" and the
+        # generator omits the SEAT column entirely.
+        _dir_block = t[start:end]
+        _dcm = re.search(r"Check-?in Baggage\s*:\s*(\d+)\s*piece[s]?\s*x\s*(\d+)", _dir_block, re.I)
+        _dca = re.search(r"Cabin Baggage\s*:\s*(\d+)\s*piece[s]?\s*x\s*(\d+)", _dir_block, re.I)
+        _dir_checked = f"{_dcm.group(1)} piece x {_dcm.group(2)} kg" if _dcm else checked_str
+        _dir_cabin = f"{_dca.group(1)} piece x {_dca.group(2)} kg" if _dca else cabin_str
+        _dir_pax = [{"name": p["name"], "cabin_bag": _dir_cabin,
+                     "checked_bag": _dir_checked, "seat": ""} for p in d["passengers"]]
         base_date = to_ddmon(h.group(5))
         # Walk the calendar date forward across the WHOLE stop chain on any
         # time rollover (e.g. a 20:15 departure arriving 00:15 next day).
@@ -1052,6 +1119,7 @@ def extract_turkish_airlines(pdf_text, ctx=None):
                 "dep_date": dep_date, "dep_time": dep_time,
                 "arr_date": arr_date, "arr_time": arr_time,
                 "cabin": cabin, "duration": _diff_hm(dep_date, dep_time, arr_date, arr_time),
+                "pax": [dict(p) for p in _dir_pax],
             })
     d["flights"] = all_flights
     return _finalize(d, ctx)

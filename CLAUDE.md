@@ -62,6 +62,13 @@ for the CONFIRMED status only. Fonts: **Cormorant Garamond** (display/figures) +
 - Rounded ref-strip capsule · rounded passenger cards with a gold top strip + grey value chips ·
   dark rounded segment banners (OUTBOUND / INBOUND) · rounded flight cards with a white plane-badge
   connector · gold layover badge · dark footer with `PIVOT AUTOMATED ITINERARY | <PNR> | WWW.PIVOT-TRAVELS.COM`.
+- **Baggage + seat live on the FLIGHT card, not the passenger card** (2026-07-30, approved):
+  one row per passenger inside each flight card (`PASSENGER | CABIN | CHECKED | SEAT`). They are
+  per-SEGMENT facts — extra baggage is often bought on one leg only, and seats differ per leg.
+  A column is **omitted entirely** when no passenger on that leg has a value. The flight card's
+  pill row therefore holds only `CABIN CLASS` (+ `DURATION` when known) — the old duplicate
+  `FLIGHT NO.`/`OPERATED BY` pills were removed because both already sit on the centre connector.
+  Passenger card is now just `PASSENGER NAME | TICKET NO.`, so long names no longer wrap.
 - **Terms & Conditions:** static 8-clause page, always issued by "Pivot Travel Management".
 - **Pagination (two-pass in `build_pdf`):** *Layout A* (itinerary fits 1 page → page 1 itinerary +
   footer, page 2 T&C + footer). *Layout B* (spills → cards flow, T&C fills the tail, one footer
@@ -84,10 +91,12 @@ confirmation, then apply the SAME change everywhere the generator lives.
 
 ```
 pnr, booking_ref, crs_ref (shown only if != pnr), booked_on, journey_type (ONE-WAY | ROUND TRIP),
-passengers[]: { name, ticket_no, cabin_bag, checked_bag, seat }
+passengers[]: { name, ticket_no }                      # identity only (card shows just these)
 segments[]:  { type: Outbound|Inbound, flights[]: { dep_iata, arr_iata, dep_city, arr_city,
                dep_airport, arr_airport, terminal (dep), arr_terminal, dep_date, dep_time,
-               arr_date, arr_time, flight_no, airline, cabin, duration }, layovers[]: {airport,duration} }
+               arr_date, arr_time, flight_no, airline, cabin, duration,
+               pax[]: { name, cabin_bag, checked_bag, seat }   # PER-LEG (2026-07-30)
+             }, layovers[]: {airport,duration} }
 ```
 Generator normalises: journey type → ONE-WAY/ROUND TRIP only; names → Title Case; baggage →
 weight-only ("7kg", "7kg + 3kg", "1Pcs"); missing values → **N/A**; next-day arrival → `HH:MM (+1)`.
@@ -101,6 +110,34 @@ review, do not produce a PDF**. `qc_check()` gates this (missing PNR / passenger
 flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
+
+- **2026-07-30 — baggage + seat moved to per-leg rows on the FLIGHT card (approved
+  design change) + all 5 extractors upgraded:**
+  Baggage/seat were booking-level on the passenger card, which could not express
+  the real world: a passenger often buys extra baggage on **one segment only**, and
+  seats differ per leg. Now each flight card carries one row per passenger
+  (`PASSENGER | CABIN | CHECKED | SEAT`); the passenger card slims to
+  `NAME | TICKET NO.` (long names stopped wrapping); and the duplicate
+  `FLIGHT NO.`/`OPERATED BY` pills were dropped since both already appear on the
+  centre connector. Columns are **omitted** (not N/A-padded) when a leg has no
+  such value.
+  **Cross-checked every portal against REAL emails first** — the finding was that
+  Alhind, aJet and Pegasus already carry per-segment data and the extractors were
+  *deliberately deduping it away* (aJet by ticket-no, Pegasus by name, Alhind by
+  only reading the first row). That repetition WAS the per-leg data. Granularity
+  now: **Alhind** per-segment (one table row per segment) · **aJet** per-leg (pax
+  block repeats per segment; assigned by match POSITION relative to each segment
+  block) · **Pegasus** per-direction (whole block repeats per direction) ·
+  **Turkish Airlines** per-direction baggage, no seats in the PDF ·
+  **Akbar** booking-level only → `build_html` backfills from `passengers[]` so it
+  still shows the allowance that genuinely applies to every leg.
+  **Latent Alhind bug fixed in passing:** continuation rows (2nd+ segment) have
+  Name/Image/FFNo rowspan'd away, so every column shifts one earlier — cabin is
+  `si+3`, not `si+4`. The old code always used `si+4`; harmless only because
+  baggage was assigned once on the name row, but reading per-segment baggage made
+  it matter. Verified on a real 4-leg booking. Golden snapshots re-generated and
+  machine-checked: **zero** existing values changed, only the new `pax` key added.
+  100 tests pass.
 
 - **2026-07-30 — "grey backdrop behind every element" in Apple PDF viewers fixed
   (box-shadow removed, + a dead `@media print` rule retired):**
