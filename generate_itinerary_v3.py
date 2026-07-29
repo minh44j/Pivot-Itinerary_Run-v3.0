@@ -488,12 +488,24 @@ body {{
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
 }}
+/* ── NO box-shadow ANYWHERE below (2026-07-30) ─────────────────────────────
+   PDF has no box-shadow primitive: Chromium rasterises every CSS shadow into
+   an image + soft mask inside a transparency group. Apple's PDFKit (iOS Quick
+   Look / Files, macOS Preview) mis-renders those masks — it drops the alpha
+   falloff and paints the shadow's BOUNDING BOX as a flat tinted rectangle, so
+   each shadowed element showed a hard-edged grey "backdrop" (and the gold
+   .plane-icon shadow became a cream square). Measured on a real render:
+   dropping the shadows removed 6 /SMask, 5 /Transparency groups and 20 /Image
+   objects per page. The cards already carry 1px borders + radii, so shape is
+   unaffected. Do NOT reintroduce box-shadow on print/PDF elements.
+   NOTE: an `@media print` box-shadow override does NOT work here —
+   build_pdf() calls page.emulate_media(media="screen"), so print rules never
+   apply. Suppression has to live in the normal cascade, as it now does.       */
 .page {{
   width: 210mm;
   min-height: 297mm;
   margin: 0 auto;
   background: #fff;
-  box-shadow: 0 4px 40px rgba(0,0,0,0.10);
   display: flex;
   flex-direction: column;
 }}
@@ -681,7 +693,6 @@ body {{
   margin-bottom: 8px;
   flex-wrap: wrap;
   align-items: center;
-  box-shadow: 0 3px 10px rgba(0,0,0,0.05);
   position: relative;
   overflow: hidden;
   page-break-inside: avoid;
@@ -737,7 +748,6 @@ body {{
   border-radius: 40px;
   margin-top: 16px;
   margin-bottom: 10px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
   page-break-inside: avoid;
   page-break-after: avoid;
   break-after: avoid;
@@ -763,7 +773,6 @@ body {{
   background: #ffffff;
   padding: 16px 22px 14px;
   margin-bottom: 8px;
-  box-shadow: 0 3px 12px rgba(0,0,0,0.06);
   page-break-inside: avoid;
 }}
 .flight-card.standalone {{
@@ -874,7 +883,6 @@ body {{
   justify-content: center;
   font-size: 10px;
   color: #c9a84c;
-  box-shadow: 0 2px 6px rgba(201,168,76,0.2);
 }}
 
 /* ── Meta row -> rounded chips ── */
@@ -1063,9 +1071,13 @@ body {{
   text-align: center;
 }}
 
+/* Kept only for someone printing the raw HTML from a browser. It is DEAD for our
+   own output: build_pdf() renders with emulate_media("screen"), so print rules
+   never apply. The old `box-shadow: none` line lived here and therefore never
+   ran — which is why a 40px page shadow shipped in every PDF. Shadows are now
+   removed in the normal cascade instead (see the note above .page). */
 @media print {{
   body {{ background: #fff; }}
-  .page, .sheet, .page-flow {{ box-shadow: none; }}
 }}
 </style>
 </head>
