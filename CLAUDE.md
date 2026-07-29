@@ -69,6 +69,14 @@ for the CONFIRMED status only. Fonts: **Cormorant Garamond** (display/figures) +
   never orphaned from its first card (`page-break-after: avoid`); cards never split
   (`page-break-inside: avoid`); pages 2+ get a 12mm top margin.
 
+- **NO `box-shadow` anywhere** (removed 2026-07-30, approved). PDF has no shadow primitive, so
+  Chromium rasterises each one into an image + soft mask; Apple's PDFKit (iOS Quick Look/Files,
+  macOS Preview) then paints the shadow's **bounding box as a flat grey rectangle** — a visible
+  "backdrop" behind every card. Cards carry 1px borders + radii, so nothing was lost. Do NOT
+  reintroduce shadows, and note an `@media print` override CANNOT fix it (§10 renders with
+  `emulate_media("screen")`, so print rules never apply). Exception kept on purpose: the tiny
+  `0 0 5px` glow on the CONFIRMED pill dot.
+
 **⚠️ Design is locked.** Before changing any layout/CSS, ask the user twice for explicit
 confirmation, then apply the SAME change everywhere the generator lives.
 
@@ -93,6 +101,29 @@ review, do not produce a PDF**. `qc_check()` gates this (missing PNR / passenger
 flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
+
+- **2026-07-30 — "grey backdrop behind every element" in Apple PDF viewers fixed
+  (box-shadow removed, + a dead `@media print` rule retired):**
+  Staff saw a hard-edged grey slab behind each card (and a **cream square** around
+  the ✈ plane badge) when opening itineraries on iPhone / macOS Preview, though
+  Chrome looked fine. Cause: PDF has no `box-shadow` primitive, so Chromium
+  rasterises every CSS shadow into an image + soft mask inside a transparency
+  group; **Apple's PDFKit drops the alpha falloff and fills the shadow's bounding
+  box** with flat tint. The cream square was the gold `.plane-icon` shadow
+  (`rgba(201,168,76,0.2)`) flattened. Verified on a real render, not theory —
+  removing shadows took the file from **13→7 `/SMask`, 11→5 `/Transparency`,
+  60→36 `/Image`, −61 KB**. Removed from `.page`, `.pax-card`, `.seg-header`,
+  `.flight-card`, `.plane-icon`; all four cards already had `1px` borders +
+  radii so the look is unchanged (visually diffed before/after). The pill-dot
+  glow was deliberately kept.
+  **Latent bug found in passing:** `@media print { .page … box-shadow: none }`
+  had been written to strip the page shadow for output, but `build_pdf()` calls
+  `page.emulate_media(media="screen")` (§10) — so that block **never applied** and
+  a 40px page shadow had been shipping in every PDF since. Suppression now lives
+  in the normal cascade; the dead line is gone and both spots carry comments so
+  it can't regress. Also note: a stray single `{` in a CSS comment inside the
+  f-string broke `build_html` with `NameError: name 'box' is not defined` — the
+  offline suite caught it immediately. 92 tests pass.
 
 - **2026-07-27 — terminal audit + departure-terminal backfill fix:**
   Cross-checked terminal handling across all 5 portals against REAL sources.
