@@ -59,15 +59,23 @@ for the CONFIRMED status only. Fonts: **Cormorant Garamond** (display/figures) +
 - **Header (Model B):** centred feather logo + "PIVOT TRAVEL MANAGEMENT" wordmark, gold hairline,
   then CONFIRMED pill (left) above "OFFICIAL TRAVEL DOCUMENT", and the PNR number (right) above
   its "PNR REFERENCE" label. There is intentionally **no "Booking Confirmation" title text**.
+  Directly under the wordmark sits the **brand strapline** `BRAND_STRAPLINE` —
+  `CORPORATE TRAVEL | CHAUFFEURS | CURATED ITINERARIES | PREMIUM PILGRIMAGE`, 6.5px,
+  2.6px tracking, `rgba(255,255,255,0.30)` (deliberately subtle) — above the gold hairline.
 - Rounded ref-strip capsule · rounded passenger cards with a gold top strip + grey value chips ·
   dark rounded segment banners (OUTBOUND / INBOUND) · rounded flight cards with a white plane-badge
-  connector · gold layover badge · dark footer with `PIVOT AUTOMATED ITINERARY | <PNR> | WWW.PIVOT-TRAVELS.COM`.
+  connector · gold layover badge · dark footer with `PIVOT AUTOMATED ITINERARY | <PNR> | WWW.PIVOT-TRAVELS.COM`
+  and a **second registration line** `CR 7043148696` (`COMPANY_CR`). `COMPANY_VAT` is an
+  intentionally EMPTY constant — the VAT number has not been supplied, and §7 forbids inventing
+  one; set it and `VAT <n>` appends to the same line automatically, everywhere.
 - **Baggage + seat live on the FLIGHT card, not the passenger card** (2026-07-30, approved):
   one row per passenger inside each flight card (`PASSENGER | CABIN | CHECKED | SEAT`). They are
   per-SEGMENT facts — extra baggage is often bought on one leg only, and seats differ per leg.
   A column is **omitted entirely** when no passenger on that leg has a value. The flight card's
-  pill row therefore holds only `CABIN CLASS` (+ `DURATION` when known) — the old duplicate
-  `FLIGHT NO.`/`OPERATED BY` pills were removed because both already sit on the centre connector.
+  pill row holds `OPERATED BY` + `CABIN CLASS` (+ `DURATION` when known) — the duplicate
+  `FLIGHT NO.` pill was removed because the flight number already sits on the centre connector;
+  `OPERATED BY` was removed with it on 2026-07-30 and **restored by request the same day** (the
+  operating carrier can differ from the marketing one, so it earns its own pill).
   Passenger card is now just `PASSENGER NAME | TICKET NO.`, so long names no longer wrap.
 - **Terms & Conditions:** static 8-clause page, always issued by "Pivot Travel Management".
 - **Pagination (two-pass in `build_pdf`):** *Layout A* (itinerary fits 1 page → page 1 itinerary +
@@ -111,6 +119,18 @@ flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
 
+- **2026-07-30 (later) — brand strapline, footer CR line, OPERATED BY pill restored:**
+  Three approved header/footer changes shipped together. (1) `OPERATED BY` is back in the
+  flight-card pill row, before `CABIN CLASS`. (2) New `BRAND_STRAPLINE` under the wordmark —
+  `CORPORATE TRAVEL | CHAUFFEURS | CURATED ITINERARIES | PREMIUM PILGRIMAGE`, deliberately
+  low-contrast so it reads as a hairline label, not a second headline (the header must stay
+  quiet: PNR and CONFIRMED are the only things that should draw the eye). The trailing period
+  was dropped — a tracked all-caps micro-label reads as a label, and a full stop makes it read
+  as a sentence. (3) Footer gained a second line, `CR 7043148696`, from the new `COMPANY_CR`
+  constant; the footer became a 2-row column flex. **`COMPANY_VAT = ""` on purpose** — no VAT
+  number has been provided and §7 forbids inventing one for a client-facing document; when the
+  real number arrives, setting that one constant makes `VAT <n>` appear beside the CR
+  everywhere. 100 tests pass; verified on the real R2F3ES round trip.
 - **2026-07-30 — baggage + seat moved to per-leg rows on the FLIGHT card (approved
   design change) + all 5 extractors upgraded:**
   Baggage/seat were booking-level on the passenger card, which could not express

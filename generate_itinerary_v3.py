@@ -181,6 +181,10 @@ def _flight_card(seg: dict, standalone: bool = False) -> str:
 
       <div class="meta-row">
         <div class="meta-item">
+          <span class="meta-lbl">OPERATED BY</span>
+          <span class="meta-val">{airline}</span>
+        </div>
+        <div class="meta-item">
           <span class="meta-lbl">CABIN CLASS</span>
           <span class="meta-val">{cabin}</span>
         </div>
@@ -303,6 +307,17 @@ def _terms_block() -> str:
 # data["doc_status"]) so a revised document is instantly distinguishable and its
 # colour matches the alert e-mail's coding (cancellation→red, schedule→orange,
 # delay→amber). Colours are inline-overridden on the existing pill geometry.
+# ── Company identifiers (footer) ─────────────────────────────────────────────
+# CR is canonical (CLAUDE.md §2). COMPANY_VAT is intentionally EMPTY until the
+# real registration number is supplied — the footer renders the VAT segment only
+# when this is set, so an unverified tax identifier can never reach a client
+# document (§7 never fabricate). Set it here and it appears everywhere at once.
+COMPANY_CR = "7043148696"
+COMPANY_VAT = ""
+
+# Services strapline under the wordmark — subtle, full uppercase, wide tracked.
+BRAND_STRAPLINE = "CORPORATE TRAVEL | CHAUFFEURS | CURATED ITINERARIES | PREMIUM PILGRIMAGE"
+
 _STATUS_PILL = {
     "confirmed":   {"label": "Confirmed",   "sub": "Official Travel Document",
                     "fg": "#7fd0a6", "dot": "#4ea87a", "border": "#4ea87a", "bg": "rgba(78,168,122,0.12)"},
@@ -415,7 +430,15 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
                 segs_html += _layover_bar(layovers[fi])
 
     footer_line  = f'PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; {pnr} &nbsp;|&nbsp; WWW.PIVOT-TRAVELS.COM'
-    footer_html  = f'<div class="footer"><span class="footer-line">{footer_line}</span></div>'
+    # Legal identifiers on their own second line (conventional place for them).
+    # VAT is appended ONLY when COMPANY_VAT is set — see the note by that constant.
+    _reg = f'CR {COMPANY_CR}'
+    if COMPANY_VAT:
+        _reg += f' &nbsp;&middot;&nbsp; VAT {COMPANY_VAT}'
+    footer_html  = (f'<div class="footer">'
+                    f'<span class="footer-line">{footer_line}</span>'
+                    f'<span class="footer-reg">{_reg}</span>'
+                    f'</div>')
     terms_html   = _terms_block()
 
     # Status pill — "confirmed" default (identical to the locked original);
@@ -427,6 +450,7 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
       {logo_html}
       <span class="company-name">Pivot Travel Management</span>
     </div>
+    <div class="brand-strapline">{BRAND_STRAPLINE}</div>
     <div class="header-divider"></div>
     <div class="header-row2">
       <div class="doc-block">
@@ -573,6 +597,18 @@ body {{
   font-weight: 400;
   letter-spacing: 0.04em;
   color: #f0ead8;
+}}
+/* Services strapline under the wordmark (2026-07-30). Deliberately SUBTLE —
+   low-opacity white, small, wide tracking — so it fills the gap under the
+   wordmark without competing with the PNR block below the hairline. */
+.brand-strapline {{
+  text-align: center;
+  margin-top: 7px;
+  font-size: 6.5px;
+  font-weight: 500;
+  letter-spacing: 2.6px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.30);
 }}
 .logo-fallback {{ display: flex; align-items: center; }}
 .logo-text-main {{
@@ -1042,6 +1078,8 @@ body {{
   page-break-inside: avoid;
   break-inside: avoid;
   display: flex;
+  flex-direction: column;    /* tag line, then the CR/VAT registration line */
+  gap: 3px;
   align-items: center;       /* vertical middle of the footer band */
   justify-content: center;   /* horizontal centre */
   min-height: 13mm;          /* defined footer section */
@@ -1056,6 +1094,14 @@ body {{
   letter-spacing: 2px;
   text-transform: uppercase;
   color: rgba(255,255,255,0.35);
+}}
+/* Legal identifiers (CR / VAT) — quieter than the tag line above it. */
+.footer-reg {{
+  font-size: 7px;
+  font-weight: 500;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.32);   /* legal identifier: quieter than the tag line, but must stay legible in print */
 }}
 
 /* ── Page sheets (layout wrappers) ── */
