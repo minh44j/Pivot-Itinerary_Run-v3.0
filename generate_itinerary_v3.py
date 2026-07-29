@@ -308,12 +308,12 @@ def _terms_block() -> str:
 # colour matches the alert e-mail's coding (cancellation→red, schedule→orange,
 # delay→amber). Colours are inline-overridden on the existing pill geometry.
 # ── Company identifiers (footer) ─────────────────────────────────────────────
-# CR is canonical (CLAUDE.md §2). COMPANY_VAT is intentionally EMPTY until the
-# real registration number is supplied — the footer renders the VAT segment only
-# when this is set, so an unverified tax identifier can never reach a client
-# document (§7 never fabricate). Set it here and it appears everywhere at once.
+# Both canonical (CLAUDE.md §2). The footer renders the VAT segment only when
+# COMPANY_VAT is non-empty, so an unverified tax identifier can never reach a
+# client document (§7 never fabricate). VAT supplied by the owner 2026-07-30
+# from the registration certificate; 15 digits, the Saudi ZATCA format.
 COMPANY_CR = "7043148696"
-COMPANY_VAT = ""
+COMPANY_VAT = "311788697700003"
 
 # Services strapline under the wordmark — subtle, full uppercase, wide tracked.
 BRAND_STRAPLINE = "CORPORATE TRAVEL | CHAUFFEURS | CURATED ITINERARIES | PREMIUM PILGRIMAGE"
