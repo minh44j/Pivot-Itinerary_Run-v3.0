@@ -99,6 +99,53 @@ def _flight_card(seg: dict, standalone: bool = False) -> str:
         f'</div>'
     ) if duration else ""
 
+    # ── per-passenger, PER-LEG baggage + seat (2026-07-30 approved change) ──
+    # Each flight carries its own pax list so extra baggage bought on one segment,
+    # or a different seat per leg, renders on the leg it actually applies to.
+    # A column is OMITTED ENTIRELY when no passenger on this leg has that value
+    # (per approved decision) rather than padded with N/A — so portals that never
+    # send seats (Turkish Airlines) or per-leg baggage (Akbar) stay clean.
+    leg_pax = seg.get("pax") or []
+    rows, show_cabin, show_checked, show_seat = [], False, False, False
+    for p in leg_pax:
+        c = _norm_bag(p.get("cabin_bag", ""))
+        k = _norm_bag(p.get("checked_bag", ""))
+        s = (p.get("seat") or "").strip()
+        # same rule as before: every fare includes a cabin piece, so if a checked
+        # allowance is stated but cabin isn't, show 1Pcs rather than nothing.
+        if c == "N/A" and k != "N/A":
+            c = "1Pcs"
+        if c != "N/A":
+            show_cabin = True
+        if k != "N/A":
+            show_checked = True
+        if s:
+            show_seat = True
+        rows.append((_title_name(p.get("name", "N/A")), c, k, s))
+
+    pax_rows_html = ""
+    if rows and (show_cabin or show_checked or show_seat):
+        head = '<div class="lp-cell lp-name">PASSENGER</div>'
+        if show_cabin:
+            head += '<div class="lp-cell">CABIN</div>'
+        if show_checked:
+            head += '<div class="lp-cell">CHECKED</div>'
+        if show_seat:
+            head += '<div class="lp-cell">SEAT</div>'
+        body = ""
+        for nm, c, k, s in rows:
+            body += '<div class="lp-row">'
+            body += f'<div class="lp-cell lp-name">{nm}</div>'
+            if show_cabin:
+                body += f'<div class="lp-cell">{c}</div>'
+            if show_checked:
+                body += f'<div class="lp-cell">{k}</div>'
+            if show_seat:
+                body += f'<div class="lp-cell">{s or "&mdash;"}</div>'
+            body += '</div>'
+        pax_rows_html = (f'<div class="leg-pax">'
+                         f'<div class="lp-row lp-head">{head}</div>{body}</div>')
+
     card_cls = "flight-card standalone" if standalone else "flight-card"
     return f"""
     <div class="{card_cls}">
@@ -134,19 +181,12 @@ def _flight_card(seg: dict, standalone: bool = False) -> str:
 
       <div class="meta-row">
         <div class="meta-item">
-          <span class="meta-lbl">FLIGHT NO.</span>
-          <span class="meta-val">{flight_no}</span>
-        </div>
-        <div class="meta-item">
-          <span class="meta-lbl">OPERATED BY</span>
-          <span class="meta-val">{airline}</span>
-        </div>
-        <div class="meta-item">
           <span class="meta-lbl">CABIN CLASS</span>
           <span class="meta-val">{cabin}</span>
         </div>
         {duration_html}
       </div>
+      {pax_rows_html}
     </div>"""
 
 
@@ -198,22 +238,16 @@ def _norm_bag(v: str) -> str:
 
 
 def _pax_card(pax: dict) -> str:
-    name    = _title_name(pax.get("name", "N/A"))
-    tkt     = _na(pax.get("ticket_no", "N/A"))
-    cabin   = _norm_bag(pax.get("cabin_bag", "N/A"))
-    checked = _norm_bag(pax.get("checked_bag", "N/A"))
-    # Partner tickets sometimes omit the cabin allowance even though a checked
-    # allowance is shown. Every fare includes a cabin piece, so when checked
-    # baggage is present but cabin is missing, default cabin to "1Pcs".
-    if cabin == "N/A" and checked != "N/A":
-        cabin = "1Pcs"
-    seat    = pax.get("seat", "")
-    seat_html = (
-        f'<div class="pax-col">'
-        f'<div class="pax-lbl">SEAT</div>'
-        f'<div class="pax-val">{seat}</div>'
-        f'</div>'
-    ) if seat else ""
+    """Identity only: NAME + TICKET NO.
+
+    2026-07-30 (approved design change): baggage and seat moved OFF this card and
+    onto per-passenger rows inside each FLIGHT card. They are per-SEGMENT facts —
+    a passenger can buy extra baggage on the return leg only, or hold a different
+    seat on each leg — which a single booking-level value cannot express. Dropping
+    them here also frees the full card width so long names no longer wrap.
+    """
+    name = _title_name(pax.get("name", "N/A"))
+    tkt  = _na(pax.get("ticket_no", "N/A"))
     return f"""
     <div class="pax-card">
       <div class="pax-col pax-name-col">
@@ -224,15 +258,6 @@ def _pax_card(pax: dict) -> str:
         <div class="pax-lbl">TICKET NO.</div>
         <div class="pax-val">{tkt}</div>
       </div>
-      <div class="pax-col">
-        <div class="pax-lbl">CABIN BAGGAGE</div>
-        <div class="pax-val">{cabin}</div>
-      </div>
-      <div class="pax-col">
-        <div class="pax-lbl">CHECKED BAGGAGE</div>
-        <div class="pax-val">{checked}</div>
-      </div>
-      {seat_html}
     </div>"""
 
 
@@ -365,6 +390,19 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
             # This only ever copies a terminal the document itself stated for that
             # exact IATA; it never invents one (§7).
             if not fl.get("terminal")     and _ap_term.get(di): fl["terminal"]     = _ap_term[di]
+
+    # Per-leg passenger baggage/seat: portals that expose per-segment data set
+    # flight["pax"] themselves. For any leg that has none, fall back to the
+    # booking-level passengers[] values — those genuinely apply to every leg, so
+    # this is honest, and it means no portal regresses while extractors catch up.
+    for grp in seg_groups:
+        for fl in grp.get("flights", []):
+            if fl.get("pax"):
+                continue
+            fl["pax"] = [{"name": p.get("name", ""),
+                          "cabin_bag": p.get("cabin_bag", ""),
+                          "checked_bag": p.get("checked_bag", ""),
+                          "seat": p.get("seat", "")} for p in passengers]
 
     segs_html = ""
     for grp in seg_groups:
@@ -916,6 +954,47 @@ body {{
   font-size: 11px;
   font-weight: 600;
   color: #1a1a1a;
+}}
+
+/* ── Per-leg passenger baggage / seat (2026-07-30 approved) ──
+   One row per passenger INSIDE the flight card, so per-segment extra baggage
+   or a per-leg seat shows on the leg it applies to. Columns are omitted by
+   _flight_card() when no passenger on the leg has that value. Uses the same
+   #f7f7f7 chip surface + gold micro-label idiom as .meta-item, so it reads as
+   part of the card rather than a new component. */
+.leg-pax {{
+  margin-top: 8px;
+  background: #f7f7f7;
+  border-radius: 14px;
+  padding: 8px 14px;
+  page-break-inside: avoid;
+}}
+.lp-row {{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 0;
+}}
+.lp-row + .lp-row {{
+  border-top: 1px solid #ececec;
+}}
+.lp-cell {{
+  flex: 1;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: #1a1a1a;
+}}
+.lp-cell.lp-name {{
+  flex: 2.4;
+  text-align: left;
+}}
+.lp-head .lp-cell {{
+  font-size: 7px;
+  font-weight: 600;
+  letter-spacing: 1.5px;
+  color: #c9a84c;
+  text-transform: uppercase;
 }}
 
 /* ── Layover — detached, centred transit badge ── */

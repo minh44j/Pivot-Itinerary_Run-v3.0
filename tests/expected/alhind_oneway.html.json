@@ -34,7 +34,15 @@
           "arr_time": "10:30",
           "arr_date": "10 Jul 2026",
           "cabin": "Economy",
-          "duration": ""
+          "duration": "",
+          "pax": [
+            {
+              "name": "Mr. JOHN DOE",
+              "cabin_bag": "7 Kg",
+              "checked_bag": "20 Kg",
+              "seat": "12A"
+            }
+          ]
         }
       ],
       "layovers": []
