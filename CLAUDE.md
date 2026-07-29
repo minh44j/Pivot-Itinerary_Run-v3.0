@@ -21,7 +21,7 @@ Two ways it runs:
 ## 2. Company facts (canonical — renamed 2026-07-15)
 
 - **Pivot Travel Management** *(formerly "Pivot Travel & Tourism" — do NOT use the old name)*
-- CR No. **7043148696** · Suite 20, 2nd Floor, Mobco Building, 2762 Ibn Al Anbari Street,
+- CR No. **7043148696** · VAT No. **311788697700003** · Suite 20, 2nd Floor, Mobco Building, 2762 Ibn Al Anbari Street,
   Al Amal District, Riyadh, Kingdom of Saudi Arabia
 - sales@pivot-travels.com · www.pivot-travels.com · monitored inbox: cs@pivot-travels.com
 - (Sister company Pivot Shipping: CR 7034458500, sales@pivotscl.com — not part of this repo.)
@@ -65,9 +65,9 @@ for the CONFIRMED status only. Fonts: **Cormorant Garamond** (display/figures) +
 - Rounded ref-strip capsule · rounded passenger cards with a gold top strip + grey value chips ·
   dark rounded segment banners (OUTBOUND / INBOUND) · rounded flight cards with a white plane-badge
   connector · gold layover badge · dark footer with `PIVOT AUTOMATED ITINERARY | <PNR> | WWW.PIVOT-TRAVELS.COM`
-  and a **second registration line** `CR 7043148696` (`COMPANY_CR`). `COMPANY_VAT` is an
-  intentionally EMPTY constant — the VAT number has not been supplied, and §7 forbids inventing
-  one; set it and `VAT <n>` appends to the same line automatically, everywhere.
+  and a **second registration line** `CR 7043148696 · VAT 311788697700003`
+  (`COMPANY_CR` / `COMPANY_VAT`). The VAT segment renders only when `COMPANY_VAT` is non-empty,
+  so an unverified tax identifier can never reach a client document (§7).
 - **Baggage + seat live on the FLIGHT card, not the passenger card** (2026-07-30, approved):
   one row per passenger inside each flight card (`PASSENGER | CABIN | CHECKED | SEAT`). They are
   per-SEGMENT facts — extra baggage is often bought on one leg only, and seats differ per leg.
@@ -127,10 +127,13 @@ flight-no / airport / time; non-Confirmed status).
   quiet: PNR and CONFIRMED are the only things that should draw the eye). The trailing period
   was dropped — a tracked all-caps micro-label reads as a label, and a full stop makes it read
   as a sentence. (3) Footer gained a second line, `CR 7043148696`, from the new `COMPANY_CR`
-  constant; the footer became a 2-row column flex. **`COMPANY_VAT = ""` on purpose** — no VAT
-  number has been provided and §7 forbids inventing one for a client-facing document; when the
-  real number arrives, setting that one constant makes `VAT <n>` appear beside the CR
-  everywhere. 100 tests pass; verified on the real R2F3ES round trip.
+  constant; the footer became a 2-row column flex. `COMPANY_VAT` shipped EMPTY that day (§7
+  forbids inventing a tax identifier for a client-facing document) and was **filled the same
+  day** from the registration certificate the owner supplied: `VAT 311788697700003` (15 digits,
+  Saudi ZATCA format). It now renders beside the CR on every document; the
+  render-only-when-set guard stays, so a future blank can never print a bare `VAT` label.
+  100 tests pass; verified on the real R2F3ES round trip and on a re-render after the VAT
+  landed (footer reads `CR 7043148696 · VAT 311788697700003`).
 - **2026-07-30 — baggage + seat moved to per-leg rows on the FLIGHT card (approved
   design change) + all 5 extractors upgraded:**
   Baggage/seat were booking-level on the passenger card, which could not express
