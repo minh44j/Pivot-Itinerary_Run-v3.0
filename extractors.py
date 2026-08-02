@@ -404,6 +404,44 @@ def extract_alhind(html, ctx=None):
 # was flagged "missing flight number". Use this constant everywhere instead.
 _IATA_DESIG = r"(?:[A-Z]{2}|[A-Z][0-9]|[0-9][A-Z])"
 
+# Countries that bleed into the "Operated by:" cell — see _akbar_airline below.
+_COUNTRY_TAIL = re.compile(
+    r"\s*(?:Saudi\s*Arabia|Pakistan|India|T[uü]rkiye|Turkey|United\s*Arab\s*Emirates|"
+    r"Qatar|Kuwait|Bahrain|Oman|Egypt|Jordan|Nepal|Bangladesh|Sri\s*Lanka|Maldives|"
+    r"Indonesia|Malaysia|Azerbaijan|Georgia|Ethiopia|Kenya|Morocco|Tunisia)\s*$", re.I)
+
+
+def _akbar_airline(detail):
+    """Operating carrier out of an Akbar ticket's 'Operated by:' cell.
+
+    Two real-world complications, both confirmed on actual pdfplumber output:
+
+      1. pdfplumber splits the label across lines — the Flyadeal Ticket-Copy
+         renders "Operated , Thu, 23 Jul 26 (02h:10m) Thu, 23 Jul 26\\nby:Flyadeal
+         Saudi Arabia," — so a contiguous "Operated by:" match misses it entirely.
+         Up to a line of junk is tolerated between the two words.
+
+      2. The value is MULTI-WORD ("Air Sial", "Air Arabia", "Fly Jinnah"), but the
+         neighbouring From/To column's country can be linearised onto the same line
+         ("by:Flyadeal Saudi Arabia,"). Capturing one word truncated "Air Sial" to
+         "Air" (a factual error on a client document, PNR A052SF); capturing the
+         whole line would have made Flyadeal into "Flyadeal Saudi Arabia".
+         So: take the line, cut at the first comma, then strip a trailing country.
+
+    Returns "" when nothing parses. That is deliberate — the previous "IndiGo"
+    default silently stamped a real airline's name onto other carriers' tickets
+    (§7 never fabricate); a blank renders as N/A, which is merely incomplete.
+    """
+    m = re.search(r"Operated\b[\s\S]{0,80}?\bby\s*:?\s*([A-Za-z][A-Za-z .'&-]*)", detail)
+    if not m:
+        return ""
+    val = m.group(1).split(",")[0]
+    val = _COUNTRY_TAIL.sub("", val.strip())
+    val = re.sub(r"\s+", " ", val).strip(" .-")
+    # An airline name is at most a few words; anything longer means the column
+    # bled and the tail is not part of the carrier's name.
+    return " ".join(val.split()[:4])
+
 
 def extract_akbar(pdf_text, ctx=None):
     """Akbar Travels. Source is read PRIMARILY from the PDF attached directly
@@ -648,14 +686,10 @@ def extract_akbar(pdf_text, ctx=None):
             # Minh to review before that already-shipped file is touched).
             # Leave it "" on failure so qc_check() flags it for manual review.
             "flight_no": fl,
-            # Operating carrier. pdfplumber often splits the "Operated by :"
-            # cell across lines — e.g. the Flyadeal Ticket-Copy renders
-            # "Operated , <date> (dur) <date>\nby:Flyadeal Saudi Arabia," so a
-            # contiguous "Operated by:" match misses it and the airline silently
-            # fell back to the IndiGo default (a Flyadeal booking labelled
-            # "IndiGo" — a factual error on a client-facing document). Allow the
-            # label and value to be separated by up to a line of junk.
-            "airline": _m(detail, r"Operated\b[\s\S]{0,80}?\bby\s*:?\s*([A-Za-z]+)") or "IndiGo",
+            # Operating carrier — see _akbar_airline for the two pdfplumber quirks
+            # this has to survive (split label, country bleeding in from the next
+            # column) and why a failed parse returns "" rather than a default.
+            "airline": _akbar_airline(detail),
             "dep_iata": dep_iata, "arr_iata": arr_iata,
             "dep_city": city2disp.get(dep_c, ""), "arr_city": city2disp.get(arr_c, ""),
             "dep_airport": "", "arr_airport": "",
@@ -1162,6 +1196,96 @@ def qc_check(d):
                         f.get("dep_time"), f.get("arr_time")]):
                 return "A segment is missing flight number / airport / time"
     return None
+
+
+# ── Airport-name reference table ───────────────────────────────────────────
+# Only ONE portal (Alhind) states airport names in a machine-readable way. The
+# other four give the city and the IATA code but no name — Akbar's PDF does
+# contain it, but pdfplumber linearises the From/To cells so badly that a name
+# cannot be reliably attributed to the departure vs the arrival side (the same
+# scrambling documented in §9), and printing "King Fahd" under the wrong airport
+# would be worse than printing nothing. So the name comes from this table
+# instead, keyed by IATA.
+#
+# This is a REFERENCE table, not extracted data, and that distinction is why it
+# is allowed here while the equivalent terminal table was rejected (§8,
+# 2026-07-27): an airport's NAME is a stable, single-valued fact — JED is King
+# Abdulaziz International Airport on every ticket, every airline, every season.
+# A TERMINAL is not: it varies by carrier, route and schedule at hubs like
+# IST/DXB/JED, so a static terminal map would confidently print wrong ones.
+#
+# It is applied as a BACKFILL ONLY (generate_itinerary_v3.build_html): whatever
+# the document itself stated always wins, and an IATA not listed here simply
+# renders no name, exactly as today. Add codes as new routes appear.
+AIRPORT_NAMES = {
+    # Saudi Arabia
+    "JED": "King Abdulaziz International Airport",
+    "RUH": "King Khalid International Airport",
+    "DMM": "King Fahd International Airport",
+    "MED": "Prince Mohammad Bin Abdulaziz International Airport",
+    "AHB": "Abha International Airport",
+    "TIF": "Taif International Airport",
+    "ELQ": "Prince Naif Bin Abdulaziz International Airport",
+    "TUU": "Tabuk Regional Airport",
+    "GIZ": "Jazan King Abdullah bin Abdulaziz Airport",
+    # Gulf
+    "DXB": "Dubai International Airport",
+    "DWC": "Al Maktoum International Airport",
+    "AUH": "Zayed International Airport",
+    "SHJ": "Sharjah International Airport",
+    "DOH": "Hamad International Airport",
+    "KWI": "Kuwait International Airport",
+    "BAH": "Bahrain International Airport",
+    "MCT": "Muscat International Airport",
+    "SLL": "Salalah International Airport",
+    # Turkiye
+    "IST": "Istanbul Airport",
+    "SAW": "Istanbul Sabiha Gokcen International Airport",
+    "ESB": "Ankara Esenboga Airport",
+    "ADB": "Izmir Adnan Menderes Airport",
+    "AYT": "Antalya Airport",
+    "ADA": "Adana Sakirpasa Airport",
+    "TZX": "Trabzon Airport",
+    "GZT": "Gaziantep Airport",
+    "DIY": "Diyarbakir Airport",
+    "VAN": "Van Ferit Melen Airport",
+    "ERZ": "Erzurum Airport",
+    "MLX": "Malatya Erhac Airport",
+    # Pakistan
+    "ISB": "Islamabad International Airport",
+    "KHI": "Jinnah International Airport",
+    "LHE": "Allama Iqbal International Airport",
+    "PEW": "Bacha Khan International Airport",
+    "MUX": "Multan International Airport",
+    "SKT": "Sialkot International Airport",
+    "LYP": "Faisalabad International Airport",
+    # India
+    "DEL": "Indira Gandhi International Airport",
+    "BOM": "Chhatrapati Shivaji Maharaj International Airport",
+    "MAA": "Chennai International Airport",
+    "BLR": "Kempegowda International Airport",
+    "HYD": "Rajiv Gandhi International Airport",
+    "CCU": "Netaji Subhas Chandra Bose International Airport",
+    "COK": "Cochin International Airport",
+    "TRV": "Trivandrum International Airport",
+    "CCJ": "Calicut International Airport",
+    "CNN": "Kannur International Airport",
+    "AMD": "Ahmedabad International Airport",
+    "GOI": "Dabolim Airport",
+    "LKO": "Chaudhary Charan Singh International Airport",
+    "GOP": "Gorakhpur Airport",
+    # Elsewhere on the network
+    "CAI": "Cairo International Airport",
+    "AMM": "Queen Alia International Airport",
+    "BEY": "Beirut Rafic Hariri International Airport",
+    "KTM": "Tribhuvan International Airport",
+    "DAC": "Hazrat Shahjalal International Airport",
+    "CMB": "Bandaranaike International Airport",
+    "MLE": "Velana International Airport",
+    "KUL": "Kuala Lumpur International Airport",
+    "CGK": "Soekarno-Hatta International Airport",
+    "LHR": "London Heathrow Airport",
+}
 
 
 # ── India-arrival detection (drives the Air Suvidha guide attachment) ──────
