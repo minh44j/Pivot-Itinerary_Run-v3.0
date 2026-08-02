@@ -406,6 +406,25 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
             # exact IATA; it never invents one (§7).
             if not fl.get("terminal")     and _ap_term.get(di): fl["terminal"]     = _ap_term[di]
 
+    # Airport NAME of last resort (2026-08-02). Only Alhind states airport names
+    # in a parseable form; the other four portals send the city and IATA code but
+    # no name, so every non-Alhind itinerary rendered a bare city under the code.
+    # extractors.AIRPORT_NAMES is a static IATA -> name reference table — a name
+    # is a stable single-valued fact, unlike a terminal (see the note on that
+    # table for why the equivalent terminal table stays rejected). Runs LAST and
+    # only fills blanks, so anything the document itself said always wins, and an
+    # unlisted IATA renders no name rather than a guessed one.
+    try:
+        from extractors import AIRPORT_NAMES as _AP_REF
+    except Exception:
+        _AP_REF = {}
+    for grp in seg_groups:
+        for fl in grp.get("flights", []):
+            if not fl.get("dep_airport"):
+                fl["dep_airport"] = _AP_REF.get(fl.get("dep_iata", ""), "")
+            if not fl.get("arr_airport"):
+                fl["arr_airport"] = _AP_REF.get(fl.get("arr_iata", ""), "")
+
     # Per-leg passenger baggage/seat: portals that expose per-segment data set
     # flight["pax"] themselves. For any leg that has none, fall back to the
     # booking-level passengers[] values — those genuinely apply to every leg, so

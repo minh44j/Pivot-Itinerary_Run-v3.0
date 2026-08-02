@@ -119,6 +119,40 @@ flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
 
+- **2026-08-02 — airport names now render on every portal + multi-word airline
+  name fixed (both found on real Akbar booking A052SF, Air Sial JED→ISB):**
+  1. **Airline truncated to its first word.** The card said the flight was
+     "OPERATED BY: Air" — the source says **Air Sial**. `extract_akbar` captured
+     `([A-Za-z]+)` after `Operated by:`, so EVERY multi-word carrier was cut
+     (Air Sial, Air Arabia, Fly Jinnah, Saudi Arabian Airlines) — a factual
+     error on a client document. Naively widening it would have broken Flyadeal,
+     whose real pdfplumber line reads `by:Flyadeal Saudi Arabia,` (the From/To
+     column's country bleeds in). New `_akbar_airline()` takes the line, cuts at
+     the first comma, then strips a trailing **country** — so `Air Sial` survives
+     whole, `Flyadeal Saudi Arabia` becomes `Flyadeal`, and `Saudi Arabian
+     Airlines` (a carrier whose own name starts with a country word) is left
+     intact. The `or "IndiGo"` default was **removed**: it had been stamping a
+     real airline's name onto other carriers' tickets. A failed parse now
+     returns `""` → renders N/A (incomplete, not wrong) per §7.
+  2. **No airport name on 4 of 5 portals.** Only Alhind ever parsed them;
+     Akbar/aJet/Pegasus/Turkish hardcoded `dep_airport`/`arr_airport` to `""`,
+     so the card showed a bare city under the IATA code. Akbar's PDF *does*
+     contain the name, but pdfplumber scrambles the From/To cells so badly that
+     a name can't be reliably attributed to the departure vs arrival side (§9's
+     linearisation problem — "King Fahd" under the wrong airport is worse than
+     nothing). Names now come from a new static **`extractors.AIRPORT_NAMES`**
+     IATA→name table, applied as a BACKFILL in `build_html` **after** the
+     document-derived pass, so anything the source stated always wins and an
+     unlisted IATA still renders nothing.
+     **Why this is allowed when the terminal table was rejected (§8, 2026-07-27):**
+     an airport's NAME is a stable, single-valued fact (JED is King Abdulaziz on
+     every ticket, every airline, every season); a TERMINAL varies by carrier,
+     route and season at hubs like IST/DXB/JED. A static terminal map stays
+     rejected — a test asserts the name backfill never touches terminal fields.
+  **Terminals are still parsed by Alhind ONLY** — that is unchanged and correct:
+  the other four portals genuinely don't carry the data (re-verified 2026-07-27),
+  and A052SF's own source shows empty From/To terminal columns. 114 tests pass;
+  verified by re-rendering A052SF (airport names on both ends, `Air Sial` intact).
 - **2026-07-30 (later) — brand strapline, footer CR line, OPERATED BY pill restored:**
   Three approved header/footer changes shipped together. (1) `OPERATED BY` is back in the
   flight-card pill row, before `CABIN CLASS`. (2) New `BRAND_STRAPLINE` under the wordmark —
