@@ -683,16 +683,14 @@ def scan_disruptions(gmail, alerted_ids, alerted_keys=None):
         sender = _header(msg, "From")
         snippet = (msg.get("snippet") or "")[:200]
         # Booking-level dedup: airlines re-send the SAME disruption for a booking
-        # repeatedly, each a new message_id. Collapse those to one alert by keying
-        # on <sender-domain>:<PNR>:<category>:<day>. No reliable PNR -> key is ""
-        # and we fall back to per-message alerting (never silently drop a warning).
-        try:
-            day = datetime.fromtimestamp(
-                int(msg.get("internalDate", "0")) / 1000, timezone.utc).strftime("%Y-%m-%d")
-        except Exception:
-            day = ""
+        # repeatedly, each a new message_id. Collapse those by keying on the
+        # booking + disruption type + the notice's FLIGHT FACTS, so an identical
+        # re-send is suppressed permanently while a genuinely new revision still
+        # alerts. The key is hashed (never a raw PNR — this log is public).
+        # No reliable PNR -> key is "" and we fall back to per-message alerting
+        # (never silently drop a warning).
         category = extractors.disruption_category(subject, snippet, kw)
-        key = extractors.disruption_dedup_key(subject, snippet, sender, category, day)
+        key = extractors.disruption_dedup_key(subject, snippet, sender, category)
         if key and (key in alerted_keys or key in seen_keys):
             continue
         if key:

@@ -150,26 +150,49 @@ def test_disruption_category(subject, preview, keyword, expected):
 
 # Booking-level dedup key for the disruption watch. Airlines re-send the same
 # disruption for a booking repeatedly (each a new message_id); the key collapses
-# those re-sends while still distinguishing a new booking / type / day.
+# identical re-sends while a genuinely NEW revision still alerts. Keyed on
+# booking + type + the notice's flight FACTS (not the calendar day — an airline
+# that backdates its Date header, or re-sends daily, defeated a day-based key).
 _TK_SUBJ = "Turkish Airlines Flight Delay Information"
 _TK_FROM = "onlineticket@mail.turkishairlines.com"
+_IG_SUBJ = "Your Revised IndiGo Itinerary"
+_IG_FROM = "services@goindigo.in"
+_IG_BODY = ("Dear 6E customer, We apologize to inform you that your flight for PNR-VHZPNH, "
+            "is affected due to operational reasons. Your itinerary revised flight details "
+            "are 6E-85, on 17 Aug, HYD-DMM 0510-0755 . Our")
 
 
-def test_disruption_dedup_resends_collapse():
-    # Two real Turkish re-sends for the SAME booking (UCHMPF), 30 min apart.
-    k1 = E.disruption_dedup_key(_TK_SUBJ, "Reservation code UCHMPF Dear NEDIM GULASTI",
-                                _TK_FROM, "delay", "2026-07-22")
-    k2 = E.disruption_dedup_key(_TK_SUBJ, "Reservation code UCHMPF ... departure time of your",
-                                _TK_FROM, "delay", "2026-07-22")
-    assert k1 and k1 == k2
+def test_disruption_dedup_identical_resends_collapse():
+    # IndiGo re-sent this byte-identical notice 5x across TWO calendar days (and
+    # backdated one Date header). All must collapse to a single alert.
+    keys = {E.disruption_dedup_key(_IG_SUBJ, _IG_BODY, _IG_FROM, "schedule_change")
+            for _ in range(5)}
+    assert len(keys) == 1 and keys.pop()
+
+
+def test_disruption_dedup_new_revision_alerts():
+    base = E.disruption_dedup_key(_IG_SUBJ, _IG_BODY, _IG_FROM, "schedule_change")
+    # a genuinely NEW revision (different flight number AND times) must re-alert,
+    # even if it lands the same day — the old day-based key wrongly suppressed it.
+    revised = _IG_BODY.replace("6E-85", "6E-92").replace("0510-0755", "0730-1015")
+    assert E.disruption_dedup_key(_IG_SUBJ, revised, _IG_FROM, "schedule_change") != base
 
 
 def test_disruption_dedup_distinguishes():
-    base = E.disruption_dedup_key(_TK_SUBJ, "Reservation code UCHMPF", _TK_FROM, "delay", "2026-07-22")
-    # different booking, different day, and different disruption type all stay distinct
-    assert E.disruption_dedup_key(_TK_SUBJ, "Reservation code WB2WKB", _TK_FROM, "delay", "2026-07-22") != base
-    assert E.disruption_dedup_key(_TK_SUBJ, "Reservation code UCHMPF", _TK_FROM, "delay", "2026-07-23") != base
-    assert E.disruption_dedup_key(_TK_SUBJ, "Reservation code UCHMPF", _TK_FROM, "cancellation", "2026-07-22") != base
+    prev = "Reservation code UCHMPF flight TK140"
+    base = E.disruption_dedup_key(_TK_SUBJ, prev, _TK_FROM, "delay")
+    # different booking, and an escalation to a cancellation, stay distinct
+    assert E.disruption_dedup_key(
+        _TK_SUBJ, "Reservation code WB2WKB flight TK140", _TK_FROM, "delay") != base
+    assert E.disruption_dedup_key(_TK_SUBJ, prev, _TK_FROM, "cancellation") != base
+
+
+def test_disruption_dedup_key_leaks_no_pnr():
+    # Persisted to a PUBLIC repo (disruption_ids.json) — must be an opaque hash.
+    k = E.disruption_dedup_key(_TK_SUBJ, "Reservation code UCHMPF flight TK140",
+                               _TK_FROM, "delay")
+    assert k and "UCHMPF" not in k
+    assert all(c in "0123456789abcdef" for c in k)
 
 
 @pytest.mark.parametrize("subject,preview", [
@@ -179,7 +202,7 @@ def test_disruption_dedup_distinguishes():
 def test_disruption_dedup_no_key_falls_back(subject, preview):
     # No reliable booking reference -> "" so main() falls back to per-message_id
     # alerting (never silently drops a warning).
-    assert E.disruption_dedup_key(subject, preview, _TK_FROM, "schedule_change", "2026-07-22") == ""
+    assert E.disruption_dedup_key(subject, preview, _TK_FROM, "schedule_change") == ""
 
 
 def test_extract_ajet_change():
