@@ -119,6 +119,26 @@ flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
 
+- **2026-08-03 — disruption dedup keyed on FACTS, not the day (+ PNR removed from the public log):**
+  The 2026-07-22 day-based key still repeated. Two real causes, both diagnosed
+  against the live mailbox: (a) **IndiGo re-sends a byte-identical "Your Revised
+  IndiGo Itinerary"** (PNR VHZPNH, `6E-85, 17 Aug, HYD-DMM 0510-0755`) for days —
+  a new calendar day meant a new key, so it re-alerted on 27 Jul, 31 Jul, and
+  twice on 3 Aug; the same-day double happened because **IndiGo backdates the
+  Date header** (a notice that ARRIVED 03 Aug 10:33 was stamped 02 Aug 22:22, so
+  `day` differed). (b) The day component also **suppressed genuinely new
+  information** — Turkish's 17:14 "the departure time of your flight…" was
+  dropped merely for sharing a day with the 13:39 notice. Fix: key is now
+  `<sender-domain>:<PNR>:<category>:<facts-fingerprint>` where the fingerprint
+  (`disruption_facts`) is the notice's flight number / route / date / times.
+  Identical re-sends collapse **permanently**; a real revision alerts even
+  minutes later; escalation (delay→cancellation) still alerts. Verified on the
+  real Turkish VJG3IZ trio: initial delay alerts, the new-departure-time notice
+  alerts, the boarding-gate call is suppressed as a dup of the first.
+  **Privacy:** the 07-22 key stored a raw PNR in `disruption_ids.json` in the
+  **public** repo (contra §11) — the key is now a truncated SHA-256 hash and the
+  6 plaintext entries were scrubbed from the file (they remain in git history).
+  80 tests pass.
 - **2026-08-02 — airport names now render on every portal + multi-word airline
   name fixed (both found on real Akbar booking A052SF, Air Sial JED→ISB):**
   1. **Airline truncated to its first word.** The card said the flight was

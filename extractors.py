@@ -17,6 +17,7 @@ Design decisions (locked with Minh, 2026-06-08/09):
     the portal placeholder like "F8VJTS1").
 """
 import re
+import hashlib
 import html as _htmllib
 from datetime import datetime, timedelta
 
@@ -1431,16 +1432,59 @@ _DISRUPTION_STOPWORDS = {
 }
 
 
-def disruption_dedup_key(subject="", preview="", sender="", category="", day=""):
+# The disruption's ACTIONABLE facts — flight number, route, date, times. These
+# are what make one notice genuinely different from another; the surrounding
+# prose (greeting, apology wording) is not. Used to fingerprint a notice so an
+# airline's identical re-sends collapse while a real revision still alerts.
+_FACT_FLIGHT = re.compile(r"\b((?:[A-Z]{2}|[A-Z][0-9]|[0-9][A-Z]))\s?-?\s?(\d{2,4})\b")
+_FACT_ROUTE = re.compile(r"\b([A-Z]{3})\s*[-–>]+\s*([A-Z]{3})\b")
+_FACT_HHMM = re.compile(r"\b(\d{1,2}:\d{2})\b")
+_FACT_HHMM4 = re.compile(r"\b(\d{4})\s*-\s*(\d{4})\b")          # IndiGo "0510-0755"
+_FACT_DATE = re.compile(
+    r"\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*)\b", re.I)
+
+
+def disruption_facts(text=""):
+    """Order-stable fingerprint of the flight facts in a disruption notice.
+    Empty string when the notice carries no extractable facts."""
+    t = text or ""
+    facts = set()
+    for m in _FACT_FLIGHT.finditer(t):
+        facts.add(f"{m.group(1)}{m.group(2)}")
+    for m in _FACT_ROUTE.finditer(t):
+        facts.add(f"{m.group(1)}-{m.group(2)}")
+    for m in _FACT_HHMM.finditer(t):
+        facts.add(m.group(1))
+    for m in _FACT_HHMM4.finditer(t):
+        facts.add(f"{m.group(1)}-{m.group(2)}")
+    for m in _FACT_DATE.finditer(t):
+        facts.add(re.sub(r"\s+", " ", m.group(1)).strip().title())
+    return "|".join(sorted(facts))
+
+
+def disruption_dedup_key(subject="", preview="", sender="", category=""):
     """Booking-level dedup key for the disruption watch, or "" if no reliable
     booking reference can be extracted (caller then falls back to message_id).
 
-    Airlines re-send a disruption notice for the SAME booking repeatedly (e.g.
-    Turkish Airlines sends "Flight Delay Information" for reservation UCHMPF every
-    ~30 min, each a NEW message_id). De-duping on message_id alone re-alerts every
-    time; keying on <sender-domain>:<PNR>:<category>:<day> collapses those re-sends
-    to ONE alert, while still re-alerting for a genuinely new booking, a different
-    disruption type (a later cancellation after a delay), or a new day."""
+    Airlines re-send a disruption notice for the SAME booking repeatedly, each a
+    NEW message_id — Turkish Airlines re-sent "Flight Delay Information" for one
+    reservation 3x in 5 hours; IndiGo re-sent a byte-identical "Revised Itinerary"
+    5x across two days. De-duping on message_id alone re-alerts every time.
+
+    The key is <sender-domain>:<PNR>:<category>:<facts-fingerprint>, so:
+      * an IDENTICAL re-send collapses to one alert — permanently, not just for
+        a day (the earlier day-based key re-alerted every calendar day, and also
+        broke on airlines that backdate the Date header — IndiGo's re-send that
+        ARRIVED on 03 Aug was stamped 02 Aug and alerted a second time);
+      * a genuinely NEW revision (different flight/route/date/time) still alerts,
+        even minutes later on the same day — which the day-based key wrongly
+        suppressed;
+      * a different booking, or an escalation (cancellation after a delay), still
+        alerts.
+
+    RETURNS A HASH, never the raw reference: this key is persisted to
+    disruption_ids.json in a PUBLIC repo, so it must not leak a PNR (§11 — the
+    other logs deliberately store only opaque ids)."""
     text = f"{subject}  {preview}"
     code = ""
     for m in _DISRUPTION_PNR_RE.finditer(text):
@@ -1454,7 +1498,8 @@ def disruption_dedup_key(subject="", preview="", sender="", category="", day="")
     md = re.search(r"@([A-Za-z0-9.\-]+)", sender or "")
     if md:
         dom = md.group(1).lower()
-    return f"{dom}:{code}:{(category or '').lower()}:{day}"
+    raw = f"{dom}:{code}:{(category or '').lower()}:{disruption_facts(text)}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
 
 
 # ── Pivot OS sync payload (Producer side of PIVOT_OS_INTEGRATION.md) ─────────
