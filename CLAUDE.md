@@ -23,10 +23,11 @@ Two ways it runs:
 - **Pivot Travel Management** *(formerly "Pivot Travel & Tourism" — do NOT use the old name)*
 - CR No. **7043148696** · VAT No. **311788697700003** · Suite 20, 2nd Floor, Mobco Building, 2762 Ibn Al Anbari Street,
   Al Amal District, Riyadh, Kingdom of Saudi Arabia
-- sales@pivot-travels.com · www.pivot-travels.com · monitored inbox: cs@pivot-travels.com
-- **Client-facing contact on every issued PDF is `info@pivot-travels.com`** (`COMPANY_EMAIL`
-  in `generate_itinerary_v3.py`, mirrored in `air_suvidha/generate_air_suvidha_guide.py`).
-  cs@ is the automation's own inbox and must NOT appear on a document a client reads.
+- **info@pivot-travels.com** (canonical public contact) · www.pivot-travels.com ·
+  monitored inbox: cs@pivot-travels.com
+- **info@ is what every issued PDF shows** (`COMPANY_EMAIL` in `generate_itinerary_v3.py`,
+  mirrored in `air_suvidha/generate_air_suvidha_guide.py`). cs@ is the automation's own
+  inbox and must NOT appear on a document a client reads.
 - (Sister company Pivot Shipping: CR 7034458500, sales@pivotscl.com — not part of this repo.)
 
 ## 3. Core files
