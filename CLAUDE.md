@@ -24,6 +24,9 @@ Two ways it runs:
 - CR No. **7043148696** · VAT No. **311788697700003** · Suite 20, 2nd Floor, Mobco Building, 2762 Ibn Al Anbari Street,
   Al Amal District, Riyadh, Kingdom of Saudi Arabia
 - sales@pivot-travels.com · www.pivot-travels.com · monitored inbox: cs@pivot-travels.com
+- **Client-facing contact on every issued PDF is `info@pivot-travels.com`** (`COMPANY_EMAIL`
+  in `generate_itinerary_v3.py`, mirrored in `air_suvidha/generate_air_suvidha_guide.py`).
+  cs@ is the automation's own inbox and must NOT appear on a document a client reads.
 - (Sister company Pivot Shipping: CR 7034458500, sales@pivotscl.com — not part of this repo.)
 
 ## 3. Core files
@@ -119,6 +122,16 @@ flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
 
+- **2026-08-02 (later) — client-facing contact switched cs@ → info@:** an audit of every
+  address in the repo found that both PDFs a client actually receives — the itinerary's
+  T&C page ("Clarifications: …") and the Air Suvidha guide's "Need help?" footer — printed
+  **cs@pivot-travels.com**, which is the automation's own monitored inbox (`IMPERSONATE_USER`,
+  the address the runner reads and can send as). Clients were being pointed at the robot.
+  Both now render the new `COMPANY_EMAIL = "info@pivot-travels.com"` constant, mirrored in
+  the guide generator so the two documents can't drift apart; `air_suvidha_guide.pdf` was
+  regenerated and re-committed. **Internal plumbing is unchanged** — the runner still READS
+  cs@ and still sends its confirmation digests there; only the two client-visible strings moved.
+  Verified by extracting text from both freshly rendered PDFs (info@ present, cs@ absent).
 - **2026-08-02 — airport names now render on every portal + multi-word airline
   name fixed (both found on real Akbar booking A052SF, Air Sial JED→ISB):**
   1. **Airline truncated to its first word.** The card said the flight was
