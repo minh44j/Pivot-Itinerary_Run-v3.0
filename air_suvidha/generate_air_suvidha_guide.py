@@ -22,6 +22,9 @@ import qrcode
 
 HERE       = Path(__file__).parent
 OUT_PDF    = HERE / "air_suvidha_guide.pdf"   # the runtime asset main.py appends
+# Client-facing contact — kept in step with generate_itinerary_v3.COMPANY_EMAIL,
+# since this guide is appended to the itinerary and the two must not disagree.
+COMPANY_EMAIL = "info@pivot-travels.com"
 PORTAL     = "airsuvidha.civilaviation.gov.in"
 PORTAL_URL = "https://airsuvidha.civilaviation.gov.in/"
 
@@ -208,7 +211,7 @@ def footer_block():
     </div>
     <div class="footer-contact">
       <div class="fc-lbl">Need help?</div>
-      <div class="fc-val">cs@pivot-travels.com</div>
+      <div class="fc-val">{COMPANY_EMAIL}</div>
     </div>
   </div>"""
 

@@ -292,7 +292,7 @@ def _terms_block() -> str:
     return f"""
   <div class="tc">
     <div class="tc-title">TERMS &amp; CONDITIONS <span class="tc-acc">&mdash;</span> FLIGHT BOOKING CONFIRMATION</div>
-    <div class="tc-issued">Issued by Pivot Travel Management &middot; Suite 20, 2762 Ibn Al Anbari Street, Al Amal District, Riyadh, Kingdom of Saudi Arabia &middot; Clarifications: cs@pivot-travels.com</div>
+    <div class="tc-issued">Issued by Pivot Travel Management &middot; Suite 20, 2762 Ibn Al Anbari Street, Al Amal District, Riyadh, Kingdom of Saudi Arabia &middot; Clarifications: {COMPANY_EMAIL}</div>
     <div class="tc-rule"></div>
     <div class="tc-cols">
       {items_html}
@@ -314,6 +314,12 @@ def _terms_block() -> str:
 # from the registration certificate; 15 digits, the Saudi ZATCA format.
 COMPANY_CR = "7043148696"
 COMPANY_VAT = "311788697700003"
+
+# Address printed on CLIENT-FACING documents (T&C page, Air Suvidha guide).
+# Deliberately NOT cs@ — that is the automation's own monitored inbox, and the
+# runner both reads from and can send as it (main.IMPERSONATE_USER). A client
+# reading a PDF should be pointed at the staffed address instead.
+COMPANY_EMAIL = "info@pivot-travels.com"
 
 # Services strapline under the wordmark — subtle, full uppercase, wide tracked.
 BRAND_STRAPLINE = "CORPORATE TRAVEL | CHAUFFEURS | CURATED ITINERARIES | PREMIUM PILGRIMAGE"
