@@ -108,8 +108,26 @@ def _creds_for(subject, scopes):
         scopes=scopes, subject=subject)
 
 
+def _env(name, default=""):
+    """Environment value with surrounding whitespace stripped.
+
+    GitHub Secrets silently preserve a trailing newline or space when a value is
+    pasted, and the UI cannot show it. For an address that becomes an OAuth
+    impersonation subject that is fatal but almost impossible to spot: Google
+    rejects it with `invalid_request: Invalid impersonation "sub" field`, which
+    reads like the account is wrong rather than the string being malformed
+    (2026-08-08 outage). Strip every such value at the boundary instead.
+    """
+    raw = os.environ.get(name) or default
+    val = raw.strip()
+    if raw != val:
+        # Name the variable, never the value — this log is public (§11).
+        print(json.dumps({"env_whitespace_stripped": name}))
+    return val
+
+
 def _services():
-    creds = _creds_for(os.environ["IMPERSONATE_USER"], SCOPES)   # reads inbox as cs@
+    creds = _creds_for(_env("IMPERSONATE_USER"), SCOPES)         # reads inbox as cs@
     return build("gmail", "v1", credentials=creds, cache_discovery=False), \
         build("drive", "v3", credentials=creds, cache_discovery=False)
 
@@ -117,7 +135,7 @@ def _services():
 def _sender_gmail():
     """Gmail service that SENDS the confirmation. Defaults to cs@ (IMPERSONATE_USER)
     unless SENDER_USER is set to another address in the same domain."""
-    sender = os.environ.get("SENDER_USER") or os.environ["IMPERSONATE_USER"]
+    sender = _env("SENDER_USER") or _env("IMPERSONATE_USER")
     creds = _creds_for(sender, ["https://www.googleapis.com/auth/gmail.send"])
     return build("gmail", "v1", credentials=creds, cache_discovery=False), sender
 
@@ -521,7 +539,7 @@ def _confirmation_html(data, source_ref="", logo_cid=None):
 
 
 def email_pdf(send_gmail, sender, pdf_path, data, source_ref=""):
-    to = os.environ.get("NOTIFY_TO") or sender             # default recipient = sender
+    to = _env("NOTIFY_TO") or sender                       # default recipient = sender
     m = EmailMessage()
     m["Subject"] = f"Booking Confirmation — {data.get('pnr')} ({data.get('portal')})"
     m["From"] = sender                                     # SENDER_USER or cs@
@@ -613,7 +631,7 @@ def _flags_html(flagged, logo_cid=None):
 def email_flags(send_gmail, sender, flagged):
     if not flagged:
         return False
-    to = os.environ.get("NOTIFY_TO") or sender
+    to = _env("NOTIFY_TO") or sender
     lines = [f"{len(flagged)} booking(s) need manual review:", ""]
     for f in flagged:
         lines.append(f"• Portal:     {f.get('portal')}")
@@ -875,7 +893,7 @@ def email_disruptions(send_gmail, sender, alerts):
     message id to locate each."""
     if not alerts:
         return False
-    to = os.environ.get("DISRUPTION_NOTIFY_TO") or os.environ.get("NOTIFY_TO") or sender
+    to = _env("DISRUPTION_NOTIFY_TO") or _env("NOTIFY_TO") or sender
     enriched = _disruption_enrich(alerts)
     m = EmailMessage()
     m["Subject"] = f"⚠️ ACTION REQUIRED — {len(alerts)} flight cancellation/change alert(s)"
@@ -1111,7 +1129,7 @@ def main():
     send_gmail, sender = _sender_gmail()       # confirmation From-address (SENDER_USER or cs@)
     # SAFETY: a blank/unset SEARCH_WINDOW must NOT mean "scan everything".
     # An empty string is treated as the safe default (last 1 day).
-    window = os.environ.get("SEARCH_WINDOW") or "newer_than:1d"
+    window = _env("SEARCH_WINDOW") or "newer_than:1d"
     # SAFETY: hard cap on how many PDFs one run may create, so a fresh log can
     # never blast the whole inbox. Default 15; override with MAX_PER_RUN.
     try:
