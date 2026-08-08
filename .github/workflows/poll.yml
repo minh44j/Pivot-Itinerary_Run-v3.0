@@ -3,7 +3,18 @@ name: Pivot Itinerary Poll
 on:
   schedule:
     - cron: "*/5 * * * *"
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      search_window:
+        description: >-
+          One-off Gmail window override for THIS manual run only, e.g.
+          "newer_than:3d". Used to recover bookings older than the normal
+          window after an outage. Leave blank to use the SEARCH_WINDOW secret.
+          Scheduled runs are never affected. Note this only widens the SEARCH —
+          a booking already in processed_ids.json is still skipped, so it cannot
+          re-send anything that was already delivered.
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -43,7 +54,9 @@ jobs:
           DRIVE_OUTPUT_FOLDER: ${{ secrets.DRIVE_OUTPUT_FOLDER }}
           AKBAR_FOLDER_NAME: ${{ secrets.AKBAR_FOLDER_NAME }}
           NOTIFY_TO: ${{ secrets.NOTIFY_TO }}
-          SEARCH_WINDOW: ${{ secrets.SEARCH_WINDOW }}
+          # Manual-run override falls back to the secret when blank, and the
+          # secret is what every scheduled run uses.
+          SEARCH_WINDOW: ${{ github.event.inputs.search_window || secrets.SEARCH_WINDOW }}
           PIVOT_OS_SYNC_URL: ${{ secrets.PIVOT_OS_SYNC_URL }}
           PIVOT_OS_SYNC_SECRET: ${{ secrets.PIVOT_OS_SYNC_SECRET }}
           PIVOT_OS_DRY_RUN: ${{ vars.PIVOT_OS_DRY_RUN }}   # set repo var to "1" to dry-run the live poll
