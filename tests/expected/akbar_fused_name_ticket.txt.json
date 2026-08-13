@@ -1,0 +1,74 @@
+{
+  "portal": "Akbar Travels",
+  "pnr": "AKG9TS",
+  "crs_ref": "AKG9TS",
+  "booking_ref": "AS999999999",
+  "booked_on": "13 Aug 2026",
+  "status": "Confirmed",
+  "passengers": [
+    {
+      "name": "Mr. JOHN DOE",
+      "ticket_no": "9990000000001",
+      "cabin_bag": "07Kg",
+      "checked_bag": "20 Kg",
+      "seat": ""
+    },
+    {
+      "name": "Mrs. JANE DOE",
+      "ticket_no": "9990000000002",
+      "cabin_bag": "07Kg",
+      "checked_bag": "20 Kg",
+      "seat": ""
+    }
+  ],
+  "segments": [
+    {
+      "type": "FLIGHT",
+      "flights": [
+        {
+          "flight_no": "G9 146",
+          "airline": "Testair Arabia",
+          "dep_iata": "TST",
+          "arr_iata": "MID",
+          "dep_city": "Testcity",
+          "arr_city": "Midcity",
+          "dep_airport": "",
+          "arr_airport": "",
+          "terminal": "",
+          "arr_terminal": "",
+          "dep_time": "10:10",
+          "dep_date": "25 Aug 2026",
+          "arr_time": "14:00",
+          "arr_date": "25 Aug 2026",
+          "cabin": "Economy",
+          "duration": "2H 50M"
+        },
+        {
+          "flight_no": "G9 530",
+          "airline": "Testair Arabia",
+          "dep_iata": "MID",
+          "arr_iata": "OTH",
+          "dep_city": "Midcity",
+          "arr_city": "Othercity",
+          "dep_airport": "",
+          "arr_airport": "",
+          "terminal": "",
+          "arr_terminal": "",
+          "dep_time": "16:40",
+          "dep_date": "25 Aug 2026",
+          "arr_time": "22:40",
+          "arr_date": "25 Aug 2026",
+          "cabin": "Economy",
+          "duration": "4H 15M"
+        }
+      ],
+      "layovers": [
+        {
+          "airport": "MID",
+          "duration": "2H 40M"
+        }
+      ]
+    }
+  ],
+  "journey_type": "One-Way"
+}

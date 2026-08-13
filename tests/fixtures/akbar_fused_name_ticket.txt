@@ -1,0 +1,52 @@
+Name : PIVOT TRAVELS AND TOURISM COMPANY
+MOBCO BUILDING 2ND FLOOR SUIT 20,IBN AL ANBARI,,AL
+Address :
+AMAL
+Tel : 550000000
+Email : test@example.com
+Ref. No: Date of Booking: Status:
+Web check-in
+AS999999999 13 August 2026 CONFIRMED
+ONWARD Testcity Midcity
+Airline Ref : AKG9TS CRS Ref : AKG9TS
+25 Aug 2026 | Non Stop | 02 hrs 50 mins
+Travel Class Product Class
+Testair Arabia
+Economy BASIC FARE
+Departure date &
+Flight Number From (Terminal) Stops To (Terminal) Arrival date & time
+time
+Testcity [TST]
+Test One International Midcity [MID]
+10:10 Non Stop , 14:00
+G9 146 Airport , Mid International Airport ,
+Tue, 25 Aug 26 (02h:50m) Tue, 25 Aug 26
+Testland, Midland,
+Terminal North Term
+At Mid International Airport Layover Time : 02h:40m
+Midcity Othercity
+Airline Ref : AKG9TS CRS Ref : AKG9TS
+25 Aug 2026 | Non Stop | 04 hrs 15 mins
+Travel Class Product Class
+Testair Arabia
+Economy BASIC FARE
+Departure date &
+Flight Number From (Terminal) Stops To (Terminal) Arrival date & time
+time
+Othercity [OTH]
+Midcity [MID]
+16:40 Non Stop , Other International Airport , 22:40
+G9 530 Mid International Airport ,
+Tue, 25 Aug 26 (04h:15m) Otherland, Tue, 25 Aug 26
+Midland,
+Terminal 1
+Traveler(s) Information
+ONWARD ADDITIONAL ADD-ONS
+Code Name Ticket No. Baggage
+Mr. JOHN DOE9990000000001 20 Kg 1 Piece, Cabin-07Kg + 1 Personal item (max 3Kg)
+9990000000001 20 Kg 1 Piece, Cabin-07Kg + 1 Personal item (max 3Kg)
+Mrs. JANE DOE9990000000002 20 Kg 1 Piece, Cabin-07Kg + 1 Personal item (max 3Kg)
+9990000000002 20 Kg 1 Piece, Cabin-07Kg + 1 Personal item (max 3Kg)
+Base Fare Taxes and Charges SSR Amount Total
+SAR 1177.95 SAR 1238.13 SAR 61.38 SAR 2477.46
+Total Net Fare : SAR 2476.71

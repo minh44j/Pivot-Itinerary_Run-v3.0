@@ -38,6 +38,12 @@ CASES = {
     # several column-header lines below the "Flight Number" label. Regression
     # for the empty-flight-number QC flag on real booking (2026-07-21).
     "akbar_flyadeal_f3.txt":           (E.extract_akbar,   None),
+    # Air Arabia G9 connection — Traveler table renders the name FUSED to the
+    # ticket number with the baggage cell trailing on the same line, and the
+    # ticket repeats once per leg. Also has no "Operated by:" line at all.
+    # Regression for the "Passenger name missing" flag on real booking
+    # AS261308499 (2026-08-13).
+    "akbar_fused_name_ticket.txt":     (E.extract_akbar,   None),
     "neg_ajet_missing_pnr.html":       (E.extract_ajet,    "Missing PNR"),
     "neg_akbar_missing_flightno.txt":  (E.extract_akbar,   "missing flight number"),
     "turkish_airlines_connecting.txt": (E.extract_turkish_airlines, None),

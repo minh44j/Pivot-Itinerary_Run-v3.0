@@ -435,6 +435,18 @@ def _akbar_airline(detail):
     """
     m = re.search(r"Operated\b[\s\S]{0,80}?\bby\s*:?\s*([A-Za-z][A-Za-z .'&-]*)", detail)
     if not m:
+        # Some Ticket-Copy layouts carry NO "Operated by:" line at all — the
+        # carrier sits on its own line in the fare block, between the
+        # "Travel Class ..." header and the cabin line (confirmed on the real
+        # Air Arabia JED-SHJ-KTM ticket and on the Flyadeal fixture):
+        #     Travel Class Product Class
+        #     Air Arabia
+        #     Economy BASIC FARE
+        # Anchoring on both neighbours keeps this tight enough that a stray
+        # line cannot be mistaken for a carrier; no match still returns "".
+        m = re.search(r"Travel\s*Class[^\n]*\n\s*([A-Za-z][A-Za-z .'&-]{2,30}?)\s*\n"
+                      r"\s*(?:Economy|Business|First|Premium)\b", detail)
+    if not m:
         return ""
     val = m.group(1).split(",")[0]
     val = _COUNTRY_TAIL.sub("", val.strip())
@@ -483,10 +495,15 @@ def extract_akbar(pdf_text, ctx=None):
     # Capture the raw allowance line; the generator's _norm_bag pulls the kg out.
     cabin = (_m(t, r"Cabin\s*Baggage\s*:?\s*\n?\s*(Adult[^\n]*)")
              or _m(t, r"Carry-On\s*:?\s*([^\n]+)")
-             or _m(t, r"Adult\s+(\d+\s*K[gG])") or "Not specified")
+             or _m(t, r"Adult\s+(\d+\s*K[gG])")
+             # Ticket-Copy layouts with no labelled baggage block state it inside
+             # the Traveler row instead: "20 Kg 1 Piece, Cabin-07Kg + 1 Personal
+             # item". Only reached when every labelled pattern above missed.
+             or _m(t, r"Cabin\s*[-:]?\s*(\d+\s*K[gG])") or "Not specified")
     checked = (_m(t, r"Check-?In\s*Baggage\s*:?\s*\n?\s*(Adult[^\n]*)")
                or _m(t, r"Baggage Allowance\s*:?\s*([^\n]+)")
-               or _m(t, r"Adult\s*-\s*(\d+\s*K[gG])") or "Not specified")
+               or _m(t, r"Adult\s*-\s*(\d+\s*K[gG])")
+               or _m(t, r"(\d+\s*K[gG])\s+\d+\s*Piece") or "Not specified")
 
     names, seen = [], set()
     # 2026-06-22 fix (Saudia Business Class layout, <ref>): some layouts
@@ -496,7 +513,15 @@ def extract_akbar(pdf_text, ctx=None):
     # returned nothing -> qc_check() correctly flagged "Passenger name
     # missing", but for the wrong underlying reason. Widened to a lookahead
     # that accepts either a trailing 10+ digit ticket number or end-of-line.
-    for nmo in re.finditer(r"(?m)\b((?:Mr|Mrs|Ms|Mstr|Master|Miss|Dr)\.?\s+[A-Z][A-Z .'\-]+?)(?=\s+\d{10,}\s*$|\s*$)", t):
+    # 2026-08-13 fix (Air Arabia G9 JED-SHJ-KTM, ref AS261308499): the Traveler
+    # table can render the name and ticket number FUSED, with the baggage cell
+    # trailing on the same line — "Mr. <NAME><TICKET> 20 Kg 1 Piece, Cabin-07Kg".
+    # The old lookahead demanded whitespace before the ticket AND end-of-line
+    # right after it, so neither branch matched, names came back empty and every
+    # such booking flagged "Passenger name missing". The ticket may now follow
+    # immediately (\s* not \s+) and need not end the line. The captured class
+    # excludes digits, so the name still stops cleanly where the number starts.
+    for nmo in re.finditer(r"(?m)\b((?:Mr|Mrs|Ms|Mstr|Master|Miss|Dr)\.?\s+[A-Z][A-Z .'\-]+?)(?=\s*\d{10,}|\s*$)", t):
         nm = re.sub(r"\s+", " ", nmo.group(1)).strip()
         if nm.upper() not in seen:
             seen.add(nm.upper())
@@ -506,7 +531,14 @@ def extract_akbar(pdf_text, ctx=None):
     # picking up fare/footer numbers.
     trav = t[t.find("Traveler"):] if "Traveler" in t else t
     trav = trav[:trav.find("Carry-On")] if "Carry-On" in trav else trav
-    tickets = re.findall(r"EXKT\s*([0-9]{10,})", trav) or re.findall(r"\b(\d{10,})\b", trav)
+    # A leading \b fails when the ticket is fused to the name ("DOE1234567890"),
+    # because letter->digit is not a word boundary. Guard on "not a digit either
+    # side" instead so both the fused and the spaced layouts are found. The rows
+    # repeat once per leg, so the same ticket appears several times — dedupe
+    # (order-preserving) or passenger 2 would inherit passenger 1's number.
+    tickets = re.findall(r"EXKT\s*([0-9]{10,})", trav) \
+        or re.findall(r"(?<![0-9])(\d{10,})(?![0-9])", trav)
+    tickets = list(dict.fromkeys(tickets))
     d["passengers"] = [{"name": n, "ticket_no": tickets[i] if i < len(tickets) else "Not specified",
                         "cabin_bag": cabin, "checked_bag": checked, "seat": ""}
                        for i, n in enumerate(names)] \
