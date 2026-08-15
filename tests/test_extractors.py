@@ -44,6 +44,10 @@ CASES = {
     # Regression for the "Passenger name missing" flag on real booking
     # AS261308499 (2026-08-13).
     "akbar_fused_name_ticket.txt":     (E.extract_akbar,   None),
+    # aJet "Basic" fare brand, written in mixed case unlike ECOJET/BIZJET/PREMIUM.
+    # Regression for the round trip that rendered Economy outbound and N/A
+    # inbound on one document (real booking 4B0NA3, 2026-08-15).
+    "ajet_basic_fare.html":            (E.extract_ajet,    None),
     "neg_ajet_missing_pnr.html":       (E.extract_ajet,    "Missing PNR"),
     "neg_akbar_missing_flightno.txt":  (E.extract_akbar,   "missing flight number"),
     "turkish_airlines_connecting.txt": (E.extract_turkish_airlines, None),

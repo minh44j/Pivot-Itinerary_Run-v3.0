@@ -226,7 +226,12 @@ def _norm_bag(v: str) -> str:
     if not v:
         return "N/A"
     s = v.strip()
-    if s.lower() == "not specified":
+    # "None" is a VALUE THE SOURCE ACTUALLY PRINTS, not a Python artifact: aJet
+    # writes "Total Check-in Baggage None" / "Cabin Baggage None" on a leg that
+    # carries no allowance (real booking 4B0NA3, 2026-08-15). Rendering it
+    # verbatim put the word "None" on a client's flight card, which reads like a
+    # software fault. It means "not stated" -> N/A, same as an empty value.
+    if s.lower() in ("not specified", "none", "n/a", "-"):
         return "N/A"
     weights = re.findall(r'(\d+(?:\.\d+)?)\s*(?:kilograms?|kgs?|kg|k)\b', s, flags=re.I)
     if weights:

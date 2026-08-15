@@ -809,7 +809,7 @@ def extract_ajet(src, ctx=None):
     seg_re = re.compile(
         r"(\d{1,2}\s+[A-Za-z]+\s+\d{4})\s*\n\s*([^\n]+?)\s*\n\s*([A-Z]{3})\s*\n\s*(\d{1,2}:\d{2})\s*\n\s*"
         r"([^\n]+?)\s*\n\s*([A-Z]{3})\s*\n\s*(\d{1,2}:\d{2})\s*\n\s*(?:Connecting|Non[ -]?Stop|Direct)?\s*\n?\s*"
-        r"(?:(\d+\s*[Hh]\s*\d+\s*[Mm]))?\s*\n?\s*(VF\s?\d{2,4})\s*\n\s*(ECOJET|BIZJET|PREMIUM)?")
+        r"(?:(\d+\s*[Hh]\s*\d+\s*[Mm]))?\s*\n?\s*(VF\s?\d{2,4})\s*\n\s*(ECOJET|BIZJET|PREMIUM|(?i:Basic))?")
     seg_starts = [mo.start() for mo in seg_re.finditer(text)]
     for si_, mo in enumerate(seg_re.finditer(text)):
         brand = (mo.group(10) or "").upper()
@@ -828,8 +828,13 @@ def extract_ajet(src, ctx=None):
             # brand (e.g. "PREMIUM / A Class"). Previously only ECOJET/BIZJET
             # were recognised, so PREMIUM bookings rendered cabin = N/A. Map
             # PREMIUM -> "Premium Economy". (BIZJET->Business, ECOJET->Economy.)
+            # 2026-08-15 fix (PNR 4B0NA3): aJet's return leg was sold on the
+            # "Basic" brand ("VF213 Basic / M Class"), which was not in the
+            # alternation — so a ROUND TRIP rendered Economy outbound and N/A
+            # inbound on the same document. Basic is an economy fare family,
+            # same as ECOJET.
             "cabin": ("Business" if brand == "BIZJET"
-                      else "Economy" if brand == "ECOJET"
+                      else "Economy" if brand in ("ECOJET", "BASIC")
                       else "Premium Economy" if brand == "PREMIUM"
                       else "Not specified"),
             # aJet tickets carry no terminal data at all (verified against real
@@ -850,7 +855,7 @@ def extract_ajet(src, ctx=None):
 _AJET_NEW_SEG = re.compile(
     r"(\d{1,2}\s+[A-Za-z]+\s+\d{4})\s*\n\s*([^\n]+?)\s*\n\s*([A-Z]{3})\s*\n\s*(\d{1,2}:\d{2})\s*\n\s*"
     r"([^\n]+?)\s*\n\s*([A-Z]{3})\s*\n\s*(\d{1,2}:\d{2})\s*\n\s*(?:Connecting|Non[ -]?Stop|Direct)?\s*\n?\s*"
-    r"(?:(\d+\s*[Hh]\s*\d+\s*[Mm]))?\s*\n?\s*(VF\s?\d{2,4})\s*\n\s*(ECOJET|BIZJET|PREMIUM)?")
+    r"(?:(\d+\s*[Hh]\s*\d+\s*[Mm]))?\s*\n?\s*(VF\s?\d{2,4})\s*\n\s*(ECOJET|BIZJET|PREMIUM|(?i:Basic))?")
 
 
 def extract_ajet_change(src, ctx=None):
@@ -883,7 +888,7 @@ def extract_ajet_change(src, ctx=None):
         "arr_city": seg.group(5).strip(), "arr_iata": seg.group(6), "arr_time": seg.group(7),
         "duration": _norm_dur(seg.group(8) or ""),
         "flight_no": re.sub(r"(VF)\s?", r"\1 ", seg.group(9)).strip(), "airline": "aJet",
-        "cabin": ("Business" if brand == "BIZJET" else "Economy" if brand == "ECOJET"
+        "cabin": ("Business" if brand == "BIZJET" else "Economy" if brand in ("ECOJET", "BASIC")
                   else "Premium Economy" if brand == "PREMIUM" else "Not specified"),
         "dep_airport": "", "arr_airport": "", "terminal": "", "arr_terminal": "",
     }
