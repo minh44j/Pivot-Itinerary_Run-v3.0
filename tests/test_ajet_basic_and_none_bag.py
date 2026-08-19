@@ -101,3 +101,32 @@ def test_single_piece_and_multi_weight_render_unchanged(raw, expected):
     """The count must be added ONLY where it adds information, so no existing
     booking's card changes."""
     assert G._norm_bag(raw) == expected
+
+
+# ── wrapped / bled "Operated by:" cell (2026-08-19) ────────────────────────
+# Real booking 8CP5SK shipped with "OPERATED BY: Saudi Mon" — a carrier that
+# does not exist. Akbar's PDF renders:
+#     Operated by:Saudi Mon, 24 Aug 26 (02h:45m) Egypt, Mon, 24 Aug 26
+#     Airline Saudi Arabia,
+# so the date column's weekday glued onto the name and the real name ("Saudi
+# Airline") was split across two lines.
+@pytest.mark.parametrize("raw,expected", [
+    ("Operated by:Saudi Mon, 24 Aug 26 (02h:45m) Egypt, Mon, 24 Aug 26\n"
+     "Airline Saudi Arabia,\nTerminal 2", "Saudi Airline"),
+    # a weekday with no continuation line is simply stripped
+    ("Operated by:Fly Jinnah Tue, 25 Aug 26", "Fly Jinnah"),
+])
+def test_wrapped_or_bled_carrier_cell(raw, expected):
+    assert E._akbar_airline(raw) == expected
+
+
+@pytest.mark.parametrize("raw,expected", [
+    # every previously-working shape must be untouched
+    ("Operated by:Air Sial", "Air Sial"),
+    ("Operated , Thu, 23 Jul 26 (02h:10m)\nby:Flyadeal Saudi Arabia,", "Flyadeal"),
+    ("Operated by: Saudi Arabian Airlines", "Saudi Arabian Airlines"),
+    ("Operated by : TestAir", "TestAir"),
+    ("no operator line here", ""),
+])
+def test_existing_carrier_shapes_unchanged(raw, expected):
+    assert E._akbar_airline(raw) == expected

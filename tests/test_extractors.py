@@ -44,6 +44,10 @@ CASES = {
     # Regression for the "Passenger name missing" flag on real booking
     # AS261308499 (2026-08-13).
     "akbar_fused_name_ticket.txt":     (E.extract_akbar,   None),
+    # Saudia via Akbar — the "Operated by:" cell WRAPS across two lines and the
+    # date column bleeds onto the first, so the carrier arrived as "Saudi Mon".
+    # Real booking 8CP5SK (2026-08-19).
+    "akbar_wrapped_carrier.txt":       (E.extract_akbar,   None),
     # aJet "Basic" fare brand, written in mixed case unlike ECOJET/BIZJET/PREMIUM.
     # Regression for the round trip that rendered Economy outbound and N/A
     # inbound on one document (real booking 4B0NA3, 2026-08-15).

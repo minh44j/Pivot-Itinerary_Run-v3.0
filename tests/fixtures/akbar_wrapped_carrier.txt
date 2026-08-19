@@ -1,0 +1,39 @@
+Name : PIVOT TRAVELS AND TOURISM COMPANY
+Address :
+Tel : 550000000
+Email : test@example.com
+License Category : TRAVEL AGENCY
+Ref. No: Date of Booking: Status:
+Web check-in
+AS999999999 19 August 2026 CONFIRMED
+ONWARD Testcity Othercity
+Airline Ref : AKSVTS CRS Ref : HMTEST
+24 Aug 2026 | Non Stop | 02 hrs 45 mins
+Check-In Baggage
+Travel Class Cabin Baggage
+Testair Airline Adult - 2 Pieces | 1 BAG UP TO
+Economy Adult 1Pc : 1 BAG UP TO 7 KG
+23KG
+Departure date &
+Flight Number From (Terminal) Stops To (Terminal) Arrival date & time
+time
+Testcity [TST]
+Othercity [OTH]
+SV 321 (Airbus A 330) Test International Airport
+20:30 Non Stop , Other International Airport , 23:15
+,
+Operated by:Testair Mon, 24 Aug 26 (02h:45m) Otherland, Mon, 24 Aug 26
+Airline Testland,
+Terminal 2
+Terminal 2
+Traveler(s) Information
+ONWARD
+Code Name Ticket No.
+Mr. JOHN DOE
+9990000000001
+Baggage
+Carry-On :Adult 1Pc : 1 BAG UP TO 7 KG
+Baggage Allowance : Adult - 2 Pieces | 1 BAG UP TO 23KG
+Base Fare Taxes and Charges SSR Amount Total
+269.00 308.75 0.00 577.75
+Total Net Fare : 577.00

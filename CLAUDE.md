@@ -125,6 +125,19 @@ flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
 
+- **2026-08-19 (later) — "OPERATED BY: Saudi Mon" — a carrier that does not exist:**
+  Booking 8CP5SK shipped naming the operator **`Saudi Mon`**. The real Akbar PDF renders
+  the cell WRAPPED, with the date column bled onto the first line:
+  `Operated by:Saudi Mon, 24 Aug 26 (02h:45m) Egypt, Mon, 24 Aug 26` / `Airline Saudi Arabia,`
+  — so the carrier is **`Saudi Airline`**, split over two lines, and the weekday `Mon` glued
+  onto it. The 2026-08-02 widening (which correctly fixed `Air` → `Air Sial`) let the weekday
+  through, because the cut-at-first-comma happens AFTER it. `_akbar_airline` now strips a
+  trailing **weekday** and re-joins a continuation line that STARTS with a carrier suffix
+  (`Airline(s)` / `Airways` / `Aviation`); anything else on that line is a different column and
+  is left alone. Zero-PII fixture reproduces the wrapped layout. Every previously-working
+  shape is asserted unchanged (Air Sial, Flyadeal, Saudi Arabian Airlines, TestAir, no-match).
+  152 tests pass; regenerating goldens changed none of the existing ones.
+
 - **2026-08-19 — multi-piece baggage no longer understated (approved design change):**
   Real Akbar/Saudia booking 8CP5SK stated `Adult - 2 Pieces | 1 BAG UP TO 23KG` — two 23kg
   bags — and the card rendered **`23kg`**, which reads as ONE bag. The weight-only rule

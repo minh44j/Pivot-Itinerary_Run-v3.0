@@ -406,6 +406,13 @@ def extract_alhind(html, ctx=None):
 _IATA_DESIG = r"(?:[A-Z]{2}|[A-Z][0-9]|[0-9][A-Z])"
 
 # Countries that bleed into the "Operated by:" cell — see _akbar_airline below.
+# The From/To date column renders as "Mon, 24 Aug 26". When pdfplumber puts it
+# on the same line as the "Operated by:" cell, cutting at the first comma leaves
+# the WEEKDAY glued to the carrier — real booking 8CP5SK shipped with
+# "OPERATED BY: Saudi Mon". No airline's name ends in a weekday, so strip it.
+_WEEKDAY_TAIL = re.compile(
+    r"\s+(?:Mon|Tue|Tues|Wed|Weds|Thu|Thur|Thurs|Fri|Sat|Sun)\.?\s*$", re.I)
+
 _COUNTRY_TAIL = re.compile(
     r"\s*(?:Saudi\s*Arabia|Pakistan|India|T[uü]rkiye|Turkey|United\s*Arab\s*Emirates|"
     r"Qatar|Kuwait|Bahrain|Oman|Egypt|Jordan|Nepal|Bangladesh|Sri\s*Lanka|Maldives|"
@@ -449,7 +456,19 @@ def _akbar_airline(detail):
     if not m:
         return ""
     val = m.group(1).split(",")[0]
+    val = _WEEKDAY_TAIL.sub("", val.strip())
     val = _COUNTRY_TAIL.sub("", val.strip())
+    # The cell can WRAP: real booking 8CP5SK renders
+    #     Operated by:Saudi Mon, 24 Aug 26 (02h:45m) Egypt, Mon, 24 Aug 26
+    #     Airline Saudi Arabia,
+    # so the carrier "Saudi Airline" is split across two lines and only "Saudi"
+    # survives the cut above. Pull the continuation back when the following line
+    # STARTS with a carrier-suffix word; anything else is a different column and
+    # is left alone.
+    _rest = detail[m.end():]
+    _cont = re.match(r"[^\n]*\n\s*(Airlines?|Airways|Aviation)\b", _rest)
+    if _cont and val:
+        val = f"{val} {_cont.group(1)}"
     val = re.sub(r"\s+", " ", val).strip(" .-")
     # An airline name is at most a few words; anything longer means the column
     # bled and the tail is not part of the carrier's name.
