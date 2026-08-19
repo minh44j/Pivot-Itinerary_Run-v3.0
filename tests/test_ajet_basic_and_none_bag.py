@@ -72,3 +72,32 @@ def test_none_never_reaches_a_flight_card():
         "pax": [{"name": "Test Pax", "cabin_bag": "None", "checked_bag": "None", "seat": ""}],
     })
     assert ">None<" not in html
+
+
+# ── piece count on multi-piece allowances (2026-08-19, approved) ───────────
+# Weight alone understates a multi-piece allowance. Saudia via Akbar states
+# "Adult - 2 Pieces | 1 BAG UP TO 23KG" (real booking 8CP5SK) = two 23kg bags;
+# rendering "23kg" reads as one bag and a passenger could leave 23kg unused.
+@pytest.mark.parametrize("raw,expected", [
+    ("Adult - 2 Pieces | 1 BAG UP TO 23KG", "2 &times; 23kg"),
+    ("Adult - 3 Pieces | 1 BAG UP TO 32KG", "3 &times; 32kg"),
+])
+def test_multi_piece_shows_the_count(raw, expected):
+    assert G._norm_bag(raw) == expected
+
+
+@pytest.mark.parametrize("raw,expected", [
+    # single piece -> unchanged, exactly as the locked weight-only rule
+    ("Adult 1Pc : 1 BAG UP TO 7 KG", "7kg"),
+    ("20 Kg 1 Piece", "20kg"),
+    ("1 piece - 8 kg (55x40x23 cm)", "8kg"),
+    ("30 kg", "30kg"),
+    # several weights already enumerate the pieces — no count prefix
+    ("7kg + 3kg", "7kg + 3kg"),
+    # piece-only, no weight stated -> the pre-existing "<n>Pcs" form
+    ("3 Pieces", "3Pcs"),
+])
+def test_single_piece_and_multi_weight_render_unchanged(raw, expected):
+    """The count must be added ONLY where it adds information, so no existing
+    booking's card changes."""
+    assert G._norm_bag(raw) == expected

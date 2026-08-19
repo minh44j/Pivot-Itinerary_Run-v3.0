@@ -239,7 +239,23 @@ def _norm_bag(v: str) -> str:
         for w in weights:
             f = float(w)
             out.append(f"{int(f)}kg" if f.is_integer() else f"{f}kg")
-        return " + ".join(out)
+        body = " + ".join(out)
+        # PIECE COUNT (2026-08-19, approved). Weight alone UNDERSTATES a
+        # multi-piece allowance: Saudia via Akbar states "Adult - 2 Pieces | 1 BAG
+        # UP TO 23KG" (real booking 8CP5SK), which is 2 bags of 23kg. Rendering
+        # just "23kg" reads as a single bag, so a passenger could leave a whole
+        # 23kg entitlement unused. Prefix the count when the source states more
+        # than one piece AND a single weight — "2 x 23kg".
+        #
+        # Deliberately narrow. A count is NOT added when several weights were
+        # found ("7kg + 3kg" already enumerates the pieces), and never when the
+        # count is 1, so every single-piece booking renders byte-identically to
+        # before and the locked weight-only look is unchanged for them.
+        if len(out) == 1:
+            _pc = re.search(r'(\d+)\s*(?:pcs?|pieces?|pc)\b', s, flags=re.I)
+            if _pc and int(_pc.group(1)) > 1:
+                body = f"{int(_pc.group(1))} &times; {body}"
+        return body
     pcs = re.search(r'(\d+)\s*(?:pcs?|pieces?|pc|p)\b', s, flags=re.I)
     if pcs:
         return f"{int(pcs.group(1))}Pcs"

@@ -111,7 +111,9 @@ segments[]:  { type: Outbound|Inbound, flights[]: { dep_iata, arr_iata, dep_city
              }, layovers[]: {airport,duration} }
 ```
 Generator normalises: journey type → ONE-WAY/ROUND TRIP only; names → Title Case; baggage →
-weight-only ("7kg", "7kg + 3kg", "1Pcs"); missing values → **N/A**; next-day arrival → `HH:MM (+1)`.
+weight-only ("7kg", "7kg + 3kg", "1Pcs") — **plus the piece count when the source states more
+than one piece for a single weight** ("2 × 23kg", approved 2026-08-19; weight alone understated a
+2-piece allowance); missing values → **N/A**; next-day arrival → `HH:MM (+1)`.
 
 ## 7. Accuracy rules (non-negotiable)
 
@@ -122,6 +124,16 @@ review, do not produce a PDF**. `qc_check()` gates this (missing PNR / passenger
 flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
+
+- **2026-08-19 — multi-piece baggage no longer understated (approved design change):**
+  Real Akbar/Saudia booking 8CP5SK stated `Adult - 2 Pieces | 1 BAG UP TO 23KG` — two 23kg
+  bags — and the card rendered **`23kg`**, which reads as ONE bag. The weight-only rule
+  (§6) extracts the weights and discards everything else, so the piece count was dropped and
+  the traveller could have left a whole 23kg entitlement unused. `_norm_bag` now prefixes the
+  count when the source states **>1 piece for a single weight** → `2 × 23kg`. Deliberately
+  narrow: no count when several weights were found (`7kg + 3kg` already enumerates them) and
+  never when the count is 1, so **every single-piece booking renders byte-identically** and
+  the locked look is unchanged for them. Tests assert both directions. 143 tests pass.
 
 - **2026-08-03 — disruption dedup keyed on FACTS, not the day (+ PNR removed from the public log):**
   The 2026-07-22 day-based key still repeated. Two real causes, both diagnosed
