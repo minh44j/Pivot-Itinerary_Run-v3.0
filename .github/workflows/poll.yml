@@ -32,6 +32,17 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Check out the CURRENT tip of main, NOT the commit pinned when this
+          # run was queued. Polls queue behind one another, so a run can start
+          # minutes after it was created; with the pinned SHA it reads a
+          # processed_ids.json that predates bookings an earlier run already
+          # handled, re-processes them, re-uploads to Drive and re-sends a
+          # duplicate confirmation, then fails its own push as non-fast-forward.
+          # Observed on 85K5MN, IFZH5N and 8CP5SK.
+          ref: main
+          # full history so the rebase in "Commit processed log" works
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -43,8 +54,29 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      # Playwright's CDN geo-blocks some GitHub runner regions outright with
+      # "403 ... this service is not available in your location", which failed
+      # the whole run on 2026-08-19. Every run used to download the browser
+      # fresh, so a single bad runner took the pipeline down. Cache it (keyed on
+      # the pinned version) so a normal run reuses an existing download and
+      # never touches the CDN at all.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-${{ runner.os }}-1.62.0
+
       - name: Install Playwright Chromium
-        run: python -m playwright install --with-deps chromium
+        run: |
+          # Retry as well, so a transient refusal on a cache miss does not fail
+          # the run. Exits as soon as one attempt succeeds.
+          for i in 1 2 3; do
+            if python -m playwright install --with-deps chromium; then exit 0; fi
+            echo "playwright install attempt $i failed — retrying"
+            sleep 10
+          done
+          echo "::error::could not install Chromium after 3 attempts"
+          exit 1
 
       - name: Run poll
         env:
@@ -65,12 +97,22 @@ jobs:
 
       - name: Commit processed log
         run: |
-          if [[ -n "$(git status --porcelain processed_ids.json disruption_ids.json flagged_ids.json medic_ids.json)" ]]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add processed_ids.json disruption_ids.json flagged_ids.json medic_ids.json
-            git commit -m "chore: update processed log [skip ci]"
-            git push
-          else
+          if [[ -z "$(git status --porcelain processed_ids.json disruption_ids.json flagged_ids.json medic_ids.json)" ]]; then
             echo "No new bookings or alerts — logs unchanged."
+            exit 0
           fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add processed_ids.json disruption_ids.json flagged_ids.json medic_ids.json
+          git commit -m "chore: update processed log [skip ci]"
+          # Another poll (or the medic) may have pushed while this one ran.
+          # Rebase onto it and retry rather than failing the run outright and
+          # leaving the log unrecorded — an unrecorded booking is re-processed
+          # and re-sent next run.
+          for i in 1 2 3; do
+            if git pull --rebase origin main && git push origin HEAD:main; then exit 0; fi
+            echo "log push attempt $i failed — retrying"
+            sleep 5
+          done
+          echo "::error::could not push the processed log"
+          exit 1
