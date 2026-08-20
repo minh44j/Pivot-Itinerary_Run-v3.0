@@ -421,6 +421,26 @@ def _build_email_body(data, source_ref=""):
     return "\n".join(lines)
 
 
+def _bags_vary_by_leg(data):
+    """True when a passenger's allowance is not the same on every leg.
+
+    Split-carrier bookings sell two airlines under one reference and each states
+    its own allowance (32 Kg on Flyadeal out, 1 x 23 Kg on Saudia back, real
+    booking AS261347760). The passenger card carries ONE booking-level value, so
+    printing it as "the" allowance states a wrong fact for at least one leg (§7).
+    When they differ the digest moves the allowance onto the individual legs.
+    """
+    seen, names = set(), set()
+    for seg in data.get("segments", []):
+        for f in seg.get("flights", []):
+            for x in (f.get("pax") or []):
+                nm = (x.get("name") or "").strip()
+                names.add(nm)
+                seen.add((nm, (x.get("cabin_bag") or "").strip(),
+                          (x.get("checked_bag") or "").strip()))
+    return len(seen) > len(names)
+
+
 def _confirmation_html(data, source_ref="", logo_cid=None):
     """Ops-only confirmation body — a TECHNICAL monospace data readout inside the
     Pivot brand chrome (charcoal/gold header: feather logo + Cormorant wordmark;
@@ -468,6 +488,7 @@ def _confirmation_html(data, source_ref="", logo_cid=None):
     rows += kv("PORTAL", esc(data.get("portal")))
 
     pax = data.get("passengers", [])
+    per_leg_bags = _bags_vary_by_leg(data)
     rows += sect(f"PASSENGERS ({len(pax)})")
     if not pax:
         rows += kv("[1]", "N/A")
@@ -475,9 +496,12 @@ def _confirmation_html(data, source_ref="", logo_cid=None):
         bag = "/".join(x for x in [(p.get("cabin_bag") or "").strip(),
                                    (p.get("checked_bag") or "").strip()] if x) or "N/A"
         seat = (p.get("seat") or "").strip() or "N/A"
+        # See _bags_vary_by_leg: one value cannot describe a booking whose legs
+        # allow different amounts, so point at the per-leg figures instead.
+        bag_html = ("per leg &darr;" if per_leg_bags else esc(bag))
         val = (f'<b>{esc(p.get("name"))}</b><br>'
                f'<span style="color:#6b6355;">TKT {esc(p.get("ticket_no"))}'
-               f' &nbsp; SEAT {esc(seat)} &nbsp; BAG {esc(bag)}</span>')
+               f' &nbsp; SEAT {esc(seat)} &nbsp; BAG {bag_html}</span>')
         rows += kv(f"[{i}]", val)
 
     rows += sect("ITINERARY")
@@ -498,6 +522,13 @@ def _confirmation_html(data, source_ref="", logo_cid=None):
         for f in flights:
             meta = "  ".join(x for x in [(f.get("cabin") or "").strip(),
                                          (f.get("duration") or "").strip()] if x)
+            if per_leg_bags:
+                for x in (f.get("pax") or []):
+                    _b2 = "/".join(v for v in [(x.get("cabin_bag") or "").strip(),
+                                               (x.get("checked_bag") or "").strip()] if v)
+                    if _b2:
+                        meta += f'  BAG {x.get("name", "")} {_b2}' if len(f.get("pax") or []) > 1 \
+                                else f"  BAG {_b2}"
             line = (f'{esc(f.get("flight_no"))} &nbsp; '
                     f'{esc(f.get("dep_iata"))} {esc(f.get("dep_time"))}&rarr;'
                     f'{esc(f.get("arr_iata"))} {esc(f.get("arr_time"))}'
