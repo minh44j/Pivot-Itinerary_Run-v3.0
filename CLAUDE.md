@@ -134,6 +134,38 @@ flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
 
+- **2026-08-20 (later) — an airport named as the carrier, and a sentence
+  printed as a baggage allowance:**
+  Real Akbar/Saudia round trip AS261349396 (MED↔RUH) shipped a card reading
+  `OPERATED BY: Saudi International Airport Airline` and `CABIN: baggage`.
+  Two independent causes. (1) The From/To column's **airport name bleeds into
+  the `Operated by:` cell** — `Operated by:Saudi International Airport , Fri, 02
+  Oct 26 …` / `Airline Saudi Arabia,` — so cutting at the first comma kept the
+  airport and the 2026-08-19 continuation re-join then appended `Airline` to it.
+  No airline's name contains "Airport", so `_AIRPORT_TAIL` now cuts the value
+  there (dropping an `International`/`Domestic`/`Regional` qualifier with it):
+  `Saudi International Airport` → `Saudi` → + `Airline` = **`Saudi Airline`**,
+  which is what the fare block states. The INBOUND leg of the same booking
+  parsed correctly **by luck** (its wrap put the weekday, not the airport, next
+  to the carrier) — one good leg is not evidence the cell parsed. (2) The Cabin
+  Baggage column carries the fare-rules sentence *"Adult 1 Piece : Short
+  conditions regarding carry-on baggage allowance details. - 1pc x 7kg"*.
+  `_m` searches **case-insensitively** and the labels had an optional colon and
+  no line anchor, so `…regarding carry-on baggage` satisfied `Carry-On` and
+  captured the next word. Labels are now **line-anchored and require their
+  colon**, which also stops a colon-less column HEADER (`Travel Class Check-In
+  Baggage Cabin Baggage`) being read as a value. (3) Per-direction baggage now
+  comes from the **ONWARD/RETURN traveller blocks** (`_akbar_direction_bags`)
+  instead of the `Airline Ref :` slice — this layout puts both flight tables
+  first and both traveller blocks after them, so the slice gave the outbound leg
+  nothing and the inbound leg the OUTBOUND block. Layouts without those headings
+  fall back to the booking-level values exactly as before. Checked baggage on
+  this booking renders `1Pcs`: the source states a piece count and the weight is
+  lost to the column bleed — incomplete, not wrong (§7). Three more of the same
+  day's bookings (8ZNLAQ, 8ZFNBC, 8XUEGZ) had shipped with `CABIN: baggage` and
+  were re-issued. 183 tests pass; regenerating the goldens changed no existing
+  value.
+
 - **2026-08-20 — split-carrier bookings: BOTH airline references now reach the
   traveller, and each leg carries its own baggage:**
   Real Akbar booking AS261347760 (Flyadeal EAM→RUH out, Saudia RUH→EAM back)
