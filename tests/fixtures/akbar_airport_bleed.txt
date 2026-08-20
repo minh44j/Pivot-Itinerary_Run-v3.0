@@ -1,0 +1,76 @@
+Name : TEST TRAVEL COMPANY
+2762 TEST STREET,SUITE 1 TEST
+Address :
+BUILDING,,TEST
+Tel : 0000000000
+Email : test@example.com
+License Category : TRAVEL AGENCY
+Ref. No: Date of Booking: Status:
+Web check-in
+AS000000002 20 August 2026 CONFIRMED
+ONWARD Madinah Riyadh
+Airline Ref : CCC333 CRS Ref : CCC444
+02 Oct 2026 | Non Stop | 01 hrs 35 mins
+Cabin Baggage
+Travel Class Check-In Baggage Adult 1 Piece : Short conditions
+Saudi Airline
+Economy Adult - 1 Piece | regarding carry-on baggage
+allowance details. - 1pc x 7kg
+Departure date &
+Flight Number From (Terminal) Stops To (Terminal) Arrival date & time
+time
+Riyadh [RUH]
+Madinah [MED]
+SV 1458 King Khaled International
+Prince Mohammed Bin Abdulaziz 09:00 Non Stop , 10:35
+Airport ,
+Operated by:Saudi International Airport , Fri, 02 Oct 26 (01h:35m) Fri, 02 Oct 26
+Airline Saudi Arabia,
+Saudi Arabia,
+Terminal 4
+RETURN Riyadh Madinah
+Airline Ref : CCC333 CRS Ref : CCC444
+04 Oct 2026 | Non Stop | 01 hrs 35 mins
+Cabin Baggage
+Travel Class Check-In Baggage Adult 1 Piece : Short conditions
+Saudi Airline
+Economy Adult - 1 Piece | regarding carry-on baggage
+allowance details. - 1pc x 7kg
+Departure date &
+Flight Number From (Terminal) Stops To (Terminal) Arrival date & time
+time
+Riyadh [RUH]
+Madinah [MED]
+SV 1457 King Khaled International
+21:25 Non Stop , Prince Mohammed Bin Abdulaziz 23:00
+Airport ,
+Operated by:Saudi Sun, 04 Oct 26 (01h:35m) International Airport , Sun, 04 Oct 26
+Airline Saudi Arabia,
+Saudi Arabia,
+Terminal 4
+Traveler(s) Information
+ONWARD
+Code Name Ticket No.
+Mr. TEST PASSENGER
+0650000000002
+Baggage
+Carry-On :Adult 1 Piece : Short conditions regarding carry-on baggage allowance details. - 1pc x 7kg
+Bag 1 Chgs May Apply if Bags Exceed Ttl Wt Allowance
+Refer to airline baggage policy for further details.
+Baggage Allowance : Adult - 1 Piece |
+Bag 1 Chgs May Apply if Bags Exceed Ttl Wt Allowance
+Refer to airline baggage policy for further details.
+RETURN
+Code Name Ticket No.
+Mr. TEST PASSENGER
+0650000000002
+Baggage
+Carry-On :Adult 1 Piece : Short conditions regarding carry-on baggage allowance details. - 1pc x 7kg
+Bag 1 Chgs May Apply if Bags Exceed Ttl Wt Allowance
+Refer to airline baggage policy for further details.
+Baggage Allowance : Adult - 1 Piece |
+Bag 1 Chgs May Apply if Bags Exceed Ttl Wt Allowance
+Refer to airline baggage policy for further details.
+Base Fare Taxes and Charges SSR Amount Total
+433.00 423.70 0.00 856.70
+Total Net Fare : 851.70

@@ -1,0 +1,89 @@
+{
+  "portal": "Akbar Travels",
+  "pnr": "CCC333",
+  "crs_ref": "CCC444",
+  "booking_ref": "AS000000002",
+  "booked_on": "20 Aug 2026",
+  "status": "Confirmed",
+  "passengers": [
+    {
+      "name": "Mr. TEST PASSENGER",
+      "ticket_no": "0650000000002",
+      "cabin_bag": "Adult 1 Piece : Short conditions regarding carry-on baggage allowance details. - 1pc x 7kg",
+      "checked_bag": "Adult - 1 Piece |",
+      "seat": ""
+    }
+  ],
+  "pnrs": [
+    "CCC333"
+  ],
+  "segments": [
+    {
+      "type": "OUTBOUND",
+      "flights": [
+        {
+          "flight_no": "SV 1458",
+          "airline": "Saudi Airline",
+          "dep_iata": "MED",
+          "arr_iata": "RUH",
+          "dep_city": "Madinah",
+          "arr_city": "Riyadh",
+          "dep_airport": "",
+          "arr_airport": "",
+          "terminal": "",
+          "arr_terminal": "",
+          "dep_time": "09:00",
+          "dep_date": "02 Oct 2026",
+          "arr_time": "10:35",
+          "arr_date": "02 Oct 2026",
+          "cabin": "Economy",
+          "duration": "1H 35M",
+          "pnr": "CCC333",
+          "pax": [
+            {
+              "name": "Mr. TEST PASSENGER",
+              "cabin_bag": "Adult 1 Piece : Short conditions regarding carry-on baggage allowance details. - 1pc x 7kg",
+              "checked_bag": "Adult - 1 Piece",
+              "seat": ""
+            }
+          ]
+        }
+      ],
+      "layovers": []
+    },
+    {
+      "type": "INBOUND",
+      "flights": [
+        {
+          "flight_no": "SV 1457",
+          "airline": "Saudi Airline",
+          "dep_iata": "RUH",
+          "arr_iata": "MED",
+          "dep_city": "Riyadh",
+          "arr_city": "Madinah",
+          "dep_airport": "",
+          "arr_airport": "",
+          "terminal": "",
+          "arr_terminal": "",
+          "dep_time": "21:25",
+          "dep_date": "04 Oct 2026",
+          "arr_time": "23:00",
+          "arr_date": "04 Oct 2026",
+          "cabin": "Economy",
+          "duration": "1H 35M",
+          "pnr": "CCC333",
+          "pax": [
+            {
+              "name": "Mr. TEST PASSENGER",
+              "cabin_bag": "Adult 1 Piece : Short conditions regarding carry-on baggage allowance details. - 1pc x 7kg",
+              "checked_bag": "Adult - 1 Piece",
+              "seat": ""
+            }
+          ]
+        }
+      ],
+      "layovers": []
+    }
+  ],
+  "journey_type": "Round Trip"
+}

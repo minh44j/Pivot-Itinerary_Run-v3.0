@@ -424,6 +424,17 @@ _IATA_DESIG = r"(?:[A-Z]{2}|[A-Z][0-9]|[0-9][A-Z])"
 _WEEKDAY_TAIL = re.compile(
     r"\s+(?:Mon|Tue|Tues|Wed|Weds|Thu|Thur|Thurs|Fri|Sat|Sun)\.?\s*$", re.I)
 
+# The From/To column's AIRPORT NAME can bleed into the same cell. Real booking
+# AS261349396 renders "Operated by:Saudi International Airport , ..." with the
+# carrier's own continuation ("Airline") on the next line, which shipped as
+# "OPERATED BY: Saudi International Airport Airline" - a carrier that does not
+# exist. No airline's name contains "Airport", so cut the value there (and drop
+# the International/Domestic/Regional qualifier in front of it) before the
+# continuation line is re-joined. "Saudi International Airport" -> "Saudi",
+# + "Airline" -> "Saudi Airline", which is what the fare block states.
+_AIRPORT_TAIL = re.compile(
+    r"\s*(?:\b(?:International|Domestic|Regional)\b\s*)?\bAirports?\b.*$", re.I)
+
 _COUNTRY_TAIL = re.compile(
     r"\s*(?:Saudi\s*Arabia|Pakistan|India|T[uü]rkiye|Turkey|United\s*Arab\s*Emirates|"
     r"Qatar|Kuwait|Bahrain|Oman|Egypt|Jordan|Nepal|Bangladesh|Sri\s*Lanka|Maldives|"
@@ -468,6 +479,7 @@ def _akbar_airline(detail):
         return ""
     val = m.group(1).split(",")[0]
     val = _WEEKDAY_TAIL.sub("", val.strip())
+    val = _AIRPORT_TAIL.sub("", val.strip())
     val = _COUNTRY_TAIL.sub("", val.strip())
     # The cell can WRAP: real booking 8CP5SK renders
     #     Operated by:Saudi Mon, 24 Aug 26 (02h:45m) Egypt, Mon, 24 Aug 26
@@ -484,6 +496,42 @@ def _akbar_airline(detail):
     # An airline name is at most a few words; anything longer means the column
     # bled and the tail is not part of the carrier's name.
     return " ".join(val.split()[:4])
+
+
+def _akbar_direction_bags(t):
+    """Per-direction baggage, keyed ONWARD / RETURN.
+
+    Akbar states each direction's real allowance in a "Traveler(s) Information"
+    block introduced by a bare ONWARD / RETURN heading:
+
+        RETURN
+        Code Name Ticket No.
+        ...
+        Carry-On :Adult 1 PC : 1 Piece equal 7 Kg
+        Baggage Allowance : Adult - 1 PC | 1 Piece equal 23 Kg
+
+    These blocks are NOT inside the direction's own "Airline Ref :" slice --
+    booking AS261349396 puts both flight tables first and both traveller blocks
+    after them, so slicing on Airline Ref gave the outbound leg nothing and the
+    inbound leg the OUTBOUND block. Slice on the headings instead, which both
+    observed layouts carry. A block can also repeat EMPTY before the populated
+    copy (booking AS261347760), so take the first value that says something.
+
+    Returns {} when the document has no such headings; the caller then falls
+    back to the booking-level values, exactly as before this existed.
+    """
+    out = {}
+    heads = list(re.finditer(r"(?m)^[ \t]*(ONWARD|RETURN)[ \t]*$", t))
+    for i, h in enumerate(heads):
+        end = heads[i + 1].start() if i + 1 < len(heads) else len(t)
+        stop = re.search(r"(?m)^[ \t]*Base\s+Fare\b", t[h.end():end])
+        blk = t[h.end(): h.end() + stop.start()] if stop else t[h.end():end]
+        cab = _akbar_first_value(r"(?m)^[ \t]*Carry-?On[ \t]*:[ \t]*([^\n]*)", blk)
+        chk = _akbar_first_value(r"(?m)^[ \t]*Baggage[ \t]*Allowance[ \t]*:[ \t]*([^\n]*)", blk)
+        cur = out.setdefault(h.group(1).upper(), ["", ""])
+        cur[0] = cur[0] or cab
+        cur[1] = cur[1] or chk
+    return {k: tuple(v) for k, v in out.items() if any(v)}
 
 
 def _akbar_first_value(pattern, text):
@@ -541,15 +589,23 @@ def extract_akbar(pdf_text, ctx=None):
     # Baggage strings vary ('Adult 07 Kg' OR 'Adult 1Pc : 1 BAG UP TO 7 KG' OR the
     # Ticket-Copy layout's 'Cabin Baggage' / 'Check-In Baggage' labelled columns).
     # Capture the raw allowance line; the generator's _norm_bag pulls the kg out.
-    cabin = (_m(t, r"Cabin\s*Baggage\s*:?\s*\n?\s*(Adult[^\n]*)")
-             or _m(t, r"Carry-On\s*:?\s*([^\n]+)")
+    # Every labelled pattern is LINE-ANCHORED and requires the colon. Both were
+    # optional before, and on real booking AS261349396 that let the fare-rules
+    # sentence "...regarding carry-on baggage / allowance details..." satisfy
+    # `Carry-On` (the helper searches case-INSENSITIVELY) and `Baggage
+    # Allowance` -- the card shipped reading "CABIN: baggage". The colon-less
+    # forms are column HEADERS ("Travel Class Check-In Baggage Cabin Baggage"),
+    # never values, so demanding the colon also stops a header being read as an
+    # allowance.
+    cabin = (_m(t, r"(?m)^[ \t]*Cabin[ \t]*Baggage[ \t]*:[ \t]*\n?[ \t]*(Adult[^\n]*)")
+             or _m(t, r"(?m)^[ \t]*Carry-?On[ \t]*:[ \t]*([^\n]+)")
              or _m(t, r"Adult\s+(\d+\s*K[gG])")
              # Ticket-Copy layouts with no labelled baggage block state it inside
              # the Traveler row instead: "20 Kg 1 Piece, Cabin-07Kg + 1 Personal
              # item". Only reached when every labelled pattern above missed.
              or _m(t, r"Cabin\s*[-:]?\s*(\d+\s*K[gG])") or "Not specified")
-    checked = (_m(t, r"Check-?In\s*Baggage\s*:?\s*\n?\s*(Adult[^\n]*)")
-               or _m(t, r"Baggage Allowance\s*:?\s*([^\n]+)")
+    checked = (_m(t, r"(?m)^[ \t]*Check-?In[ \t]*Baggage[ \t]*:[ \t]*\n?[ \t]*(Adult[^\n]*)")
+               or _m(t, r"(?m)^[ \t]*Baggage[ \t]*Allowance[ \t]*:[ \t]*([^\n]+)")
                or _m(t, r"Adult\s*-\s*(\d+\s*K[gG])")
                or _m(t, r"(\d+\s*K[gG])\s+\d+\s*Piece") or "Not specified")
 
@@ -655,6 +711,16 @@ def extract_akbar(pdf_text, ctx=None):
             if line.lower().startswith(dc) and line[len(dc):].strip():
                 return dc, line[len(dc):].strip().lower()
         return None, None
+
+    dir_bags = _akbar_direction_bags(t)
+
+    def _direction(prev_lines):
+        """ONWARD / RETURN off this segment's own route header."""
+        for ln in reversed(prev_lines[-6:]):
+            mo = re.match(r"\s*(ONWARD|RETURN)\b", ln, re.I)
+            if mo:
+                return mo.group(1).upper()
+        return ""
 
     def _split_cities(prev_lines):
         # The ONWARD/RETURN route header is USUALLY the line immediately
@@ -763,15 +829,15 @@ def extract_akbar(pdf_text, ctx=None):
         # traveller could not check in for their own return leg.
         _rm = re.match(r"\s*([A-Z0-9]{5,7})\b", detail)
         seg_ref = _rm.group(1) if _rm else ""
-        # Per-DIRECTION baggage. Each direction states its own allowance in its
-        # own Traveler/Baggage block, and on a split-carrier booking the two
-        # airlines allow different amounts (32 Kg on Flyadeal, 1 x 23 Kg on
-        # Saudia). The booking-level values above are whichever block happened to
-        # match first, so applying them to both legs printed a 32 Kg allowance on
-        # a leg that does not have one (§7). Fall back to the booking-level value
-        # only when this segment states nothing of its own.
-        seg_cabin = _akbar_first_value(r"Carry-?On[ \t]*:?[ \t]*([^\n]*)", detail) or cabin
-        seg_checked = _akbar_first_value(r"Baggage[ \t]*Allowance[ \t]*:?[ \t]*([^\n]*)", detail) or checked
+        # Per-DIRECTION baggage, from the traveller block belonging to THIS
+        # direction. On a split-carrier booking the two airlines allow different
+        # amounts (32 Kg on Flyadeal, 1 x 23 Kg on Saudia), so one booking-level
+        # value would state a wrong fact for one of the legs (§7). Falls back to
+        # the booking-level value when the document carries no direction blocks.
+        _dir = _direction(prev_lines)
+        seg_cabin, seg_checked = dir_bags.get(_dir, ("", ""))
+        seg_cabin = seg_cabin or cabin
+        seg_checked = seg_checked or checked
         fkey = (re.sub(r"\s+", "", fl).upper() if fl
                 else f"{dep_iata}-{arr_iata}-{times[0] if times else i}")
         if fkey in seen_fl:                       # PDF repeats on a 2nd page

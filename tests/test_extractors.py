@@ -54,6 +54,9 @@ CASES = {
     # Traveler/Baggage block repeats empty before the populated one.
     # Real booking AS261347760 (2026-08-20).
     "akbar_split_carrier.txt":         (E.extract_akbar,   None),
+    # Airport name bleeding into the "Operated by:" cell, and fare-rules PROSE
+    # satisfying the baggage labels. Real booking AS261349396 (2026-08-20).
+    "akbar_airport_bleed.txt":         (E.extract_akbar,   None),
     # aJet "Basic" fare brand, written in mixed case unlike ECOJET/BIZJET/PREMIUM.
     # Regression for the round trip that rendered Economy outbound and N/A
     # inbound on one document (real booking 4B0NA3, 2026-08-15).
