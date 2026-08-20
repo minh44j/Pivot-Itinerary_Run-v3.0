@@ -21,6 +21,9 @@
       "seat": ""
     }
   ],
+  "pnrs": [
+    "AKG9TS"
+  ],
   "segments": [
     {
       "type": "FLIGHT",
@@ -41,7 +44,22 @@
           "arr_time": "14:00",
           "arr_date": "25 Aug 2026",
           "cabin": "Economy",
-          "duration": "2H 50M"
+          "duration": "2H 50M",
+          "pnr": "AKG9TS",
+          "pax": [
+            {
+              "name": "Mr. JOHN DOE",
+              "cabin_bag": "07Kg",
+              "checked_bag": "20 Kg",
+              "seat": ""
+            },
+            {
+              "name": "Mrs. JANE DOE",
+              "cabin_bag": "07Kg",
+              "checked_bag": "20 Kg",
+              "seat": ""
+            }
+          ]
         },
         {
           "flight_no": "G9 530",
@@ -59,7 +77,22 @@
           "arr_time": "22:40",
           "arr_date": "25 Aug 2026",
           "cabin": "Economy",
-          "duration": "4H 15M"
+          "duration": "4H 15M",
+          "pnr": "AKG9TS",
+          "pax": [
+            {
+              "name": "Mr. JOHN DOE",
+              "cabin_bag": "07Kg",
+              "checked_bag": "20 Kg",
+              "seat": ""
+            },
+            {
+              "name": "Mrs. JANE DOE",
+              "cabin_bag": "07Kg",
+              "checked_bag": "20 Kg",
+              "seat": ""
+            }
+          ]
         }
       ],
       "layovers": [

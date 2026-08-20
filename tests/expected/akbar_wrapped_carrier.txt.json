@@ -14,6 +14,9 @@
       "seat": ""
     }
   ],
+  "pnrs": [
+    "AKSVTS"
+  ],
   "segments": [
     {
       "type": "FLIGHT",
@@ -34,7 +37,16 @@
           "arr_time": "23:15",
           "arr_date": "24 Aug 2026",
           "cabin": "Economy",
-          "duration": "2H 45M"
+          "duration": "2H 45M",
+          "pnr": "AKSVTS",
+          "pax": [
+            {
+              "name": "Mr. JOHN DOE",
+              "cabin_bag": "Adult 1Pc : 1 BAG UP TO 7 KG",
+              "checked_bag": "Adult - 2 Pieces | 1 BAG UP TO 23KG",
+              "seat": ""
+            }
+          ]
         }
       ],
       "layovers": []

@@ -12,6 +12,9 @@
     }
   ],
   "status": "Confirmed",
+  "pnrs": [
+    "TESTAJ"
+  ],
   "segments": [
     {
       "type": "FLIGHT",

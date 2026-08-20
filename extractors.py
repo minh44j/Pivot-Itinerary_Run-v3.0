@@ -239,6 +239,17 @@ def _finalize(d, ctx=None):
         d["booked_on"] = ctx["date"]
     flights = d.pop("flights", [])
     _mark_next_day(flights)
+    # Every airline reference on the booking, in itinerary order, de-duplicated.
+    # Normally one; a split-carrier booking has one per operating airline and the
+    # document has to show them all (see the note in extract_akbar). Portals that
+    # never set a per-flight "pnr" fall through to the single booking-level ref,
+    # so nothing about a single-reference booking changes.
+    refs = []
+    for f in flights:
+        r = (f.get("pnr") or "").strip().upper()
+        if r and r not in refs:
+            refs.append(r)
+    d["pnrs"] = refs or ([d["pnr"].strip().upper()] if (d.get("pnr") or "").strip() else [])
     d["segments"] = group_segments(flights)
     d["journey_type"] = journey_label(flights)
     return d
@@ -475,6 +486,24 @@ def _akbar_airline(detail):
     return " ".join(val.split()[:4])
 
 
+def _akbar_first_value(pattern, text):
+    """First NON-BLANK value for a repeated labelled field inside one segment.
+
+    Akbar repeats the "Traveler(s) Information / Baggage" block within a single
+    direction, and on a split-carrier booking the first copy is EMPTY
+    ("Carry-On :" / "Baggage Allowance :" with nothing after the colon) while a
+    later copy carries the real allowance. Taking the first match would render a
+    blank; taking the last would break the single-block layouts. Take the first
+    that actually says something.
+    """
+    import re as _re
+    for v in _re.findall(pattern, text):
+        v = v.strip().strip(":|-").strip()
+        if v:
+            return v
+    return ""
+
+
 def extract_akbar(pdf_text, ctx=None):
     """Akbar Travels. Source is read PRIMARILY from the PDF attached directly
     to the 'Booking Success' email ('Ticket Copy' layout — ONWARD/RETURN
@@ -548,8 +577,15 @@ def extract_akbar(pdf_text, ctx=None):
     # Ticket numbers: 'EXKT <num>' OR a plain 10+ digit number in the Traveler
     # section (Akbar's 'Ticket No.' column). Bound to that section to avoid
     # picking up fare/footer numbers.
-    trav = t[t.find("Traveler"):] if "Traveler" in t else t
-    trav = trav[:trav.find("Carry-On")] if "Carry-On" in trav else trav
+    # 2026-08-20 fix (split-carrier round trip AS261347760): the window used to
+    # run from the first "Traveler" to the first "Carry-On". On a two-airline
+    # booking Akbar prints ONE Traveler table per direction, and the FIRST one
+    # carries no "Ticket No." column at all ("Code Name" only) — the number lives
+    # in the SECOND table, far past that first "Carry-On", so every passenger on
+    # such a booking rendered "Not specified". Read every Traveler block instead,
+    # each bounded by the fare table / next segment that follows it.
+    trav = "".join(m.group(0) for m in re.finditer(
+        r"Traveler[\s\S]*?(?=Base\s*Fare|Airline\s*Ref|\Z)", t)) or t
     # A leading \b fails when the ticket is fused to the name ("DOE1234567890"),
     # because letter->digit is not a word boundary. Guard on "not a digit either
     # side" instead so both the fused and the spaced layouts are found. The rows
@@ -718,6 +754,24 @@ def extract_akbar(pdf_text, ctx=None):
         dm = (re.search(r"\((\d{1,2})h:?(\d{2})m\)", detail, re.I)
               or re.search(r"(\d+)\s*hrs?\s*(\d+)\s*min", detail, re.I))
         dep_iata, arr_iata = city2iata.get(dep_c, ""), city2iata.get(arr_c, "")
+        # Per-segment airline reference. It is the value we just split on, so it
+        # sits at the very start of this segment's detail text. On a normal
+        # booking every segment repeats the SAME ref; on a split-carrier booking
+        # (two airlines under one agency ref) each direction has its own — real
+        # booking AS261347760: Flyadeal B9PS6D out, Saudia 8XMVR7 back. The
+        # return ref used to appear nowhere on the client document, so the
+        # traveller could not check in for their own return leg.
+        _rm = re.match(r"\s*([A-Z0-9]{5,7})\b", detail)
+        seg_ref = _rm.group(1) if _rm else ""
+        # Per-DIRECTION baggage. Each direction states its own allowance in its
+        # own Traveler/Baggage block, and on a split-carrier booking the two
+        # airlines allow different amounts (32 Kg on Flyadeal, 1 x 23 Kg on
+        # Saudia). The booking-level values above are whichever block happened to
+        # match first, so applying them to both legs printed a 32 Kg allowance on
+        # a leg that does not have one (§7). Fall back to the booking-level value
+        # only when this segment states nothing of its own.
+        seg_cabin = _akbar_first_value(r"Carry-?On[ \t]*:?[ \t]*([^\n]*)", detail) or cabin
+        seg_checked = _akbar_first_value(r"Baggage[ \t]*Allowance[ \t]*:?[ \t]*([^\n]*)", detail) or checked
         fkey = (re.sub(r"\s+", "", fl).upper() if fl
                 else f"{dep_iata}-{arr_iata}-{times[0] if times else i}")
         if fkey in seen_fl:                       # PDF repeats on a 2nd page
@@ -753,6 +807,10 @@ def extract_akbar(pdf_text, ctx=None):
             "arr_time": times[1] if len(times) > 1 else "", "arr_date": to_ddmon(dates[1]) if len(dates) > 1 else "",
             "cabin": default_class,
             "duration": f"{int(dm.group(1))}H {int(dm.group(2)):02d}M" if dm else "",
+            "pnr": seg_ref,
+            "pax": [{"name": p.get("name", ""), "cabin_bag": seg_cabin,
+                     "checked_bag": seg_checked, "seat": ""}
+                    for p in d["passengers"]],
         })
     d["flights"] = flights
     return _finalize(d, ctx)

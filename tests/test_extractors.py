@@ -48,6 +48,12 @@ CASES = {
     # date column bleeds onto the first, so the carrier arrived as "Saudi Mon".
     # Real booking 8CP5SK (2026-08-19).
     "akbar_wrapped_carrier.txt":       (E.extract_akbar,   None),
+    # SPLIT-CARRIER round trip: two airlines under one agency ref, so each
+    # direction has its OWN airline reference and its OWN baggage allowance, the
+    # first Traveler table has no "Ticket No." column at all, and the second
+    # Traveler/Baggage block repeats empty before the populated one.
+    # Real booking AS261347760 (2026-08-20).
+    "akbar_split_carrier.txt":         (E.extract_akbar,   None),
     # aJet "Basic" fare brand, written in mixed case unlike ECOJET/BIZJET/PREMIUM.
     # Regression for the round trip that rendered Economy outbound and N/A
     # inbound on one document (real booking 4B0NA3, 2026-08-15).

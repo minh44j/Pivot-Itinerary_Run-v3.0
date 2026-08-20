@@ -12,6 +12,9 @@
       "checked_bag": "1 piece x 23 kg"
     }
   ],
+  "pnrs": [
+    "TESTA1"
+  ],
   "segments": [
     {
       "type": "OUTBOUND",

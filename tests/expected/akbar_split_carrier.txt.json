@@ -1,0 +1,90 @@
+{
+  "portal": "Akbar Travels",
+  "pnr": "AAA111",
+  "crs_ref": "AAA111",
+  "booking_ref": "AS000000001",
+  "booked_on": "20 Aug 2026",
+  "status": "Confirmed",
+  "passengers": [
+    {
+      "name": "Mr. TEST PASSENGER",
+      "ticket_no": "0650000000001",
+      "cabin_bag": "Adult 07 Kg",
+      "checked_bag": "Adult - 32 Kg",
+      "seat": ""
+    }
+  ],
+  "pnrs": [
+    "AAA111",
+    "BBB222"
+  ],
+  "segments": [
+    {
+      "type": "OUTBOUND",
+      "flights": [
+        {
+          "flight_no": "F3 74",
+          "airline": "Flyadeal",
+          "dep_iata": "EAM",
+          "arr_iata": "RUH",
+          "dep_city": "Najran",
+          "arr_city": "Riyadh",
+          "dep_airport": "",
+          "arr_airport": "",
+          "terminal": "",
+          "arr_terminal": "",
+          "dep_time": "11:25",
+          "dep_date": "02 Oct 2026",
+          "arr_time": "13:15",
+          "arr_date": "02 Oct 2026",
+          "cabin": "Economy",
+          "duration": "1H 50M",
+          "pnr": "AAA111",
+          "pax": [
+            {
+              "name": "Mr. TEST PASSENGER",
+              "cabin_bag": "Adult 07 Kg",
+              "checked_bag": "Adult - 32 Kg",
+              "seat": ""
+            }
+          ]
+        }
+      ],
+      "layovers": []
+    },
+    {
+      "type": "INBOUND",
+      "flights": [
+        {
+          "flight_no": "SV 1847",
+          "airline": "Saudi Airline",
+          "dep_iata": "RUH",
+          "arr_iata": "EAM",
+          "dep_city": "Riyadh",
+          "arr_city": "Najran",
+          "dep_airport": "",
+          "arr_airport": "",
+          "terminal": "",
+          "arr_terminal": "",
+          "dep_time": "20:30",
+          "dep_date": "04 Oct 2026",
+          "arr_time": "22:15",
+          "arr_date": "04 Oct 2026",
+          "cabin": "Economy",
+          "duration": "1H 45M",
+          "pnr": "BBB222",
+          "pax": [
+            {
+              "name": "Mr. TEST PASSENGER",
+              "cabin_bag": "Adult 1 PC : 1 Piece equal 7 Kg",
+              "checked_bag": "Adult - 1 PC | 1 Piece equal 23 Kg",
+              "seat": ""
+            }
+          ]
+        }
+      ],
+      "layovers": []
+    }
+  ],
+  "journey_type": "Round Trip"
+}

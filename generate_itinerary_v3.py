@@ -43,7 +43,28 @@ def _weekday_date(date_str: str) -> str:
         return date_str
 
 
-def _segment_header(seg_type: str, flights: list) -> str:
+def booking_refs(data: dict) -> list:
+    """Every airline reference on the booking, in itinerary order.
+
+    Almost always a single value. A SPLIT-CARRIER booking — two airlines sold
+    under one agency reference, e.g. Flyadeal out / Saudia back on Akbar booking
+    AS261347760 — carries one reference per airline, and a traveller cannot check
+    in for a leg whose reference is not on their document. Extractors put the
+    list on data["pnrs"]; anything that predates that key falls back to the
+    single data["pnr"], so single-reference documents are unaffected.
+    """
+    refs = [str(r).strip() for r in (data.get("pnrs") or []) if str(r).strip()]
+    if not refs:
+        one = str(data.get("pnr") or "").strip()
+        refs = [one] if one else []
+    out = []
+    for r in refs:
+        if r.upper() not in {x.upper() for x in out}:
+            out.append(r)
+    return out
+
+
+def _segment_header(seg_type: str, flights: list, seg_pnr: str = "") -> str:
     if not flights:
         return ""
     first    = flights[0]
@@ -54,10 +75,16 @@ def _segment_header(seg_type: str, flights: list) -> str:
     label    = seg_type.upper()
     route    = f"{dep_city} TO {arr_city}"
     full_date = _weekday_date(dep_date)
+    # seg_pnr is passed ONLY when the booking carries more than one reference —
+    # repeating the single ref that already sits in the header would be noise.
+    # The single-reference markup below is byte-identical to the locked original.
+    right = (f'<span class="seg-meta"><span class="seg-pnr">PNR {seg_pnr}</span>'
+             f'<span class="seg-date">{full_date}</span></span>') if seg_pnr else \
+            f'<span class="seg-date">{full_date}</span>'
     return f"""
     <div class="seg-header">
       <span class="seg-route">&#x2794; {label} &mdash; {route}</span>
-      <span class="seg-date">{full_date}</span>
+      {right}
     </div>"""
 
 
@@ -361,6 +388,12 @@ _STATUS_PILL = {
 
 def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
     pnr          = data.get("pnr", "N/A")
+    # Split-carrier bookings carry one airline reference per airline; both must
+    # reach the traveller (see booking_refs). A single-reference booking gives a
+    # one-item list and every string below is exactly what it always was.
+    refs         = booking_refs(data) or [pnr]
+    pnr_display  = " / ".join(refs)
+    pnr_label    = "PNR Reference" if len(refs) < 2 else "PNR References"
     booking_ref  = data.get("booking_ref") or ""
     crs_ref      = data.get("crs_ref") or ""
     booked_on    = data.get("booked_on", "N/A")
@@ -469,13 +502,16 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
     for grp in seg_groups:
         flights  = grp.get("flights", [])
         layovers = grp.get("layovers", [])
-        segs_html += _segment_header(grp.get("type", "ONE-WAY"), flights)
+        # Show the leg's own reference on the banner only when the booking has
+        # more than one — that is the leg a traveller checks in with.
+        _seg_ref = (flights[0].get("pnr") or "") if (flights and len(refs) > 1) else ""
+        segs_html += _segment_header(grp.get("type", "ONE-WAY"), flights, _seg_ref)
         for fi, flight in enumerate(flights):
             segs_html += _flight_card(flight, standalone=(fi > 0))
             if fi < len(layovers):
                 segs_html += _layover_bar(layovers[fi])
 
-    footer_line  = f'PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; {pnr} &nbsp;|&nbsp; WWW.PIVOT-TRAVELS.COM'
+    footer_line  = f'PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; {pnr_display} &nbsp;|&nbsp; WWW.PIVOT-TRAVELS.COM'
     # Legal identifiers on their own second line (conventional place for them).
     # VAT is appended ONLY when COMPANY_VAT is set — see the note by that constant.
     _reg = f'CR {COMPANY_CR}'
@@ -507,8 +543,8 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
         <div class="doc-label">{_pill['sub']}</div>
       </div>
       <div class="pnr-block">
-        <div class="pnr-value">{pnr}</div>
-        <div class="pnr-label">PNR Reference</div>
+        <div class="pnr-value">{pnr_display}</div>
+        <div class="pnr-label">{pnr_label}</div>
       </div>
     </div>
   </div>"""
@@ -578,7 +614,7 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Booking Confirmation — {pnr}</title>
+<title>Booking Confirmation — {pnr_display}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -884,6 +920,24 @@ body {{
   font-weight: 500;
   color: #e8e2d2;
   letter-spacing: 0.5px;
+}}
+/* Right-hand group on the banner. Only rendered on split-carrier bookings —
+   see _segment_header — so single-reference documents keep the locked markup. */
+.seg-meta {{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}}
+.seg-pnr {{
+  font-size: 7.5px;
+  font-weight: 700;
+  letter-spacing: 1.6px;
+  color: #e0c675;
+  text-transform: uppercase;
+  border: 1px solid rgba(201,168,76,0.45);
+  border-radius: 20px;
+  padding: 2px 9px;
+  white-space: nowrap;
 }}
 
 /* ── Flight card ── */
@@ -1265,7 +1319,12 @@ def build_pdf(booking_data: dict, out_dir: str, project_dir: str = None) -> str:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     pnr = booking_data.get("pnr", "UNKNOWN")
-    pdf_path = out_dir / f"{pnr}.pdf"
+    # File name carries EVERY airline reference on the booking, so a split-carrier
+    # round trip is findable by either one (B9PS6D-8XMVR7.pdf). Single-reference
+    # bookings are named exactly as before.
+    _safe = lambda v: "".join(c for c in str(v) if c.isalnum() or c in "_-")
+    _stem = "-".join(_safe(r) for r in booking_refs(booking_data) if _safe(r)) or _safe(pnr) or "UNKNOWN"
+    pdf_path = out_dir / f"{_stem}.pdf"
 
     # No explicit margin → the CSS @page rules apply (page 1 full-bleed,
     # pages 2+ get a 12mm top margin).
@@ -1297,7 +1356,7 @@ def build_pdf(booking_data: dict, out_dir: str, project_dir: str = None) -> str:
         #                                         then T&C, then ONE footer pinned
         #                                         to the bottom of the last page.
         m_html = _write(build_html(booking_data, project_dir=project_dir, layout="measure"))
-        m_pdf  = str(out_dir / f".{pnr}_measure.pdf")
+        m_pdf  = str(out_dir / f".{_stem}_measure.pdf")
         page.goto(f"file://{m_html}", wait_until="networkidle")
         page.pdf(path=m_pdf, **pdf_opts)
         os.unlink(m_html)

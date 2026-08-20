@@ -81,6 +81,11 @@ for the CONFIRMED status only. Fonts: **Cormorant Garamond** (display/figures) +
   `OPERATED BY` was removed with it on 2026-07-30 and **restored by request the same day** (the
   operating carrier can differ from the marketing one, so it earns its own pill).
   Passenger card is now just `PASSENGER NAME | TICKET NO.`, so long names no longer wrap.
+- **Split-carrier bookings** (approved 2026-08-20): when a booking carries more than one
+  airline reference, the header shows them joined (`B9PS6D / 8XMVR7`) under the label
+  `PNR References`, and each segment banner gains a gold outlined `PNR <ref>` chip beside its
+  date. Both are **suppressed entirely** on single-reference bookings, whose markup stays
+  byte-identical to the locked original.
 - **Terms & Conditions:** static 8-clause page, always issued by "Pivot Travel Management".
 - **Pagination (two-pass in `build_pdf`):** *Layout A* (itinerary fits 1 page → page 1 itinerary +
   footer, page 2 T&C + footer). *Layout B* (spills → cards flow, T&C fills the tail, one footer
@@ -110,6 +115,10 @@ segments[]:  { type: Outbound|Inbound, flights[]: { dep_iata, arr_iata, dep_city
                pax[]: { name, cabin_bag, checked_bag, seat }   # PER-LEG (2026-07-30)
              }, layovers[]: {airport,duration} }
 ```
+Split-carrier bookings (two airlines, one agency ref) additionally carry
+`pnrs[]` (ordered, de-duplicated) and a per-flight `pnr`; `generate_itinerary_v3.booking_refs()`
+is the single reader. Single-reference bookings get a one-item list and render unchanged.
+
 Generator normalises: journey type → ONE-WAY/ROUND TRIP only; names → Title Case; baggage →
 weight-only ("7kg", "7kg + 3kg", "1Pcs") — **plus the piece count when the source states more
 than one piece for a single weight** ("2 × 23kg", approved 2026-08-19; weight alone understated a
@@ -124,6 +133,34 @@ review, do not produce a PDF**. `qc_check()` gates this (missing PNR / passenger
 flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
+
+- **2026-08-20 — split-carrier bookings: BOTH airline references now reach the
+  traveller, and each leg carries its own baggage:**
+  Real Akbar booking AS261347760 (Flyadeal EAM→RUH out, Saudia RUH→EAM back)
+  sells two airlines under ONE agency reference, and each airline issues its own
+  record locator — `B9PS6D` outbound, `8XMVR7` inbound. The PDF showed only the
+  first, so the traveller had **nothing to check in with on the return leg**.
+  Three defects, all from treating a two-airline booking as if it had one of
+  everything: (1) one reference; (2) one baggage allowance applied to both legs —
+  the document claimed **32 Kg on a Saudia leg that allows 1 × 23 Kg**, a wrong
+  fact rather than a missing one (§7); (3) **no ticket number** — the search
+  window ran from the first `Traveler` to the first `Carry-On`, and on this
+  layout the first Traveler table has no `Ticket No.` column at all (the number
+  sits in the second one, past that cut). Fixes: `extract_akbar` captures the
+  per-segment `Airline Ref` onto each flight (`flight["pnr"]`) and reads each
+  direction's OWN `Carry-On :` / `Baggage Allowance :` values into a per-leg
+  `pax[]` (Akbar's block repeats EMPTY before the populated copy, so
+  `_akbar_first_value` takes the first non-blank); the ticket window now spans
+  every `Traveler` block. `_finalize` publishes the ordered, de-duplicated
+  `pnrs` list for **every** portal, so one-airline bookings simply get a one-item
+  list. **Approved design change** (asked and confirmed): both references render
+  in the header (`AAA111 / BBB222`, label becomes `PNR References`), a gold
+  `PNR <ref>` chip sits on **each segment banner**, the footer lists both, and
+  the file is named `B9PS6D-8XMVR7.pdf`. All of it is conditional on there being
+  more than one reference — a single-reference booking's HTML was verified
+  **byte-identical** across all three layouts (A / B / measure) on four real
+  Akbar fixtures. Goldens regenerated: **zero existing values changed**, only
+  the new keys added. 167 tests pass.
 
 - **2026-08-19 (later) — "OPERATED BY: Saudi Mon" — a carrier that does not exist:**
   Booking 8CP5SK shipped naming the operator **`Saudi Mon`**. The real Akbar PDF renders

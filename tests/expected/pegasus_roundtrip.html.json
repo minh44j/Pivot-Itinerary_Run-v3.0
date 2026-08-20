@@ -12,6 +12,9 @@
       "seat": "14A"
     }
   ],
+  "pnrs": [
+    "PGTST1"
+  ],
   "segments": [
     {
       "type": "OUTBOUND",

@@ -14,6 +14,9 @@
       "seat": ""
     }
   ],
+  "pnrs": [
+    "AKF3TS"
+  ],
   "segments": [
     {
       "type": "FLIGHT",
@@ -34,7 +37,16 @@
           "arr_time": "17:55",
           "arr_date": "23 Jul 2026",
           "cabin": "Economy",
-          "duration": "2H 10M"
+          "duration": "2H 10M",
+          "pnr": "AKF3TS",
+          "pax": [
+            {
+              "name": "Mr. TEST TRAVELER",
+              "cabin_bag": "Adult 7 Kg",
+              "checked_bag": "0 Kg",
+              "seat": ""
+            }
+          ]
         }
       ],
       "layovers": []

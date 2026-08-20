@@ -40,7 +40,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 
 import extractors
-from generate_itinerary_v3 import build_pdf
+from generate_itinerary_v3 import build_pdf, booking_refs
 
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
@@ -372,7 +372,10 @@ def _build_email_body(data, source_ref=""):
     present on `data` (no extra extraction). Every missing value renders 'N/A'.
     The confirmation PDF itself is attached; this body is the at-a-glance copy."""
     lines = []
-    lines.append(f"PNR: {_b(data.get('pnr'))}")
+    # A split-carrier booking has one airline reference per airline; list them all
+    # so the desk can check in on either leg (see generate_itinerary_v3.booking_refs).
+    _refs = booking_refs(data)
+    lines.append(f"PNR: {_b(' / '.join(_refs) if _refs else data.get('pnr'))}")
     booking_ref = (data.get("booking_ref") or "").strip()
     if booking_ref and booking_ref != (data.get("pnr") or "").strip():
         lines.append(f"Booking Ref: {booking_ref}")
@@ -450,7 +453,9 @@ def _confirmation_html(data, source_ref="", logo_cid=None):
 
     rows = ""
     rows += sect("BOOKING")
-    rows += kv("PNR", esc(data.get("pnr")), bold=True)
+    _refs = booking_refs(data)
+    rows += kv("PNR" if len(_refs) < 2 else "PNRs",
+               esc(" / ".join(_refs) if _refs else data.get("pnr")), bold=True)
     br = (data.get("booking_ref") or "").strip()
     if br and br != pnr_raw:
         rows += kv("BOOKING REF", esc(br))
@@ -509,7 +514,7 @@ def _confirmation_html(data, source_ref="", logo_cid=None):
     rows += sect("META")
     if source_ref:
         rows += kv("SOURCE REF", esc(source_ref))
-    rows += kv("ATTACHMENT", f"{esc(data.get('pnr'))}.pdf")
+    rows += kv("ATTACHMENT", f"{esc('-'.join(booking_refs(data)) or data.get('pnr'))}.pdf")
 
     return f'''<!DOCTYPE html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">

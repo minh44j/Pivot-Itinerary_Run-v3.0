@@ -1,0 +1,80 @@
+Name : TEST TRAVEL COMPANY
+2762 TEST STREET,SUITE 1 TEST
+Address :
+BUILDING,,TEST
+Tel : 0000000000
+Email : test@example.com
+License Category : TRAVEL AGENCY
+Ref. No: Date of Booking: Status:
+AS000000001 20 August 2026 CONFIRMED
+ONWARD Najran Riyadh
+Airline Ref : AAA111 CRS Ref : AAA111
+02 Oct 2026 | Non Stop | 01 hrs 50 mins
+Travel Class Check-In Baggage Cabin Baggage
+Flyadeal
+Economy Adult - 32 Kg Adult 07 Kg
+Departure date &
+Flight Number From (Terminal) Stops To (Terminal) Arrival date & time
+time
+Riyadh [RUH]
+F3 74 Najran [EAM] 11:25 Non Stop , King Khaled International Airport 13:15
+Najran Domestic Airport , ,
+Fri, 02 Oct 26 (01h:50m) Fri, 02 Oct 26
+Operated by:Flyadeal Saudi Arabia, Saudi Arabia,
+Terminal 3
+Traveler(s) Information
+ONWARD
+Code Name
+Mr. TEST PASSENGER
+Baggage
+Carry-On :Adult 07 Kg
+Bag 1 Chgs May Apply if Bags Exceed Ttl Wt Allowance
+Refer to airline baggage policy for further details.
+Baggage Allowance : Adult - 32 Kg
+Bag 1 Chgs May Apply if Bags Exceed Ttl Wt Allowance
+Refer to airline baggage policy for further details.
+Base Fare Taxes and Charges SSR Amount Total
+117.40 351.60 0.00 469.00
+Total Net Fare : 1000
+Name : TEST TRAVEL COMPANY
+Ref. No: Date of Booking: Status:
+AS000000001 20 August 2026 CONFIRMED
+Web check-in
+RETURN Riyadh Najran
+Airline Ref : BBB222 CRS Ref : BBB222
+04 Oct 2026 | Non Stop | 01 hrs 45 mins
+Check-In Baggage
+Travel Class Cabin Baggage
+Saudi Airline Adult - 1 PC | 1 Piece equal 23
+Economy Adult 1 PC : 1 Piece equal 7 Kg
+Kg
+Departure date &
+Flight Number From (Terminal) Stops To (Terminal) Arrival date & time
+time
+SV 1847 (AIRBUS JET Riyadh [RUH]
+320) King Khaled International Airport 20:30 Non Stop , Najran [EAM] 22:15
+Najran Domestic Airport ,
+Operated by:Saudi , Sun, 04 Oct 26 (01h:45m) Saudi Arabia, Sun, 04 Oct 26
+Airline Saudi Arabia,
+Traveler(s) Information
+Baggage
+Carry-On :
+Bag 1 Chgs May Apply if Bags Exceed Ttl Wt Allowance
+Refer to airline baggage policy for further details.
+Baggage Allowance :
+Bag 1 Chgs May Apply if Bags Exceed Ttl Wt Allowance
+Refer to airline baggage policy for further details.
+RETURN
+Code Name Ticket No.
+Mr. TEST PASSENGER
+0650000000001
+Baggage
+Carry-On :Adult 1 PC : 1 Piece equal 7 Kg
+Bag 1 Chgs May Apply if Bags Exceed Ttl Wt Allowance
+Refer to airline baggage policy for further details.
+Baggage Allowance : Adult - 1 PC | 1 Piece equal 23 Kg
+Bag 1 Chgs May Apply if Bags Exceed Ttl Wt Allowance
+Refer to airline baggage policy for further details.
+Base Fare Taxes and Charges SSR Amount Total
+272.00 259.30 0.00 531.30
+Total Net Fare : 1000

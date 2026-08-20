@@ -14,6 +14,9 @@
       "seat": ""
     }
   ],
+  "pnrs": [
+    "AKTST1"
+  ],
   "segments": [
     {
       "type": "FLIGHT",
@@ -34,7 +37,16 @@
           "arr_time": "10:30",
           "arr_date": "08 Jul 2026",
           "cabin": "Economy",
-          "duration": ""
+          "duration": "",
+          "pnr": "AKTST1",
+          "pax": [
+            {
+              "name": "Mr. JOHN DOE",
+              "cabin_bag": "Adult 7 Kg",
+              "checked_bag": "Adult 20 Kg",
+              "seat": ""
+            }
+          ]
         }
       ],
       "layovers": []
