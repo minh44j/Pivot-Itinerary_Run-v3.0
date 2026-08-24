@@ -65,7 +65,7 @@ def run():
     if not portal or portal.get("source") != "drive_pdf":
         raise SystemExit("BOOKING_MSG_ID is not a PDF-portal booking email")
     src = M.akbar_attachment_text(gmail, msg)
-    data = portal["extract"](src, {"date": M._email_date_ddmon(msg)})
+    data = portal["fn"](src, {"date": M._email_date_ddmon(msg)})
 
     pax = _eticket_passengers(gmail, names_id)
     if not pax:
