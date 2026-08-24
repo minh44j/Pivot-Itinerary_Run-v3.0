@@ -1,0 +1,65 @@
+name: Manual Issue (merge e-ticket names)
+
+# Issues ONE booking whose portal PDF lacks the passenger table, by merging the
+# airline's own e-ticket receipt (names + ticket numbers) into the parsed
+# booking. Human-triggered per booking, after reading the manual-review flag.
+# The log stays PII-free: tools/manual_issue.py prints counts only.
+
+on:
+  workflow_dispatch:
+    inputs:
+      booking_message_id:
+        description: Gmail message id of the portal "Booking Success" email
+        required: true
+      names_message_id:
+        description: Gmail message id of the airline e-ticket receipt email
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  issue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-${{ runner.os }}-1.62.0
+
+      - name: Install Playwright Chromium
+        run: |
+          for i in 1 2 3; do
+            if python -m playwright install --with-deps chromium; then exit 0; fi
+            echo "playwright install attempt $i failed — retrying"
+            sleep 10
+          done
+          echo "::error::could not install Chromium after 3 attempts"
+          exit 1
+
+      - name: Issue booking
+        env:
+          GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
+          IMPERSONATE_USER: ${{ secrets.IMPERSONATE_USER }}
+          SENDER_USER: ${{ secrets.SENDER_USER }}
+          DRIVE_OUTPUT_FOLDER: ${{ secrets.DRIVE_OUTPUT_FOLDER }}
+          NOTIFY_TO: ${{ secrets.NOTIFY_TO }}
+          BOOKING_MSG_ID: ${{ github.event.inputs.booking_message_id }}
+          NAMES_MSG_ID: ${{ github.event.inputs.names_message_id }}
+        run: python tools/manual_issue.py
