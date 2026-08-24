@@ -39,11 +39,13 @@ def _eticket_passengers(gmail, msg_id):
     """
     msg = gmail.users().messages().get(userId="me", id=msg_id, format="full")\
         .execute(num_retries=M.API_RETRIES)
-    text = M._plain_body(msg)
+    # _plain_body returns the RAW HTML — flatten it the same way the body
+    # extractors do, so the name and its e-Ticket line sit on adjacent lines.
+    text = M._html_to_text(M._plain_body(msg))
     pax, seen = [], set()
     for mo in re.finditer(
             r"\b((?:Mr|Mrs|Ms|Mstr|Master|Miss|Dr)\.?\s*[A-Z][A-Za-z .'\-]+?)\s*"
-            r"[\r\n|]+\s*e-?Ticket\s*:?\s*(\d{10,})", text):
+            r"[\s|]+e-?Ticket\s*:?\s*(\d{10,})", text):
         name = re.sub(r"\s+", " ", mo.group(1)).strip()
         # Saudia writes "Mr.Abdulaziz" with no space after the title's period
         name = re.sub(r"^((?:Mr|Mrs|Ms|Mstr|Master|Miss|Dr)\.)(?=\S)", r"\1 ", name)
