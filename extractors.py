@@ -1412,6 +1412,13 @@ def qc_check(d):
 # the document itself stated always wins, and an IATA not listed here simply
 # renders no name, exactly as today. Add codes as new routes appear.
 AIRPORT_NAMES = {
+    # Southeast Asia (first sold 2026-08-24, multi-city 873UGS RUH-HKT/BKK-RUH)
+    "BKK": "Suvarnabhumi Airport",
+    "DMK": "Don Mueang International Airport",
+    "HKT": "Phuket International Airport",
+    "KUL": "Kuala Lumpur International Airport",
+    "SIN": "Singapore Changi Airport",
+    "CGK": "Soekarno-Hatta International Airport",
     # Saudi Arabia
     "JED": "King Abdulaziz International Airport",
     "RUH": "King Khalid International Airport",
