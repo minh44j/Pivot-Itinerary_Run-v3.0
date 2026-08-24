@@ -702,7 +702,10 @@ def extract_akbar(pdf_text, ctx=None):
                    "jul", "aug", "sep", "oct", "nov", "dec"}
 
     def _split_cities_line(line):
-        line = re.sub(r"^\s*(?:ONWARD|RETURN)\s+", "", line.strip(), flags=re.I)
+        # Multi-city bookings label segments "TRIP 1" / "TRIP 2" instead of
+        # ONWARD/RETURN (first seen on AS261373110, RUH-HKT out / BKK-RUH back,
+        # 2026-08-24). Same header shape, different word — strip either.
+        line = re.sub(r"^\s*(?:ONWARD|RETURN|TRIP\s*\d+)\s+", "", line.strip(), flags=re.I)
         # 2026-07-06 fix: pdfplumber may render the Akbar Ticket-Copy arrow
         # image as a Unicode arrow character (e.g. →) between city names.
         # Normalise any such character to a plain space so city matching works.
@@ -715,11 +718,11 @@ def extract_akbar(pdf_text, ctx=None):
     dir_bags = _akbar_direction_bags(t)
 
     def _direction(prev_lines):
-        """ONWARD / RETURN off this segment's own route header."""
+        """ONWARD / RETURN / TRIP<n> off this segment's own route header."""
         for ln in reversed(prev_lines[-6:]):
-            mo = re.match(r"\s*(ONWARD|RETURN)\b", ln, re.I)
+            mo = re.match(r"\s*(ONWARD|RETURN|TRIP\s*\d+)\b", ln, re.I)
             if mo:
-                return mo.group(1).upper()
+                return re.sub(r"\s+", "", mo.group(1)).upper()
         return ""
 
     def _split_cities(prev_lines):
@@ -836,6 +839,16 @@ def extract_akbar(pdf_text, ctx=None):
         # the booking-level value when the document carries no direction blocks.
         _dir = _direction(prev_lines)
         seg_cabin, seg_checked = dir_bags.get(_dir, ("", ""))
+        # The multi-city (TRIP n) layout has ONE traveller block for the whole
+        # booking, so there are no per-direction ONWARD/RETURN blocks to read —
+        # but each TRIP's own fare header states that trip's allowance
+        # ("Economy Adult - 2 Piece | Child - 2 Piece |" on trip 1 vs
+        # "... 1 Piece ..." on trip 2, real booking AS261373110). Read it from
+        # THIS segment's slice. Gated on TRIP so the two long-standing layouts
+        # keep their exact current behaviour.
+        if _dir.startswith("TRIP"):
+            seg_checked = seg_checked or _m(detail, r"(?m)^[^\n]*?\b(Adult\s*-\s*\d+\s*(?:Pieces?|Pcs?|PC)\b[^\n]*)")
+            seg_cabin = seg_cabin or _m(detail, r"(\d+\s*pcs?\s*x\s*\d+\s*K[gG])")
         seg_cabin = seg_cabin or cabin
         seg_checked = seg_checked or checked
         fkey = (re.sub(r"\s+", "", fl).upper() if fl

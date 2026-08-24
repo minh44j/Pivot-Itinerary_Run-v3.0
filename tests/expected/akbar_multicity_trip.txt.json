@@ -1,0 +1,88 @@
+{
+  "portal": "Akbar Travels",
+  "pnr": "DDD444",
+  "crs_ref": "DDD555",
+  "booking_ref": "AS000000003",
+  "booked_on": "24 Aug 2026",
+  "status": "Confirmed",
+  "passengers": [
+    {
+      "name": "Not specified",
+      "ticket_no": "Not specified",
+      "cabin_bag": "Adult 1 Piece , Child 1 Piece : Short conditions regarding carry-on baggage allowance details. - 1pc x 7kg",
+      "checked_bag": "Adult - 2 Piece | Child - 2 Piece |"
+    }
+  ],
+  "pnrs": [
+    "DDD444"
+  ],
+  "segments": [
+    {
+      "type": "OUTBOUND",
+      "flights": [
+        {
+          "flight_no": "SV 852",
+          "airline": "Saudi Airline",
+          "dep_iata": "RUH",
+          "arr_iata": "HKT",
+          "dep_city": "Riyadh",
+          "arr_city": "Phuket",
+          "dep_airport": "",
+          "arr_airport": "",
+          "terminal": "",
+          "arr_terminal": "",
+          "dep_time": "10:50",
+          "dep_date": "18 Sep 2026",
+          "arr_time": "22:20",
+          "arr_date": "18 Sep 2026",
+          "cabin": "Economy",
+          "duration": "7H 30M",
+          "pnr": "DDD444",
+          "pax": [
+            {
+              "name": "Not specified",
+              "cabin_bag": "1pc x 7kg",
+              "checked_bag": "Adult - 2 Piece | Child - 2 Piece |",
+              "seat": ""
+            }
+          ]
+        }
+      ],
+      "layovers": []
+    },
+    {
+      "type": "INBOUND",
+      "flights": [
+        {
+          "flight_no": "SV 847",
+          "airline": "Saudi Airline",
+          "dep_iata": "BKK",
+          "arr_iata": "RUH",
+          "dep_city": "Bangkok",
+          "arr_city": "Riyadh",
+          "dep_airport": "",
+          "arr_airport": "",
+          "terminal": "",
+          "arr_terminal": "",
+          "dep_time": "15:25",
+          "dep_date": "26 Sep 2026",
+          "arr_time": "18:50",
+          "arr_date": "26 Sep 2026",
+          "cabin": "Economy",
+          "duration": "7H 25M",
+          "pnr": "DDD444",
+          "pax": [
+            {
+              "name": "Not specified",
+              "cabin_bag": "1pc x 7kg",
+              "checked_bag": "Adult - 1 Piece | Child - 1 Piece |",
+              "seat": ""
+            }
+          ]
+        }
+      ],
+      "layovers": []
+    }
+  ],
+  "journey_type": "Round Trip"
+}

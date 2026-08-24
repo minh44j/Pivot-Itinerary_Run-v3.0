@@ -57,6 +57,12 @@ CASES = {
     # Airport name bleeding into the "Operated by:" cell, and fare-rules PROSE
     # satisfying the baggage labels. Real booking AS261349396 (2026-08-20).
     "akbar_airport_bleed.txt":         (E.extract_akbar,   None),
+    # Multi-city layout: segments headed "TRIP 1"/"TRIP 2" instead of
+    # ONWARD/RETURN, one traveller block for the whole booking, and that block
+    # carries NO name/ticket table at all — so the correct outcome is a full
+    # parse of the flights plus a "Passenger name missing" flag, never a PDF
+    # with a fabricated passenger. Real booking AS261373110 (2026-08-24).
+    "akbar_multicity_trip.txt":        (E.extract_akbar,   "Passenger name missing"),
     # aJet "Basic" fare brand, written in mixed case unlike ECOJET/BIZJET/PREMIUM.
     # Regression for the round trip that rendered Economy outbound and N/A
     # inbound on one document (real booking 4B0NA3, 2026-08-15).

@@ -1,0 +1,65 @@
+Name : TEST TRAVEL COMPANY
+2762 TEST STREET,SUITE 1 TEST
+Address :
+BUILDING,,TEST
+Tel : 0000000000
+Email : test@example.com
+License Category : TRAVEL AGENCY
+Ref. No: Date of Booking: Status:
+Web check-in
+AS000000003 24 August 2026 CONFIRMED
+TRIP 1 Riyadh Phuket
+Airline Ref : DDD444 CRS Ref : DDD555
+18 Sep 2026 | Non Stop | 07 hrs 30 mins
+Cabin Baggage
+Adult 1 Piece , Child 1 Piece :
+Travel Class Check-In Baggage
+Saudi Airline Short conditions regarding carry-
+Economy Adult - 2 Piece | Child - 2 Piece |
+on baggage allowance details. -
+1pc x 7kg
+Departure date &
+Flight Number From (Terminal) Stops To (Terminal) Arrival date & time
+time
+Riyadh [RUH]
+Phuket [HKT]
+SV 852 King Khaled International Airport
+10:50 Non Stop , Phuket International Airport , 22:20
+,
+Operated by:Saudi Fri, 18 Sep 26 (07h:30m) Thailand, Fri, 18 Sep 26
+Airline Saudi Arabia,
+Terminal I
+Terminal 2
+TRIP 2 Bangkok Riyadh
+Airline Ref : DDD444 CRS Ref : DDD555
+26 Sep 2026 | Non Stop | 07 hrs 25 mins
+Cabin Baggage
+Adult 1 Piece , Child 1 Piece :
+Travel Class Check-In Baggage
+Saudi Airline Short conditions regarding carry-
+Economy Adult - 1 Piece | Child - 1 Piece |
+on baggage allowance details. -
+1pc x 7kg
+Departure date &
+Flight Number From (Terminal) Stops To (Terminal) Arrival date & time
+time
+Riyadh [RUH]
+Bangkok [BKK]
+SV 847 King Khaled International Airport
+Suvarnabhumi International 15:25 Non Stop , 18:50
+,
+Operated by:Saudi Airport , Sat, 26 Sep 26 (07h:25m) Sat, 26 Sep 26
+Airline Saudi Arabia,
+Thailand,
+Terminal 2
+Traveler(s) Information
+Baggage
+Carry-On :Adult 1 Piece , Child 1 Piece : Short conditions regarding carry-on baggage allowance details. - 1pc x 7kg
+Bag 1 Chgs May Apply if Bags Exceed Ttl Wt Allowance
+Refer to airline baggage policy for further details.
+Baggage Allowance : Adult - 2 Piece | Child - 2 Piece |
+Bag 1 Chgs May Apply if Bags Exceed Ttl Wt Allowance
+Refer to airline baggage policy for further details.
+Base Fare Taxes and Charges SSR Amount Total
+3174.00 6144.00 0.00 9318.00
+Total Net Fare : 9318

@@ -110,3 +110,22 @@ def test_direction_bags_absent_when_the_layout_has_no_headings():
     booking-level values, exactly as before this existed."""
     t = (FIX / "akbar_oneway.txt").read_text(encoding="utf-8")
     assert E._akbar_direction_bags(t) == {}
+
+
+# ── multi-city "TRIP n" layout (2026-08-24, AS261373110) ───────────────────
+def test_trip_layout_parses_routes_and_per_trip_baggage():
+    import generate_itinerary_v3 as G
+    d = E.extract_akbar((FIX / "akbar_multicity_trip.txt").read_text(encoding="utf-8"),
+                        {"date": "24 Aug 2026"})
+    (a, b) = d["segments"]
+    assert (a["flights"][0]["dep_iata"], a["flights"][0]["arr_iata"]) == ("RUH", "HKT")
+    assert (b["flights"][0]["dep_iata"], b["flights"][0]["arr_iata"]) == ("BKK", "RUH")
+    for seg in d["segments"]:
+        assert seg["flights"][0]["airline"] == "Saudi Airline"
+    # each TRIP states its own allowance; applying trip 1's two pieces to the
+    # one-piece trip 2 would be a wrong fact (§7)
+    assert G._norm_bag(a["flights"][0]["pax"][0]["checked_bag"]) == "2Pcs"
+    assert G._norm_bag(b["flights"][0]["pax"][0]["checked_bag"]) == "1Pcs"
+    assert G._norm_bag(a["flights"][0]["pax"][0]["cabin_bag"]) == "7kg"
+    # the PDF genuinely carries no passenger table -> flag, never fabricate
+    assert E.qc_check(d) == "Passenger name missing"
