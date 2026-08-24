@@ -130,3 +130,16 @@ def test_wrapped_or_bled_carrier_cell(raw, expected):
 ])
 def test_existing_carrier_shapes_unchanged(raw, expected):
     assert E._akbar_airline(raw) == expected
+
+
+@pytest.mark.parametrize("raw,expected", [
+    # Saudia's e-ticket writes the same multi-piece fact as "NxWEIGHT"
+    # (2026-08-24, booking 873UGS: "2X23 KG" per passenger on the outbound)
+    ("2X23 KG", "2 &times; 23kg"),
+    ("2x23kg", "2 &times; 23kg"),
+    # a count of one, and packing dimensions, must never gain a prefix
+    ("1X23 KG", "23kg"),
+    ("1 piece - 8 kg (55x40x23 cm)", "8kg"),
+])
+def test_n_x_weight_form(raw, expected):
+    assert G._norm_bag(raw) == expected

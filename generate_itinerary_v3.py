@@ -279,7 +279,14 @@ def _norm_bag(v: str) -> str:
         # count is 1, so every single-piece booking renders byte-identically to
         # before and the locked weight-only look is unchanged for them.
         if len(out) == 1:
-            _pc = re.search(r'(\d+)\s*(?:pcs?|pieces?|pc)\b', s, flags=re.I)
+            # "2 Pieces | ... 23KG" and Saudia's "2X23 KG" both state a
+            # multi-piece allowance for one weight; either form loses its count
+            # under the weight-only rule and understates the entitlement. The
+            # NxWEIGHT match requires the kg unit right after the second number
+            # so packing dimensions like "55x40x23 cm" can never be read as a
+            # piece count.
+            _pc = (re.search(r'(\d+)\s*(?:pcs?|pieces?|pc)\b', s, flags=re.I)
+                   or re.search(r'(\d+)\s*[x\u00d7]\s*\d+\s*K[gG]\b', s, flags=re.I))
             if _pc and int(_pc.group(1)) > 1:
                 body = f"{int(_pc.group(1))} &times; {body}"
         return body
