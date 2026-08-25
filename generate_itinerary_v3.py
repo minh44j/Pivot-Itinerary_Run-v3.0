@@ -260,6 +260,18 @@ def _norm_bag(v: str) -> str:
     # software fault. It means "not stated" -> N/A, same as an empty value.
     if s.lower() in ("not specified", "none", "n/a", "-"):
         return "N/A"
+    # A fare can state SEVERAL PASSENGER TYPES in one string:
+    #   "Adult - 2 Pieces | 1 BAG UP TO 32KG | Infant - 1 Piece | 1 Piece equals 23KG"
+    # (real Akbar/Saudia booking AS261379552). Those 32KG and 23KG belong to
+    # DIFFERENT travellers, so merging them rendered "32kg + 23kg" on every
+    # passenger's row — a claim of 55kg that no one on the booking holds (§7:
+    # a wrong fact, not a missing one). Keep only the FIRST type's block; the
+    # rest describes somebody else's allowance. Strings with no type marker
+    # (e.g. aJet's "7kg + 3kg", one traveller with two bags) are untouched,
+    # so every previously-correct value renders exactly as before.
+    _types = list(re.finditer(r'\b(?:Adult|Child|Infant|Adt|Chd|Inf)\b', s, flags=re.I))
+    if len(_types) > 1:
+        s = s[:_types[1].start()].rstrip(" |,;-")
     weights = re.findall(r'(\d+(?:\.\d+)?)\s*(?:kilograms?|kgs?|kg|k)\b', s, flags=re.I)
     if weights:
         out = []

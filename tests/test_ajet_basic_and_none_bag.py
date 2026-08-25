@@ -143,3 +143,30 @@ def test_existing_carrier_shapes_unchanged(raw, expected):
 ])
 def test_n_x_weight_form(raw, expected):
     assert G._norm_bag(raw) == expected
+
+
+# ── several passenger TYPES in one allowance string (2026-08-25) ───────────
+# Real Akbar/Saudia booking AS261379552 states
+#   "Adult - 2 Pieces | 1 BAG UP TO 32KG | Infant - 1 Piece | 1 Piece equals 23KG"
+# The 32KG and the 23KG belong to DIFFERENT travellers, so merging them printed
+# "32kg + 23kg" — 55kg — on every passenger's row. Keep the first type's block.
+@pytest.mark.parametrize("raw,expected", [
+    ("Adult - 2 Pieces | 1 BAG UP TO 32KG | Infant - 1 Piece | 1 Piece equals 23KG",
+     "2 &times; 32kg"),
+    ("Adult 1Pc : 1 BAG UP TO 12 KG | Infant 0Pc :", "12kg"),
+    ("Adult - 2 Piece | Child - 2 Piece |", "2Pcs"),
+])
+def test_multi_passenger_type_allowance(raw, expected):
+    assert G._norm_bag(raw) == expected
+
+
+@pytest.mark.parametrize("raw,expected", [
+    # ONE type, or none at all -> untouched. "7kg + 3kg" is a single traveller
+    # with two bags and must keep both weights.
+    ("Adult - 2 Pieces | 1 BAG UP TO 23KG", "2 &times; 23kg"),
+    ("7kg + 3kg", "7kg + 3kg"),
+    ("Adult - 1 PC | 1 Piece equal 23 Kg", "23kg"),
+    ("Adult 07 Kg", "7kg"),
+])
+def test_single_type_allowance_unchanged(raw, expected):
+    assert G._norm_bag(raw) == expected
