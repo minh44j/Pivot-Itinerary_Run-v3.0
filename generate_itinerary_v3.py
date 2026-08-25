@@ -1418,14 +1418,27 @@ def build_pdf(booking_data: dict, out_dir: str, project_dir: str = None) -> str:
         if layout == "B":
             n = _count(pdf_path)
             # Page 1 is full height (297mm); pages 2+ lose 12mm to the top margin
-            # (285mm printable). Grow the sheet to the bottom of page n (−6mm safe).
-            target = 297 + (n - 1) * 285 - 6
-            page.evaluate(
-                "(mm) => { const e = document.querySelector('.page-flow');"
-                " if (e) e.style.minHeight = mm + 'mm'; }",
-                target,
-            )
-            page.pdf(path=str(pdf_path), **pdf_opts)
+            # (285mm printable), so the bottom of page n sits exactly here:
+            full = 297 + (n - 1) * 285
+
+            def _grow(mm) -> int:
+                page.evaluate(
+                    "(mm) => { const e = document.querySelector('.page-flow');"
+                    " if (e) e.style.minHeight = mm + 'mm'; }",
+                    mm,
+                )
+                page.pdf(path=str(pdf_path), **pdf_opts)
+                return _count(pdf_path)
+
+            # Grow to the EXACT bottom of the last page so the footer is flush
+            # with the paper edge. A fixed safety subtraction used to be applied
+            # unconditionally, which left that much white below the footer on
+            # every layout-B document. Sub-pixel rounding can still tip the sheet
+            # onto one page too many, so shrink only as far as it actually takes,
+            # and only when it actually happened.
+            for slack in (0, 1, 2, 4, 6):
+                if _grow(full - slack) == n:
+                    break
 
         os.unlink(f_html)
         page.close()
