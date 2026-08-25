@@ -134,6 +134,31 @@ flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
 
+- **2026-08-25 — Akbar terminals now RENDER, attributed by column position; and
+  two passenger types no longer merge into one baggage figure:**
+  Real Akbar/Saudia booking AS261379552 (RUH↔CCJ, Business, 3 pax).
+  (1) **Terminals.** Blank on Akbar since 2026-07-17 because a stated terminal
+  flattens to a bare `Terminal <n>` line and an unstated one to nothing, so the
+  token could not be tied to a side (an earlier guess put the fragment `North`
+  on the wrong airport). This booking proves the flattened text can *never*
+  settle it: the SAME airport (RUH, Terminal 2) is the departure on the outbound
+  leg and the arrival on the inbound, rendering identically both times. In the
+  PDF it is unambiguous — the token's left edge lines up with its column header
+  (`From (Terminal)` x0≈101.7, `To (Terminal)` x0≈378.8). New pure
+  **`akbar_terminals_from_words()`** reads pdfplumber's word boxes and returns
+  one `{dep, arr}` per flight table; `main.akbar_attachment_text(..., with_words=True)`
+  supplies them via `ctx["terminals"]`. A token matching neither column (or both)
+  is DROPPED, not guessed. No boxes (Drive fallback, every `.txt` fixture) →
+  blank, exactly as before. **The static IATA→terminal table stays rejected** —
+  this reads what the document itself states, per segment.
+  (2) **Baggage across passenger types.** The fare states
+  `Adult - 2 Pieces | 1 BAG UP TO 32KG | Infant - 1 Piece | 1 Piece equals 23KG`;
+  `_norm_bag` collected every weight and joined them, so all three travellers
+  rendered **`32kg + 23kg`** — 55kg, which nobody on the booking holds (§7 wrong,
+  not merely missing). Only the FIRST type's block is kept now → `2 × 32kg`.
+  Strings with one type marker or none are untouched, so aJet's genuine
+  two-bag `7kg + 3kg` still shows both weights. 203 tests pass; no golden changed.
+
 - **2026-08-20 (later) — an airport named as the carrier, and a sentence
   printed as a baggage allowance:**
   Real Akbar/Saudia round trip AS261349396 (MED↔RUH) shipped a card reading
@@ -277,9 +302,9 @@ flight-no / airport / time; non-Confirmed status).
      every ticket, every airline, every season); a TERMINAL varies by carrier,
      route and season at hubs like IST/DXB/JED. A static terminal map stays
      rejected — a test asserts the name backfill never touches terminal fields.
-  **Terminals are still parsed by Alhind ONLY** — that is unchanged and correct:
-  the other four portals genuinely don't carry the data (re-verified 2026-07-27),
-  and A052SF's own source shows empty From/To terminal columns. 114 tests pass;
+  **Terminals were then parsed by Alhind ONLY** — correct at the time; Akbar
+  joined it on 2026-08-25 via column-position attribution (see the entry above).
+  aJet / Pegasus / Turkish genuinely don't carry the data (re-verified 2026-07-27). 114 tests pass;
   verified by re-rendering A052SF (airport names on both ends, `Air Sial` intact).
 - **2026-07-30 (later) — brand strapline, footer CR line, OPERATED BY pill restored:**
   Three approved header/footer changes shipped together. (1) `OPERATED BY` is back in the

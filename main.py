@@ -259,7 +259,14 @@ def search_messages(gmail, portal, window):
 # the email itself, so it can never be stale, and needs no extra scope (still
 # plain gmail.readonly). The old Drive-folder lookup is kept only as a
 # fallback for the rare case an Akbar email arrives with no attachment.
-def akbar_attachment_text(gmail, msg):
+def akbar_attachment_text(gmail, msg, with_words=False):
+    """Text of the email's own PDF attachment.
+
+    With with_words=True also returns pdfplumber's word boxes, which carry the
+    X-positions needed to tell a departure terminal from an arrival one (see
+    extractors.akbar_terminals_from_words). Default stays text-only so the
+    Turkish Airlines path and the diagnostic tools are unaffected.
+    """
     import pdfplumber
 
     def find_pdf_attachment_id(part):
@@ -276,15 +283,19 @@ def akbar_attachment_text(gmail, msg):
 
     att_id = find_pdf_attachment_id(msg["payload"])
     if not att_id:
-        return ""   # no attachment on this email — caller falls back to Drive
+        return ("", []) if with_words else ""   # no attachment — caller falls back to Drive
     raw = gmail.users().messages().attachments().get(
         userId="me", messageId=msg["id"], id=att_id).execute(num_retries=API_RETRIES)
     data = base64.urlsafe_b64decode(raw["data"])
-    text = ""
+    text, words = "", []
     with pdfplumber.open(io.BytesIO(data)) as pdf:
-        for page in pdf.pages:
+        for pageno, page in enumerate(pdf.pages):
             text += (page.extract_text() or "") + "\n"
-    return text
+            if with_words:
+                for w in page.extract_words():
+                    w["page"] = pageno
+                    words.append(w)
+    return (text, words) if with_words else text
 
 
 # ── Akbar Drive PDF -> text (FALLBACK ONLY — see akbar_attachment_text) ────
@@ -1199,16 +1210,22 @@ def main():
                 if portal["subject"].lower() not in subj or portal["from"].lower() not in frm:
                     continue
 
+                ctx = {"date": _email_date_ddmon(msg)}
                 if portal["source"] == "drive_pdf":
-                    src = akbar_attachment_text(gmail, msg)   # primary: email's own PDF attachment
+                    # word boxes come along so terminals can be attributed to the
+                    # departure vs arrival column by position
+                    src, words = akbar_attachment_text(gmail, msg, with_words=True)
                     if not src:
                         epoch = int(msg["internalDate"]) / 1000
                         date_str = datetime.fromtimestamp(epoch, timezone.utc).strftime("%Y-%m-%d")
                         src = akbar_pdf_text(drive, date_str, msg_epoch=epoch)   # fallback: Drive
+                        words = []                     # Drive fallback has no boxes -> blank
+                    if words:
+                        ctx["terminals"] = extractors.akbar_terminals_from_words(words)
                 else:
                     src = _plain_body(msg)
 
-                data = portal["fn"](src, {"date": _email_date_ddmon(msg)})
+                data = portal["fn"](src, ctx)
                 data["portal"] = data.get("portal") or portal["name"]
 
                 problem = extractors.qc_check(data)

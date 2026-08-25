@@ -552,6 +552,78 @@ def _akbar_first_value(pattern, text):
     return ""
 
 
+def akbar_terminals_from_words(words):
+    """Per-segment departure/arrival terminals, attributed by X-POSITION.
+
+    Akbar's flight table has "From (Terminal)" and "To (Terminal)" columns. A
+    stated terminal renders as a bare "Terminal <n>" token BELOW its column and
+    an unstated one renders as nothing at all, so in the flattened text the
+    token is unattributable — that is why Akbar terminals have been left blank
+    since 2026-07-17 (guessing once put the fragment "North" on the wrong side).
+
+    In the PDF itself it is not ambiguous: the token's left edge lines up with
+    its column's header. Real booking AS261379552 (RUH<->CCJ) proves both
+    directions — segment 1's token sits at the From column's x0 (Riyadh is the
+    departure) and segment 2's at the To column's x0 (Riyadh is the arrival),
+    while Calicut, which states no terminal, contributes no token at all.
+
+    `words` is pdfplumber's extract_words() output for one page, or the
+    concatenation across pages with a distinct `page` key. Returns a list of
+    {"dep": str, "arr": str}, one per flight table, in document order.
+
+    Attribution is deliberately strict: a token is claimed only when its left
+    edge is within X_TOL of exactly ONE column header. Anything else is left
+    blank, because a blank terminal is incomplete while a wrong one sends a
+    passenger to the wrong building (§7).
+    """
+    X_TOL = 12.0          # points; the token and its header share a left edge
+    out = []
+    # Column headers repeat once per flight table. Group them by row (top).
+    heads = {}
+    for w in words:
+        if w.get("text") not in ("From", "To"):
+            continue
+        key = (w.get("page", 0), round(float(w["top"]), 1))
+        heads.setdefault(key, {})[w["text"]] = float(w["x0"])
+    tables = sorted((k for k, v in heads.items() if "From" in v and "To" in v))
+    for i, key in enumerate(tables):
+        nxt = tables[i + 1] if i + 1 < len(tables) else None
+        col = heads[key]
+        dep, arr = "", ""
+        for w in words:
+            if w.get("text") != "Terminal":
+                continue
+            pos = (w.get("page", 0), round(float(w["top"]), 1))
+            if pos <= key or (nxt and pos >= nxt):
+                continue                       # belongs to another table
+            near_dep = abs(float(w["x0"]) - col["From"]) <= X_TOL
+            near_arr = abs(float(w["x0"]) - col["To"]) <= X_TOL
+            if near_dep == near_arr:
+                continue                       # ambiguous or matches neither
+            # pdfplumber tokenises "Terminal 2" as two words; take the value
+            # sitting immediately to the right on the SAME row.
+            val = ""
+            for v in words:
+                if v is w or v.get("page", 0) != w.get("page", 0):
+                    continue
+                if abs(float(v["top"]) - float(w["top"])) > 2.0:
+                    continue
+                if float(v["x0"]) < float(w["x1"]):
+                    continue
+                cand = (v.get("text") or "").strip(" .,;:")
+                if cand and len(cand) <= 4:
+                    val = cand
+                break
+            if not val:
+                continue
+            if near_dep and not dep:
+                dep = val
+            elif near_arr and not arr:
+                arr = val
+        out.append({"dep": dep, "arr": arr})
+    return out
+
+
 def extract_akbar(pdf_text, ctx=None):
     """Akbar Travels. Source is read PRIMARILY from the PDF attached directly
     to the 'Booking Success' email ('Ticket Copy' layout — ONWARD/RETURN
@@ -789,6 +861,10 @@ def extract_akbar(pdf_text, ctx=None):
             return ""
         return re.sub(r"\s+", " ", cand).strip() if cand else ""
 
+    # Terminals attributed by column position, when the caller read the PDF's
+    # word boxes (see akbar_terminals_from_words). Absent -> blank, exactly as
+    # before; every .txt fixture and the Drive fallback take that path.
+    seg_terms = (ctx or {}).get("terminals") or []
     parts = re.split(r"Airline\s*Ref\s*:", t)
     flights, seen_fl = [], set()
     for i in range(1, len(parts)):
@@ -804,16 +880,16 @@ def extract_akbar(pdf_text, ctx=None):
         # missing return leg in the 2026-06-18 bug.
         dates4 = re.findall(r"(\d{1,2}\s+" + MON + r"\s+\d{4})", detail)
         dates = dates4 if len(dates4) >= 2 else re.findall(r"(\d{1,2}\s+" + MON + r"\s+\d{2})\b", detail)
-        # 2026-07-17: Akbar's flight-table "From (Terminal) / To (Terminal)"
-        # columns are EMPTY in every real ticket sampled (rendered as ", ,").
-        # The only "Terminal X" tokens in the PDF sit in a separate airport-
-        # metadata block that pdfplumber scatters unpredictably (e.g. "Terminal 4"
-        # floats next to the RETURN header; "North Terminal" next to the layover
-        # line) and CANNOT be reliably attributed to a segment's departure vs
-        # arrival airport. The old `terms[0]` grab mislabeled these (e.g. it
-        # captured the fragment "North" as a departure terminal on PNR <ref>).
-        # Accuracy-first: leave Akbar terminals blank rather than show a wrong one.
-        terms = []
+        # 2026-08-25: terminals are now attributed by the token's X-POSITION in
+        # the PDF (which column header its left edge lines up with) rather than
+        # guessed from the flattened text — see akbar_terminals_from_words. The
+        # flattened text genuinely cannot tell departure from arrival: on real
+        # booking AS261379552 the SAME airport (RUH, Terminal 2) is the
+        # departure on one leg and the arrival on the other, and both render as
+        # one bare "Terminal 2" line in the same position. An airport that
+        # states no terminal contributes no token, so it stays blank.
+        _t = seg_terms[i - 1] if (i - 1) < len(seg_terms) else {}
+        dep_term, arr_term = _t.get("dep", ""), _t.get("arr", "")
         # Stops-column "(Xh:Ym)" is fully inside this segment's own table and
         # can't bleed in from a neighbouring segment's header line the way the
         # looser "X hrs Y mins" phrase can (that phrase sits in the NEXT
@@ -878,10 +954,7 @@ def extract_akbar(pdf_text, ctx=None):
             "dep_iata": dep_iata, "arr_iata": arr_iata,
             "dep_city": city2disp.get(dep_c, ""), "arr_city": city2disp.get(arr_c, ""),
             "dep_airport": "", "arr_airport": "",
-            # Akbar terminals stay blank on purpose (see the 2026-07-17 note above);
-            # arr_terminal is still emitted so every portal exposes the same keys and
-            # the generator's terminal backfill can populate it from another leg.
-            "terminal": terms[0] if terms else "", "arr_terminal": "",
+            "terminal": dep_term, "arr_terminal": arr_term,
             "dep_time": times[0] if times else "", "dep_date": to_ddmon(dates[0]) if dates else "",
             "arr_time": times[1] if len(times) > 1 else "", "arr_date": to_ddmon(dates[1]) if len(dates) > 1 else "",
             "cabin": default_class,
