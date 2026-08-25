@@ -135,8 +135,9 @@ def _flight_card(seg: dict, standalone: bool = False) -> str:
     leg_pax = seg.get("pax") or []
     rows, show_cabin, show_checked, show_seat = [], False, False, False
     for p in leg_pax:
-        c = _norm_bag(p.get("cabin_bag", ""))
-        k = _norm_bag(p.get("checked_bag", ""))
+        _pt = p.get("pax_type", "")
+        c = _norm_bag(p.get("cabin_bag", ""), _pt)
+        k = _norm_bag(p.get("checked_bag", ""), _pt)
         s = (p.get("seat") or "").strip()
         # same rule as before: every fare includes a cabin piece, so if a checked
         # allowance is stated but cabin isn't, show 1Pcs rather than nothing.
@@ -247,7 +248,7 @@ def _na(v) -> str:
     return s
 
 
-def _norm_bag(v: str) -> str:
+def _norm_bag(v: str, pax_type: str = "") -> str:
     # Baggage values show weight only. "1 pc 7kg + personal item 3kg" -> "7kg + 3kg".
     # Multiple weights joined with " + ". Piece-only values (no kg) -> "<n>Pcs". No dimensions/extras.
     if not v:
@@ -269,9 +270,28 @@ def _norm_bag(v: str) -> str:
     # rest describes somebody else's allowance. Strings with no type marker
     # (e.g. aJet's "7kg + 3kg", one traveller with two bags) are untouched,
     # so every previously-correct value renders exactly as before.
-    _types = list(re.finditer(r'\b(?:Adult|Child|Infant|Adt|Chd|Inf)\b', s, flags=re.I))
+    _types = list(re.finditer(r'\b(Adult|Child|Infant|Adt|Chd|Inf)\b', s, flags=re.I))
     if len(_types) > 1:
-        s = s[:_types[1].start()].rstrip(" |,;-")
+        # Split into one block per type and take the block for THIS passenger.
+        # An infant's allowance is genuinely different from an adult's on the
+        # same fare (real booking AS261379552: adults 2 x 32kg checked and 12kg
+        # cabin, the infant 1 x 23kg checked and NO cabin piece at all), so a
+        # passenger whose type is known must be shown their own line. Falls back
+        # to the first block when the type is unknown — an unknown type is the
+        # common case and the first block is the fare's primary (adult) one.
+        _blocks = []
+        for _i, _m in enumerate(_types):
+            _end = _types[_i + 1].start() if _i + 1 < len(_types) else len(s)
+            _blocks.append((_m.group(1).lower()[:3], s[_m.start():_end].rstrip(" |,;-")))
+        _want = (pax_type or "").strip().lower()[:3]
+        s = next((b for k, b in _blocks if k == _want), _blocks[0][1])
+    # An EXPLICIT zero ("Infant 0Pc :") is not a missing value — the fare states
+    # that this passenger carries nothing. N/A would read as "not stated" and
+    # would also trip the card's "every fare includes a cabin piece" fallback,
+    # handing the infant a piece the ticket does not give them.
+    if re.search(r'\b0\s*(?:pcs?|pieces?|pc|p)\b', s, flags=re.I) and not re.search(
+            r'\d+(?:\.\d+)?\s*(?:kilograms?|kgs?|kg|k)\b', s, flags=re.I):
+        return "&mdash;"
     weights = re.findall(r'(\d+(?:\.\d+)?)\s*(?:kilograms?|kgs?|kg|k)\b', s, flags=re.I)
     if weights:
         out = []

@@ -170,3 +170,48 @@ def test_multi_passenger_type_allowance(raw, expected):
 ])
 def test_single_type_allowance_unchanged(raw, expected):
     assert G._norm_bag(raw) == expected
+
+
+# ── per-passenger-type allowance (2026-08-25) ─────────────────────────────
+# Real Akbar/Saudia booking AS261379552 prices adults and an infant on one
+# fare and states both in one string. The infant's entitlement is genuinely
+# different: 1 x 23kg checked and NO cabin piece at all.
+_CHECKED = "Adult - 2 Pieces | 1 BAG UP TO 32KG | Infant - 1 Piece | 1 Piece equals 23KG"
+_CABIN = "Adult 1Pc : 1 BAG UP TO 12 KG | Infant 0Pc :"
+
+
+@pytest.mark.parametrize("pax_type,cabin,checked", [
+    ("Adult", "12kg", "2 &times; 32kg"),
+    ("Infant", "&mdash;", "23kg"),
+    ("", "12kg", "2 &times; 32kg"),        # unknown type -> the fare's primary block
+])
+def test_allowance_follows_the_passenger_type(pax_type, cabin, checked):
+    assert G._norm_bag(_CABIN, pax_type) == cabin
+    assert G._norm_bag(_CHECKED, pax_type) == checked
+
+
+def test_explicit_zero_is_not_missing_data():
+    """"Infant 0Pc" means carries nothing. N/A would read as 'not stated' AND
+    would trip the card's 'every fare includes a cabin piece' fallback, handing
+    the infant a piece the ticket does not give them."""
+    assert G._norm_bag("Infant 0Pc :", "Infant") == "&mdash;"
+    html = G._flight_card({
+        "flight_no": "SV 712", "airline": "Saudi Airline", "dep_iata": "RUH",
+        "arr_iata": "CCJ", "dep_city": "Riyadh", "arr_city": "Kozhikode",
+        "dep_airport": "", "arr_airport": "", "terminal": "2", "arr_terminal": "",
+        "dep_date": "12 Sep 2026", "dep_time": "01:00", "arr_date": "12 Sep 2026",
+        "arr_time": "08:45", "cabin": "Business", "duration": "5H 15M",
+        "pax": [{"name": "Adult Pax", "cabin_bag": _CABIN, "checked_bag": _CHECKED,
+                 "seat": "", "pax_type": "Adult"},
+                {"name": "Infant Pax", "cabin_bag": _CABIN, "checked_bag": _CHECKED,
+                 "seat": "", "pax_type": "Infant"}],
+    })
+    assert "1Pcs" not in html          # the fallback must NOT fire for the infant
+    assert "2 &times; 32kg" in html and "23kg" in html
+
+
+def test_pax_type_absent_leaves_every_existing_booking_unchanged():
+    """No pax_type key -> byte-identical to the pre-2026-08-25 behaviour."""
+    for raw in ("Adult 07 Kg", "7kg + 3kg", "Adult - 32 Kg", "30 kg",
+                "Adult - 2 Pieces | 1 BAG UP TO 23KG"):
+        assert G._norm_bag(raw) == G._norm_bag(raw, "")
