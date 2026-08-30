@@ -56,6 +56,31 @@ def _valid_seat(s):
     return " / ".join(good)
 
 
+# Pegasus renders an UPSELL BUTTON in the baggage cell when the fare includes
+# no allowance, and its template repeats the label — exactly like the
+# "Seat Selection Seat Selection" CTA that _valid_seat already filters. Real
+# booking 2BBTXC shipped with a flight card reading
+# "CABIN: Add Baggage Add Baggage", i.e. a button caption presented to a client
+# as their baggage entitlement.
+_BAG_CTA = re.compile(r"^\s*(?:add|order|buy|purchase|select|choose|upgrade)\b", re.I)
+
+
+def _valid_bag(v):
+    """Accept only a stated allowance; reject a call-to-action caption.
+
+    Every genuine allowance names a NUMBER — "20 kg", "1 pc (55x40x23cm)",
+    "Adult - 2 Pieces | 1 BAG UP TO 32KG". A button label ("Add Baggage",
+    "Order Food") never does, so a value with no digit at all is not an
+    allowance. The CTA-verb check additionally catches an upsell that happens
+    to quote a number ("Add 20 kg"). Returns "" so the caller falls through to
+    "Not specified" -> N/A: incomplete, rather than wrong (§7).
+    """
+    s = (v or "").strip()
+    if not s or not re.search(r"\d", s) or _BAG_CTA.match(s):
+        return ""
+    return s
+
+
 def to_ddmon(s):
     """Normalise many date spellings to 'DD Mon YYYY'."""
     s = (s or "").strip()
@@ -1269,8 +1294,8 @@ def _pegasus_passengers(text, fallback_name):
         passengers.append({
             "name": name,
             "ticket_no": "Not specified",                                # Pegasus = PNR only
-            "cabin_bag": _m(body, r"Cabin\s*Baggage\s*\n\s*([^\n]+)") or "Not specified",
-            "checked_bag": _m(body, r"Checked\s*Baggage\s*\n\s*([^\n]+)") or "Not specified",
+            "cabin_bag": _valid_bag(_m(body, r"Cabin\s*Baggage\s*\n\s*([^\n]+)")) or "Not specified",
+            "checked_bag": _valid_bag(_m(body, r"Checked\s*Baggage\s*\n\s*([^\n]+)")) or "Not specified",
             "seat": seat,
         })
     if passengers:
@@ -1279,8 +1304,8 @@ def _pegasus_passengers(text, fallback_name):
     return [{
         "name": fallback_name or "Not specified",
         "ticket_no": "Not specified",
-        "cabin_bag": _m(text, r"Cabin\s*Baggage\s*\n\s*([^\n]+)") or "Not specified",
-        "checked_bag": _m(text, r"Checked\s*Baggage\s*\n\s*([^\n]+)") or "Not specified",
+        "cabin_bag": _valid_bag(_m(text, r"Cabin\s*Baggage\s*\n\s*([^\n]+)")) or "Not specified",
+        "checked_bag": _valid_bag(_m(text, r"Checked\s*Baggage\s*\n\s*([^\n]+)")) or "Not specified",
         "seat": "",
     }]
 
