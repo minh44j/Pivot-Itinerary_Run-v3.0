@@ -25,8 +25,15 @@ import main as M                                       # noqa: E402
 
 
 def _legs(data):
-    return [(f.get("flight_no", ""), f.get("dep_date", ""), f.get("arr_date", ""))
-            for s in data.get("segments", []) for f in s.get("flights", [])]
+    """Per-leg fingerprint: the facts a client reads off the flight card."""
+    out = []
+    for s in data.get("segments", []):
+        for f in s.get("flights", []):
+            bags = [(p.get("cabin_bag", ""), p.get("checked_bag", ""))
+                    for p in (f.get("pax") or [])]
+            out.append((f.get("flight_no", ""), f.get("dep_date", ""),
+                        f.get("arr_date", ""), tuple(bags)))
+    return out
 
 
 def run():
@@ -37,6 +44,7 @@ def run():
 
     checked = affected = errors = 0
     _real_roll = E._roll_overnight_connections
+    _real_bag = E._valid_bag
 
     for portal in extractors_portals():
         for mid in M.search_messages(gmail, portal, window):
@@ -62,23 +70,35 @@ def run():
                 if not src:
                     continue
 
+                # "before" = the code as it stood when the document was issued
                 E._roll_overnight_connections = lambda flights: None
+                E._valid_bag = lambda v: (v or "").strip()
                 before = _legs(portal["fn"](src, dict(ctx)))
                 E._roll_overnight_connections = _real_roll
+                E._valid_bag = _real_bag
                 after = _legs(portal["fn"](src, dict(ctx)))
 
                 checked += 1
                 if before != after:
                     affected += 1
                     print(f"AFFECTED {mid}  portal={portal['name']}")
-                    for (fno, bd, ba), (_, ad, aa) in zip(before, after):
-                        mark = "  <-- changed" if (bd, ba) != (ad, aa) else ""
-                        print(f"    leg {fno or '?'}: dep {bd} -> {ad} | arr {ba} -> {aa}{mark}")
+                    for b, a in zip(before, after):
+                        if b == a:
+                            continue
+                        fno = b[0] or "?"
+                        if (b[1], b[2]) != (a[1], a[2]):
+                            print(f"    leg {fno}: DATE dep {b[1]} -> {a[1]} | arr {b[2]} -> {a[2]}")
+                        if b[3] != a[3]:
+                            for (bc, bk), (ac, ak) in zip(b[3], a[3]):
+                                if (bc, bk) != (ac, ak):
+                                    print(f"    leg {fno}: BAG cabin {bc!r} -> {ac!r} | "
+                                          f"checked {bk!r} -> {ak!r}")
             except Exception as exc:                      # noqa: BLE001
                 errors += 1
                 print(f"ERROR    {mid}  {type(exc).__name__}")
             finally:
                 E._roll_overnight_connections = _real_roll
+                E._valid_bag = _real_bag
 
     print("=" * 60)
     print(f"checked={checked} affected={affected} errors={errors} window={window}")
