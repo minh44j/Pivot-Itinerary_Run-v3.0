@@ -214,6 +214,41 @@ def group_segments(flights):
     ]
 
 
+def _roll_overnight_connections(flights):
+    """Advance a connecting leg's dates when the connection crosses midnight.
+
+    Portals that state ONE date for a whole multi-leg journey stamp it on every
+    leg, so a leg that actually departs after midnight keeps the previous day's
+    date. Pegasus prints a single "Flight Date", and real booking 2BBZE2 shipped
+    with PC698 departing SAW at 00:50 on the SAME date the previous leg landed
+    there at 22:15 — impossible, and the client caught it before we did.
+
+    Nothing surfaced the contradiction because _diff_hm wraps a negative gap
+    into +24h, so the layover read a perfectly correct 2H 35M while the leg
+    underneath it carried the wrong day.
+
+    This only ever moves a leg FORWARD, and only when it starts before the
+    previous leg ended — which cannot happen on a correctly-dated itinerary, so
+    no good booking can be disturbed. A shift of more than two days is left
+    alone: that is not a connection, and guessing is worse than reporting what
+    the source said (§7). Pure arithmetic on stated times; nothing is invented.
+    """
+    for i in range(1, len(flights)):
+        prev, cur = flights[i - 1], flights[i]
+        pa = _parse_dt(prev.get("arr_date"), prev.get("arr_time"))
+        cd = _parse_dt(cur.get("dep_date"), cur.get("dep_time"))
+        if not pa or not cd or cd >= pa:
+            continue
+        gap = pa - cd
+        days = gap.days + (1 if (gap.seconds or gap.microseconds) else 0)
+        if not 0 < days <= 2:
+            continue
+        for key in ("dep_date", "arr_date"):
+            base = _parse_dt(cur.get(key), "00:00")
+            if base:
+                cur[key] = (base + timedelta(days=days)).strftime("%d %b %Y")
+
+
 def _mark_next_day(flights):
     """Mark ' (+1)' on arrivals that land the next calendar day; advance arr_date
     when the source only gave a single (departure) date."""
@@ -238,6 +273,9 @@ def _finalize(d, ctx=None):
     if not d.get("booked_on") and ctx and ctx.get("date"):
         d["booked_on"] = ctx["date"]
     flights = d.pop("flights", [])
+    # Correct any leg whose date fell behind an overnight connection BEFORE the
+    # next-day marker and the outbound/inbound split read those dates.
+    _roll_overnight_connections(flights)
     _mark_next_day(flights)
     # Every airline reference on the booking, in itinerary order, de-duplicated.
     # Normally one; a split-carrier booking has one per operating airline and the
