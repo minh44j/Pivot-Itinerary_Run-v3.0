@@ -593,6 +593,15 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
     # Document state drives the label's wording and tint only — there is no
     # status pill any more (see _DOC_STATE).
     _st = _DOC_STATE.get((data.get("doc_status") or "confirmed").lower(), _DOC_STATE["confirmed"])
+    # Revision number. Shown only from the SECOND copy onward: "Revision 1" on a
+    # first issue tells the reader nothing, while "Revision 2" beside an older
+    # print-out settles which one to travel on. main.next_revision supplies it;
+    # a manual render passes nothing and prints nothing.
+    try:
+        _rev = int(data.get("revision") or 0)
+    except (TypeError, ValueError):
+        _rev = 0
+    _rev_stamp = f" &nbsp;&middot;&nbsp; Revision {_rev}" if _rev > 1 else ""
     header_html = f"""
   <div class="header">
     <div class="hdr-top">
@@ -601,7 +610,7 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
         <div class="hdr-name"><b>Pivot</b> Travel Management</div>
         <div class="hdr-state" style="color:{_st['fg']};">{_st['label']}</div>
         <div class="hdr-addr">{COMPANY_ADDRESS}</div>
-        <div class="hdr-issued">Issued {_issued_stamp()}</div>
+        <div class="hdr-issued">Issued {_issued_stamp()}{_rev_stamp}</div>
       </div>
     </div>
     <div class="hdr-service">

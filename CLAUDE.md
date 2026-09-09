@@ -149,6 +149,23 @@ flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
 
+- **2026-09-09 (later) — revision counter: two copies of one booking can finally be told apart:**
+  The gap left open by the header redesign, closed. A reissue produced a second PDF carrying the
+  same reference, the same "Booked On" date and no way to tell which copy was current — a passenger
+  travelling on the older print-out goes to the wrong gate at the wrong hour (8JS4ID reissued
+  07 Sep, 8JVF9L 27 Aug). The header now stamps `· Revision N` from the second copy onward.
+  **The counter is keyed on a truncated SHA-256 of the reference** (`extractors.revision_key`), NOT
+  the PNR: `revision_ids.json` is committed to a PUBLIC repo, and the disruption log made exactly
+  that mistake on 2026-07-22 and had to be scrubbed (§11). The key normalises case, order and
+  whitespace, so a split-carrier booking counts once however its two references are spelled.
+  `main.next_revision` counts a render and returns which copy it is; it is called BEFORE `build_pdf`
+  at both render sites (the poll loop and the revised-draft builder), and the log is checkpointed
+  next to `processed_ids.json` so a crash between the two cannot issue the same number twice. A
+  booking with no usable reference returns 0 and prints nothing — a number that cannot be tied to a
+  booking is worse than none (§7). `poll.yml` persists the new file beside the other logs.
+  Deliberately shown only from copy 2: "Revision 1" on a first issue tells the reader nothing, so
+  every first-issue document is byte-identical to what it would have been. 237 tests pass.
+
 - **2026-09-09 — header redesigned (Reference Block) and "Official Travel Document" retired:**
   Asked and confirmed twice per §5, chosen from three drawn directions. Three complaints, all
   measurable rather than matters of taste. (1) **The label was wrong.** In aviation and immigration
@@ -170,7 +187,7 @@ flight-no / airport / time; non-Confirmed status).
   `processed_log.json` — printing a guessed number would be exactly the fabrication §7 forbids. The
   gap it leaves is real: 8JS4ID and 8JVF9L were each reissued this fortnight and the client received
   a second PDF with the same reference, the same "Booked On" date and nothing to say which was
-  current. Verified on a real Akbar booking (9L6WUH, CAI→RUH) and on the split-carrier fixture,
+  current. **Built the same day** — see the entry above. Verified on a real Akbar booking (9L6WUH, CAI→RUH) and on the split-carrier fixture,
   where `AAA111 / BBB222` at 34px still clears the reference cells. 230 tests pass.
 
 - **2026-08-25 — Akbar terminals now RENDER, attributed by column position; and

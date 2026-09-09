@@ -1798,6 +1798,28 @@ def disruption_facts(text=""):
     return "|".join(sorted(facts))
 
 
+def revision_key(refs) -> str:
+    """Public-safe key for the revision counter: a truncated SHA-256 of the
+    booking's reference(s).
+
+    The counter has to live in the repo so it survives between runs, and the repo
+    is PUBLIC — so the raw PNR must never be written to it (§11; the disruption
+    log made exactly that mistake on 2026-07-22 and was scrubbed). Hashing keeps
+    the counter working while storing nothing a reader could tie to a passenger.
+
+    `refs` is a list (split-carrier bookings carry one reference per airline) or a
+    single string. Order and case are normalised so the same booking always keys
+    the same way. An empty reference gives "" — the caller then skips counting
+    rather than lumping unrelated bookings under one key.
+    """
+    if isinstance(refs, str):
+        refs = [refs]
+    joined = "/".join(sorted(r.strip().upper() for r in (refs or []) if r and r.strip()))
+    if not joined:
+        return ""
+    return hashlib.sha256(joined.encode("utf-8")).hexdigest()[:16]
+
+
 def disruption_dedup_key(subject="", preview="", sender="", category=""):
     """Booking-level dedup key for the disruption watch, or "" if no reliable
     booking reference can be extracted (caller then falls back to message_id).

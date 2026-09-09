@@ -54,6 +54,10 @@ DISRUPTION_LOG_FILE = "disruption_ids.json"
 # Dedup log for manual-review flags (message_id only) so a booking that keeps
 # failing extraction is emailed ONCE, not on every poll.
 FLAGGED_LOG_FILE = "flagged_ids.json"
+# Revision counter, so a reissued booking's PDF can say which copy it is. Keyed
+# on a truncated SHA-256 of the reference (extractors.revision_key) — the repo is
+# public, so no PNR goes in here.
+REVISION_LOG_FILE = "revision_ids.json"
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 OUT_DIR = os.path.join(PROJECT_DIR, "out")
 # Transient 5xx / rate-limit responses from Google get retried with exponential
@@ -185,6 +189,37 @@ def load_flagged_log():
 def save_flagged_log(log):
     with open(FLAGGED_LOG_FILE, "w") as f:
         json.dump(log, f, indent=2)
+
+
+# ── revision counter (hashed reference -> how many copies issued) ─────────────
+# Two PDFs for one booking used to be indistinguishable: same reference, same
+# "Booked On", nothing to say which was current — so a passenger could travel on
+# a superseded print-out (8JS4ID and 8JVF9L were both reissued in Sep 2026).
+def load_revision_log():
+    if os.path.exists(REVISION_LOG_FILE):
+        with open(REVISION_LOG_FILE) as f:
+            return json.load(f)
+    return {"revisions": {}}
+
+
+def save_revision_log(log):
+    with open(REVISION_LOG_FILE, "w") as f:
+        json.dump(log, f, indent=2)
+
+
+def next_revision(log, data):
+    """Count this render and return which copy it is (1 = first issue).
+
+    Returns 0 when the booking has no usable reference — the caller then prints
+    no revision at all, which is right: a number we cannot tie to a booking would
+    be worse than none (§7).
+    """
+    key = extractors.revision_key(booking_refs(data) or [data.get("pnr", "")])
+    if not key:
+        return 0
+    n = int(log.setdefault("revisions", {}).get(key, 0)) + 1
+    log["revisions"][key] = n
+    return n
 
 
 # ── gmail helpers ──────────────────────────────────────────────────────────
@@ -1153,6 +1188,9 @@ def build_revised_itinerary(gmail, alert):
         pnr = "".join(c for c in str(booking["pnr"]) if c.isalnum() or c in "_-") or "UNKNOWN"
         out_dir = os.path.join(OUT_DIR, "revised", datetime.now().strftime("%Y-%m-%d"))
         os.makedirs(out_dir, exist_ok=True)
+        _rev_log = load_revision_log()
+        booking["revision"] = next_revision(_rev_log, booking)
+        save_revision_log(_rev_log)
         pdf_path = build_pdf(booking, out_dir, project_dir=PROJECT_DIR)
         revised = os.path.join(out_dir, f"REVISED-{pnr}.pdf")
         os.replace(pdf_path, revised)
@@ -1184,6 +1222,7 @@ def main():
     except ValueError:
         max_per_run = 15
     log = load_log()
+    revision_log = load_revision_log()
     done_ids = processed_ids(log)
     created, skipped, flagged = [], [], []
     pivot_os = {"ok": 0, "duplicate": 0, "error": 0}   # Pivot OS sync tallies (public-safe)
@@ -1236,6 +1275,10 @@ def main():
 
                 pnr = "".join(c for c in str(data["pnr"]) if c.isalnum() or c in "_-") or "UNKNOWN"
                 date_sub = datetime.now().strftime("%Y-%m-%d")
+                # Count this copy BEFORE rendering: a reissue arrives as a new
+                # email (new message_id), so it renders again and gets the next
+                # number, which is what makes the newer PDF self-evidently newer.
+                data["revision"] = next_revision(revision_log, data)
                 pdf_path = build_pdf(data, os.path.join(OUT_DIR, date_sub), project_dir=PROJECT_DIR)
                 if extractors.india_arrival(data):
                     _append_air_suvidha(pdf_path)   # single merged PDF: itinerary + guide
@@ -1255,6 +1298,7 @@ def main():
                 log["processed"].append({"message_id": mid})
                 done_ids.add(mid)
                 save_log(log)                                   # checkpoint per booking
+                save_revision_log(revision_log)                 # same checkpoint
                 try:
                     email_pdf(send_gmail, sender, pdf_path, data, source_ref=mid)
                 except Exception as e:
@@ -1273,6 +1317,7 @@ def main():
                                 "reason": f"error: {e}", "trace": traceback.format_exc()[-500:]})
 
     save_log(log)
+    save_revision_log(revision_log)
     # Privately notify Minh of anything needing manual review (inbox only, never
     # the public log). A failure here must not break the run summary.
     # DEDUP: a flagged booking is never marked processed, so email ONLY the ones
