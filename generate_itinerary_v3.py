@@ -487,9 +487,10 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
     # Reference cells. They used to sit in a capsule BELOW the header; since
     # 2026-09-09 they live inside it, beside the airline reference, and the
     # capsule is gone (approved — the page also gets shorter for it).
-    # Label and value are emitted separately: the header row is ONE grid, so
-    # every label shares a line and every value shares a BASELINE, whatever the
-    # size difference between the 34px reference and the 10px cells.
+    # Each cell is a tight label-over-value stack; the ROW then aligns those
+    # stacks on their LAST baseline, so every value sits on the reference's
+    # baseline while its label stays close above it. (A shared label row would
+    # align the values too, but strand each label at the top of a 34px row.)
     _cells = []
     if booking_ref:
         _cells.append(("Agency Ref.", booking_ref))
@@ -498,21 +499,9 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
     _cells.append(("Booked On", booked_on))
     _cells.append(("Journey", journey_type.title()))
 
-    hdr_cols = "1fr" + " auto" * len(_cells)
-    # Every item is placed EXPLICITLY: the rules below span both rows, which
-    # blocks grid auto-placement from flowing labels and values around them.
-    hdr_labels = "".join(
-        f'<div class="hdr-lbl hdr-cell" style="grid-column:{i + 2};grid-row:1;">{lbl}</div>'
-        for i, (lbl, _) in enumerate(_cells))
-    hdr_values = "".join(
-        f'<div class="hdr-val hdr-cell" style="grid-column:{i + 2};grid-row:2;">{val}</div>'
-        for i, (_, val) in enumerate(_cells))
-    # One rule per cell, spanning BOTH grid rows. A border on each cell instead
-    # would show as two segments with a gap: baseline alignment offsets the
-    # value box downward, and that offset falls outside its border box.
-    hdr_rules = "".join(
-        f'<div class="hdr-rule" style="grid-column:{i + 2};"></div>'
-        for i in range(len(_cells)))
+    hdr_cells = "".join(
+        f'<div class="hdr-cell"><div class="hdr-lbl">{lbl}</div>'
+        f'<div class="hdr-val">{val}</div></div>' for lbl, val in _cells)
 
     pax_html  = "\n".join(_pax_card(p) for p in passengers) if passengers else _pax_card({"name": "N/A"})
 
@@ -619,12 +608,12 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
       <span class="hdr-strap">{BRAND_STRAPLINE}</span>
       <span class="hdr-contact">{COMPANY_HOTLINE} &nbsp;&middot;&nbsp; {HEADER_EMAIL}</span>
     </div>
-    <div class="hdr-row" style="grid-template-columns:{hdr_cols};">
-      {hdr_rules}
-      <div class="hdr-lbl hdr-lbl-pnr" style="grid-column:1;grid-row:1;">{pnr_label}</div>
-      {hdr_labels}
-      <div class="pnr-value" style="grid-column:1;grid-row:2;">{pnr_display}</div>
-      {hdr_values}
+    <div class="hdr-row">
+      <div class="pnr-block">
+        <div class="hdr-lbl hdr-lbl-pnr">{pnr_label}</div>
+        <div class="pnr-value">{pnr_display}</div>
+      </div>
+      <div class="hdr-refs">{hdr_cells}</div>
     </div>
   </div>"""
 
@@ -834,14 +823,27 @@ body {{
   font-feature-settings: "lnum" 1;
 }}
 
-/* Reference row: ONE grid. Labels fill the first implicit row, values the
-   second, and baseline alignment does the rest. Column count comes from the
-   markup (a booking without a distinct CRS ref has one column fewer). */
+/* Reference row. `last baseline` is the point: each cell is a tight
+   label-over-value stack, and aligning the stacks on their LAST baseline puts
+   every value on the 34px reference's baseline while its label stays close
+   above it. Aligning the boxes instead (flex-end) leaves visibly unequal gaps
+   under the reference and the cells, which is what "not lined up" looked like. */
 .hdr-row {{
-  display: grid;
-  align-items: baseline;
-  row-gap: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: last baseline;
+  gap: 24px;
   padding: 13px 30px 14px;
+}}
+.hdr-refs {{
+  display: flex;
+  align-items: last baseline;
+}}
+.hdr-cell {{
+  border-left: 1px solid rgba(255,255,255,0.09);
+  padding-left: 16px;
+  margin-left: 16px;
+  text-align: left;
 }}
 .hdr-lbl {{
   font-size: 6.5px;
@@ -850,7 +852,7 @@ body {{
   text-transform: uppercase;
   color: rgba(255,255,255,0.34);
   line-height: 1;
-  padding-bottom: 9px;
+  margin-bottom: 7px;
 }}
 /* The reference's own label is gold: same tier, higher rank. */
 .hdr-lbl-pnr {{ color: rgba(201,168,76,0.72); }}
@@ -862,23 +864,6 @@ body {{
   font-variant-numeric: lining-nums;
   font-feature-settings: "lnum" 1;
 }}
-/* Hairline between reference cells. Applied to BOTH rows with no row-gap, so
-   the two segments meet and read as one continuous rule. */
-.hdr-cell {{
-  padding-left: 17px;
-  margin-left: 16px;
-  text-align: left;
-}}
-.hdr-rule {{
-  grid-row: 1 / 3;
-  align-self: stretch;
-  justify-self: start;
-  width: 1px;
-  margin-left: 16px;
-  background: rgba(255,255,255,0.09);
-}}
-/* The reference is the point of the header, so it is now the largest thing in
-   it — it used to be set at 18px, smaller than the wordmark above it. */
 .pnr-value {{
   font-family: 'Cormorant Garamond', serif;
   font-style: normal;
