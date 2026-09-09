@@ -589,9 +589,6 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
     # Document state drives the label's wording and tint only — there is no
     # status pill any more (see _DOC_STATE).
     _st = _DOC_STATE.get((data.get("doc_status") or "confirmed").lower(), _DOC_STATE["confirmed"])
-    _reg_line = f"CR {COMPANY_CR}"
-    if COMPANY_VAT:
-        _reg_line += f" &nbsp;&middot;&nbsp; VAT {COMPANY_VAT}"
     header_html = f"""
   <div class="header">
     <div class="hdr-top">
@@ -605,20 +602,18 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
       <div class="hdr-doc">
         <div class="doc-label" style="color:{_st['fg']};">{_st['label']}</div>
         <div class="doc-meta">Issued {_issued_stamp()}</div>
-        <div class="doc-meta">{_reg_line}</div>
       </div>
     </div>
-    <div class="header-divider"></div>
+    <div class="hdr-service">
+      <span class="hdr-strap">{BRAND_STRAPLINE}</span>
+      <span class="hdr-contact">HOTLINE &nbsp;{COMPANY_HOTLINE} &nbsp;&middot;&nbsp; {HEADER_EMAIL}</span>
+    </div>
     <div class="hdr-row">
       <div class="pnr-block">
         <div class="pnr-label">{pnr_label}</div>
         <div class="pnr-value">{pnr_display}</div>
       </div>
       <div class="hdr-refs">{hdr_refs}</div>
-    </div>
-    <div class="hdr-service">
-      <span class="hdr-strap">{BRAND_STRAPLINE}</span>
-      <span class="hdr-contact">HOTLINE &nbsp;{COMPANY_HOTLINE} &nbsp;&middot;&nbsp; {HEADER_EMAIL}</span>
     </div>
   </div>"""
 
@@ -727,7 +722,7 @@ body {{
   align-items: flex-start;
   justify-content: space-between;
   gap: 24px;
-  padding: 15px 30px 11px;
+  padding: 15px 30px 12px;
 }}
 .hdr-brand {{
   display: flex;
@@ -788,17 +783,12 @@ body {{
   font-variant-numeric: lining-nums;
   font-feature-settings: "lnum" 1;
 }}
-.header-divider {{
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(201,168,76,0.55) 22%, rgba(201,168,76,0.55) 78%, transparent);
-  margin: 0 30px;
-}}
 .hdr-row {{
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 24px;
-  padding: 12px 30px 14px;
+  padding: 13px 30px 15px;
 }}
 .pnr-block {{ text-align: left; }}
 .pnr-label {{
@@ -846,16 +836,20 @@ body {{
   font-variant-numeric: lining-nums;
   font-feature-settings: "lnum" 1;
 }}
-/* Service bar along the bottom edge of the header. The strapline lives here
-   now: a service promise is marketing and does not belong in the identity
-   block of an operational document. */
+/* Service strip. Sits BETWEEN the brand block and the reference row
+   (2026-09-09, second pass) and does the dividing itself, which retired the
+   separate gold hairline — one band rather than a rule plus a bar. The
+   strapline lives here because a service promise is marketing, and marketing
+   does not belong in the identity block of an operational document. */
 .hdr-service {{
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  padding: 7px 30px;
-  border-top: 1px solid rgba(201,168,76,0.32);
+  padding: 6px 30px;
+  background: rgba(255,255,255,0.035);
+  border-top: 1px solid rgba(201,168,76,0.30);
+  border-bottom: 1px solid rgba(201,168,76,0.30);
 }}
 .hdr-strap {{
   font-size: 6.5px;

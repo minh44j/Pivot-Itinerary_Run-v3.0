@@ -72,9 +72,7 @@ for the CONFIRMED status only. Fonts: **Cormorant Garamond** (display/figures) +
   `Issued <date> · <HH:MM> AST` and the `CR · VAT` line. (2) Gold hairline. (3) **Reference row** —
   `PNR Reference` label above the reference at **34px** (it was 18px, smaller than the wordmark, which
   is why the header read flat), with `Agency Ref. / CRS Ref. / Booked On / Journey` as hairline-divided
-  cells on the right. (4) **Service bar** on the bottom edge — `BRAND_STRAPLINE` left,
-  `HOTLINE <COMPANY_HOTLINE> · <HEADER_EMAIL>` right.
-  There is intentionally **no "Booking Confirmation" title text**.
+  cells on the right. There is intentionally **no "Booking Confirmation" title text**.
 - **No status pill** (retired 2026-09-09, approved). The green CONFIRMED pill duplicated the label
   beside it and read as app rather than document language. The state now lives in the label itself,
   tinted by `_DOC_STATE`: `Itinerary Confirmation` in gold, `Revised Itinerary · Rescheduled` etc. in
