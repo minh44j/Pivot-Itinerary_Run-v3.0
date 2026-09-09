@@ -19,6 +19,7 @@ The corresponding requirement is that NOTHING changes for a single-reference
 booking — asserted in test_extractors.py's golden snapshots and again here on
 the rendered HTML.
 """
+import re
 import pathlib
 
 import pytest
@@ -64,7 +65,10 @@ def test_qc_passes(split):
 
 def test_both_references_render_in_header_footer_and_banners(split):
     html = G.build_html(split, project_dir=str(PROJ), layout="A")
-    assert 'class="pnr-value">AAA111 / BBB222<' in html
+    # Matched loosely on purpose: the element carries an inline grid placement
+    # since 2026-09-09, so asserting the exact tag text pinned attribute order
+    # rather than the behaviour under test (both references reaching the header).
+    assert re.search(r'class="pnr-value"[^>]*>AAA111 / BBB222<', html)
     assert "PNR References" in html
     assert "AAA111 / BBB222 &nbsp;|&nbsp; WWW.PIVOT-TRAVELS.COM" in html
     assert html.count('class="seg-pnr">PNR AAA111<') == 1

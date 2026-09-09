@@ -487,17 +487,32 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
     # Reference cells. They used to sit in a capsule BELOW the header; since
     # 2026-09-09 they live inside it, beside the airline reference, and the
     # capsule is gone (approved — the page also gets shorter for it).
-    def _ref_cell(label, value):
-        return (f'<div class="hdr-ref"><div class="hdr-ref-lbl">{label}</div>'
-                f'<div class="hdr-ref-val">{value}</div></div>')
-
-    hdr_refs = ""
+    # Label and value are emitted separately: the header row is ONE grid, so
+    # every label shares a line and every value shares a BASELINE, whatever the
+    # size difference between the 34px reference and the 10px cells.
+    _cells = []
     if booking_ref:
-        hdr_refs += _ref_cell("Agency Ref.", booking_ref)
+        _cells.append(("Agency Ref.", booking_ref))
     if crs_ref and crs_ref.upper() != pnr.upper():
-        hdr_refs += _ref_cell("CRS Ref.", crs_ref)
-    hdr_refs += _ref_cell("Booked On", booked_on)
-    hdr_refs += _ref_cell("Journey", journey_type.title())
+        _cells.append(("CRS Ref.", crs_ref))
+    _cells.append(("Booked On", booked_on))
+    _cells.append(("Journey", journey_type.title()))
+
+    hdr_cols = "1fr" + " auto" * len(_cells)
+    # Every item is placed EXPLICITLY: the rules below span both rows, which
+    # blocks grid auto-placement from flowing labels and values around them.
+    hdr_labels = "".join(
+        f'<div class="hdr-lbl hdr-cell" style="grid-column:{i + 2};grid-row:1;">{lbl}</div>'
+        for i, (lbl, _) in enumerate(_cells))
+    hdr_values = "".join(
+        f'<div class="hdr-val hdr-cell" style="grid-column:{i + 2};grid-row:2;">{val}</div>'
+        for i, (_, val) in enumerate(_cells))
+    # One rule per cell, spanning BOTH grid rows. A border on each cell instead
+    # would show as two segments with a gap: baseline alignment offsets the
+    # value box downward, and that offset falls outside its border box.
+    hdr_rules = "".join(
+        f'<div class="hdr-rule" style="grid-column:{i + 2};"></div>'
+        for i in range(len(_cells)))
 
     pax_html  = "\n".join(_pax_card(p) for p in passengers) if passengers else _pax_card({"name": "N/A"})
 
@@ -592,28 +607,24 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
     header_html = f"""
   <div class="header">
     <div class="hdr-top">
-      <div class="hdr-brand">
-        {logo_html}
-        <div>
-          <div class="company-name"><b>Pivot</b> Travel Management</div>
-          <div class="company-addr">{COMPANY_ADDRESS}</div>
-        </div>
-      </div>
-      <div class="hdr-doc">
-        <div class="doc-label" style="color:{_st['fg']};">{_st['label']}</div>
-        <div class="doc-meta">Issued {_issued_stamp()}</div>
+      {logo_html}
+      <div class="hdr-id">
+        <div class="hdr-name"><b>Pivot</b> Travel Management</div>
+        <div class="hdr-state" style="color:{_st['fg']};">{_st['label']}</div>
+        <div class="hdr-addr">{COMPANY_ADDRESS}</div>
+        <div class="hdr-issued">Issued {_issued_stamp()}</div>
       </div>
     </div>
     <div class="hdr-service">
       <span class="hdr-strap">{BRAND_STRAPLINE}</span>
-      <span class="hdr-contact">HOTLINE &nbsp;{COMPANY_HOTLINE} &nbsp;&middot;&nbsp; {HEADER_EMAIL}</span>
+      <span class="hdr-contact">{COMPANY_HOTLINE} &nbsp;&middot;&nbsp; {HEADER_EMAIL}</span>
     </div>
-    <div class="hdr-row">
-      <div class="pnr-block">
-        <div class="pnr-label">{pnr_label}</div>
-        <div class="pnr-value">{pnr_display}</div>
-      </div>
-      <div class="hdr-refs">{hdr_refs}</div>
+    <div class="hdr-row" style="grid-template-columns:{hdr_cols};">
+      {hdr_rules}
+      <div class="hdr-lbl hdr-lbl-pnr" style="grid-column:1;grid-row:1;">{pnr_label}</div>
+      {hdr_labels}
+      <div class="pnr-value" style="grid-column:1;grid-row:2;">{pnr_display}</div>
+      {hdr_values}
     </div>
   </div>"""
 
@@ -711,23 +722,24 @@ body {{
 /* ── Header — Model B: centred wordmark, hairline, doc-label + PNR ── */
 .header {{
   /* 2026-09-09 (approved): shorter than the Model B header it replaces — the
-     centred logo/wordmark lockup went inline, the strapline dropped into the
-     service bar, and the reference capsule that used to sit below the header
-     moved inside it. Net saving is roughly 70px of page. */
+     centred logo/wordmark lockup went inline, the strapline dropped into a
+     service strip, and the reference capsule that used to sit below the header
+     moved inside it. Net saving is roughly 70px of page.
+
+     Both text blocks are GRIDS aligned on the baseline, not stacks aligned on
+     their boxes: with a 34px reference sitting beside 10px cells, box alignment
+     leaves visibly different gaps under each (they are not on the same line
+     even though they look like they should be). Grid baseline alignment puts
+     every label on one line and every value on one baseline, whatever their
+     sizes. */
   background: linear-gradient(150deg, #323234 0%, #1e1e20 50%, #0e0e0f 100%);
   border-bottom: 2px solid #c9a84c;
 }}
 .hdr-top {{
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 15px 30px 12px;
-}}
-.hdr-brand {{
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  gap: 13px;
+  padding: 14px 30px 12px;
 }}
 .logo-img {{
   height: 34px;
@@ -736,9 +748,18 @@ body {{
   display: block;
   flex-shrink: 0;
 }}
+/* Row 1: wordmark | document state.   Row 2: address | issue stamp. */
+.hdr-id {{
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  column-gap: 24px;
+  row-gap: 7px;
+}}
 /* Wordmark: "Pivot" bold against the rest regular, so the name carries and the
    descriptor recedes (approved 2026-09-09). */
-.company-name {{
+.hdr-name {{
   font-family: 'Cormorant Garamond', serif;
   font-size: 24px;
   font-weight: 400;
@@ -746,18 +767,31 @@ body {{
   color: #f0ead8;
   line-height: 1;
 }}
-.company-name b {{ font-weight: 700; }}
-.company-addr {{
-  /* One line by design — a wrapped address orphans "Arabia" and costs the
-     header the height this redesign was meant to save. */
-  font-size: 7.2px;
+.hdr-name b {{ font-weight: 700; }}
+.hdr-state {{
+  /* Never wrap: a two-line state label pushes the address/issue row out of
+     alignment with the wordmark ("Revised Itinerary · Rescheduled" is the
+     longest it gets, and it fits). */
+  white-space: nowrap;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  text-align: right;
+  line-height: 1;
+}}
+/* The address and the issue stamp are one tier: same size, tracking and
+   colour, sharing a baseline, so the two read as a single line across the
+   header rather than two unrelated scraps of small print. */
+.hdr-addr, .hdr-issued {{
+  font-size: 7px;
   font-weight: 400;
-  letter-spacing: 0.3px;
-  color: rgba(255,255,255,0.38);
-  margin-top: 6px;
-  line-height: 1.4;
+  letter-spacing: 0.55px;
+  color: rgba(255,255,255,0.40);
+  line-height: 1;
   white-space: nowrap;
 }}
+.hdr-issued {{ text-align: right; }}
 .logo-fallback {{ display: flex; align-items: center; }}
 .logo-text-main {{
   font-family: 'Cormorant Garamond', serif;
@@ -767,36 +801,81 @@ body {{
   color: #f0ead8;
 }}
 .logo-text-main b {{ font-weight: 700; }}
-.hdr-doc {{ text-align: right; flex-shrink: 0; }}
-.doc-label {{
-  font-size: 8px;
-  font-weight: 600;
-  letter-spacing: 3px;
+
+/* Service strip. Sits BETWEEN the brand block and the reference row and does
+   the dividing itself, which retired the separate gold hairline — one band
+   rather than a rule plus a bar. The strapline lives here because a service
+   promise is marketing, and marketing does not belong in the identity block of
+   an operational document. */
+.hdr-service {{
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 6px 30px 7px;
+  background: rgba(255,255,255,0.035);
+  border-top: 1px solid rgba(201,168,76,0.30);
+  border-bottom: 1px solid rgba(201,168,76,0.30);
+}}
+.hdr-strap, .hdr-contact {{
+  font-size: 6.5px;
+  font-weight: 500;
+  letter-spacing: 2.2px;
+  line-height: 1;
+}}
+.hdr-strap  {{
+  color: rgba(255,255,255,0.30);
   text-transform: uppercase;
 }}
-.doc-meta {{
-  font-size: 7px;
-  letter-spacing: 1.4px;
-  color: rgba(255,255,255,0.42);
-  text-transform: uppercase;
-  margin-top: 4px;
+.hdr-contact {{
+  color: rgba(224,198,117,0.92);
+  white-space: nowrap;
   font-variant-numeric: lining-nums;
   font-feature-settings: "lnum" 1;
 }}
+
+/* Reference row: ONE grid. Labels fill the first implicit row, values the
+   second, and baseline alignment does the rest. Column count comes from the
+   markup (a booking without a distinct CRS ref has one column fewer). */
 .hdr-row {{
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 13px 30px 15px;
+  display: grid;
+  align-items: baseline;
+  row-gap: 0;
+  padding: 13px 30px 14px;
 }}
-.pnr-block {{ text-align: left; }}
-.pnr-label {{
-  font-size: 7px;
+.hdr-lbl {{
+  font-size: 6.5px;
   font-weight: 600;
-  letter-spacing: 2px;
-  color: rgba(201,168,76,0.72);
+  letter-spacing: 1.8px;
   text-transform: uppercase;
+  color: rgba(255,255,255,0.34);
+  line-height: 1;
+  padding-bottom: 9px;
+}}
+/* The reference's own label is gold: same tier, higher rank. */
+.hdr-lbl-pnr {{ color: rgba(201,168,76,0.72); }}
+.hdr-val {{
+  font-size: 10px;
+  font-weight: 500;
+  color: #f0ead8;
+  line-height: 1;
+  font-variant-numeric: lining-nums;
+  font-feature-settings: "lnum" 1;
+}}
+/* Hairline between reference cells. Applied to BOTH rows with no row-gap, so
+   the two segments meet and read as one continuous rule. */
+.hdr-cell {{
+  padding-left: 17px;
+  margin-left: 16px;
+  text-align: left;
+}}
+.hdr-rule {{
+  grid-row: 1 / 3;
+  align-self: stretch;
+  justify-self: start;
+  width: 1px;
+  margin-left: 16px;
+  background: rgba(255,255,255,0.09);
 }}
 /* The reference is the point of the header, so it is now the largest thing in
    it — it used to be set at 18px, smaller than the wordmark above it. */
@@ -808,62 +887,8 @@ body {{
   color: #ffffff;
   letter-spacing: 1.5px;
   line-height: 1;
-  margin-top: 6px;
   font-variant-numeric: lining-nums;
   font-feature-settings: "lnum" 1;
-}}
-.hdr-refs {{ display: flex; align-items: flex-end; }}
-.hdr-ref {{
-  padding: 0 16px;
-  border-left: 1px solid rgba(255,255,255,0.09);
-  text-align: left;
-}}
-.hdr-ref:first-child {{ border-left: none; }}
-.hdr-ref:last-child {{ padding-right: 0; }}
-.hdr-ref-lbl {{
-  font-size: 6.5px;
-  font-weight: 600;
-  letter-spacing: 1.8px;
-  color: rgba(255,255,255,0.34);
-  text-transform: uppercase;
-}}
-.hdr-ref-val {{
-  font-size: 10px;
-  font-weight: 500;
-  color: #f0ead8;
-  margin-top: 5px;
-  line-height: 1.35;
-  font-variant-numeric: lining-nums;
-  font-feature-settings: "lnum" 1;
-}}
-/* Service strip. Sits BETWEEN the brand block and the reference row
-   (2026-09-09, second pass) and does the dividing itself, which retired the
-   separate gold hairline — one band rather than a rule plus a bar. The
-   strapline lives here because a service promise is marketing, and marketing
-   does not belong in the identity block of an operational document. */
-.hdr-service {{
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 6px 30px;
-  background: rgba(255,255,255,0.035);
-  border-top: 1px solid rgba(201,168,76,0.30);
-  border-bottom: 1px solid rgba(201,168,76,0.30);
-}}
-.hdr-strap {{
-  font-size: 6.5px;
-  font-weight: 500;
-  letter-spacing: 2.2px;
-  text-transform: uppercase;
-  color: rgba(255,255,255,0.30);
-}}
-.hdr-contact {{
-  font-size: 7px;
-  font-weight: 500;
-  letter-spacing: 1.2px;
-  color: rgba(224,198,117,0.92);
-  white-space: nowrap;
 }}
 
 /* ── Content ── */
