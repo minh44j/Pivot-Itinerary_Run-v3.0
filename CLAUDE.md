@@ -25,6 +25,10 @@ Two ways it runs:
   Al Amal District, Riyadh, Kingdom of Saudi Arabia
 - **info@pivot-travels.com** (canonical public contact) · www.pivot-travels.com ·
   monitored inbox: cs@pivot-travels.com
+- **The itinerary HEADER carries `cs@pivot-travels.com` + hotline `+966 11 220 0296`**
+  (`HEADER_EMAIL` / `COMPANY_HOTLINE`, owner's explicit call 2026-09-09, asked and confirmed): a
+  client with a booking question is meant to reach the ticketing desk that watches that inbox. This
+  is a deliberate exception to the line below, which still governs the T&C page and the guide.
 - **info@ is what every issued PDF shows** (`COMPANY_EMAIL` in `generate_itinerary_v3.py`,
   mirrored in `air_suvidha/generate_air_suvidha_guide.py`). cs@ is the automation's own
   inbox and must NOT appear on a document a client reads.
@@ -60,13 +64,26 @@ Palette: charcoal→black gradient `#323234 / #1e1e20 / #0e0e0f` for header/foot
 banners; **white body** with light `#f7f7f7` chips; gold `#c9a84c`; emerald `#4ea87a/#7fd0a6`
 for the CONFIRMED status only. Fonts: **Cormorant Garamond** (display/figures) + **Inter** (body).
 
-- **Header (Model B):** centred feather logo + "PIVOT TRAVEL MANAGEMENT" wordmark, gold hairline,
-  then CONFIRMED pill (left) above "OFFICIAL TRAVEL DOCUMENT", and the PNR number (right) above
-  its "PNR REFERENCE" label. There is intentionally **no "Booking Confirmation" title text**.
-  Directly under the wordmark sits the **brand strapline** `BRAND_STRAPLINE` —
-  `CORPORATE TRAVEL | CHAUFFEURS | CURATED ITINERARIES | PREMIUM PILGRIMAGE`, 6.5px,
-  2.6px tracking, `rgba(255,255,255,0.30)` (deliberately subtle) — above the gold hairline.
-- Rounded ref-strip capsule · rounded passenger cards with a gold top strip + grey value chips ·
+- **Header (Reference Block, approved 2026-09-09 — replaces Model B):** three bands inside one
+  dark panel. (1) **Brand row** — feather logo + wordmark INLINE (no longer centred/stacked), where
+  `Pivot` is bold 700 against `Travel Management` at 400 (`.company-name b`), 24px; the registered
+  `COMPANY_ADDRESS` runs on ONE line beneath it (`white-space: nowrap` — a wrap orphans "Arabia" and
+  costs the height this header exists to save). Right-aligned opposite: the **document label**, then
+  `Issued <date> · <HH:MM> AST` and the `CR · VAT` line. (2) Gold hairline. (3) **Reference row** —
+  `PNR Reference` label above the reference at **34px** (it was 18px, smaller than the wordmark, which
+  is why the header read flat), with `Agency Ref. / CRS Ref. / Booked On / Journey` as hairline-divided
+  cells on the right. (4) **Service bar** on the bottom edge — `BRAND_STRAPLINE` left,
+  `HOTLINE <COMPANY_HOTLINE> · <HEADER_EMAIL>` right.
+  There is intentionally **no "Booking Confirmation" title text**.
+- **No status pill** (retired 2026-09-09, approved). The green CONFIRMED pill duplicated the label
+  beside it and read as app rather than document language. The state now lives in the label itself,
+  tinted by `_DOC_STATE`: `Itinerary Confirmation` in gold, `Revised Itinerary · Rescheduled` etc. in
+  the disruption's colour. `data["doc_status"]` still drives it exactly as before.
+- **"Official Travel Document" is retired** (2026-09-09). A *travel document* is a passport or visa
+  and *official* implies state issue; this page is neither. The label is now **Itinerary Confirmation**.
+- **The ref-strip capsule is gone** — its four values moved up into the header's reference row, so the
+  page is ~70px shorter and every reference reads in one place.
+- Rounded passenger cards with a gold top strip + grey value chips ·
   dark rounded segment banners (OUTBOUND / INBOUND) · rounded flight cards with a white plane-badge
   connector · gold layover badge · dark footer with `PIVOT AUTOMATED ITINERARY | <PNR> | WWW.PIVOT-TRAVELS.COM`
   and a **second registration line** `CR 7043148696 · VAT 311788697700003`
@@ -133,6 +150,30 @@ review, do not produce a PDF**. `qc_check()` gates this (missing PNR / passenger
 flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
+
+- **2026-09-09 — header redesigned (Reference Block) and "Official Travel Document" retired:**
+  Asked and confirmed twice per §5, chosen from three drawn directions. Three complaints, all
+  measurable rather than matters of taste. (1) **The label was wrong.** In aviation and immigration
+  language a *travel document* is a passport, visa or laissez-passer, and *official* implies an
+  authority issued it — this page is neither, and calling it official invites a passenger to present
+  it where it carries no weight. It now reads **Itinerary Confirmation**, flexing to *Revised
+  Itinerary · Rescheduled* etc. (2) **The reference was set at 18px** on a 794px page — smaller than
+  the wordmark above it, so the eye landed on the brand and never travelled to the code. It is now
+  34px and reads first. (3) **The bottom row was half empty**: a pill left, the reference right, a
+  wide dead gap through the middle. Filled with the reference cells lifted out of the capsule that
+  used to sit BELOW the header — a move, not an addition, and the page is ~70px shorter for it.
+  Also approved in the same pass: the wordmark goes inline with `Pivot` bold against `Travel
+  Management` regular (mirrored in the Air Suvidha guide and all three alert/digest emails); the
+  registered address prints under it; the strapline drops to a service bar carrying the hotline; and
+  the **CONFIRMED pill is retired** — it duplicated the label beside it, and its dot glow was the
+  last `box-shadow` in the file (the one primitive Apple's PDF viewer paints as a grey slab, §8
+  2026-07-30). **Deliberately NOT done: the revision counter.** The header stamps the issue time,
+  which is honest at render, but "Revision 2 of 2" needs state keyed on the PNR in
+  `processed_log.json` — printing a guessed number would be exactly the fabrication §7 forbids. The
+  gap it leaves is real: 8JS4ID and 8JVF9L were each reissued this fortnight and the client received
+  a second PDF with the same reference, the same "Booked On" date and nothing to say which was
+  current. Verified on a real Akbar booking (9L6WUH, CAI→RUH) and on the split-carrier fixture,
+  where `AAA111 / BBB222` at 34px still clears the reference cells. 230 tests pass.
 
 - **2026-08-25 — Akbar terminals now RENDER, attributed by column position; and
   two passenger types no longer merge into one baggage figure:**

@@ -10,6 +10,7 @@ Usage:
 """
 
 import json, sys, os, tempfile, base64, re
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from datetime import datetime
 
@@ -408,20 +409,42 @@ COMPANY_VAT = "311788697700003"
 # reading a PDF should be pointed at the staffed address instead.
 COMPANY_EMAIL = "info@pivot-travels.com"
 
+# Registered address, printed under the wordmark in the header (2026-09-09).
+COMPANY_ADDRESS = ("Suite 20, 2nd Floor, Mobco Building, 2762 Ibn Al Anbari Street, "
+                   "Al Amal District, Riyadh, Kingdom of Saudi Arabia")
+
+# Header service bar. The owner asked for cs@ here specifically (2026-09-09),
+# knowing it is the automation's own inbox: a client with a booking question is
+# to reach the ticketing desk that watches it. The T&C page keeps COMPANY_EMAIL.
+COMPANY_HOTLINE = "+966 11 220 0296"
+HEADER_EMAIL = "cs@pivot-travels.com"
+
+# Riyadh is UTC+3 year-round (no DST), so a fixed offset is exact. The runner
+# executes in CI on UTC; the stamp must read local to the issuing office.
+_AST = timezone(timedelta(hours=3))
+
+
+def _issued_stamp() -> str:
+    """Date and time this copy was rendered, in Riyadh local time.
+
+    A reissued booking otherwise produces a second PDF carrying the same PNR and
+    the same 'Booked On' date, with nothing to say which copy is current — a
+    passenger can end up travelling on a superseded print-out.
+    """
+    return datetime.now(timezone.utc).astimezone(_AST).strftime("%d %b %Y &middot; %H:%M AST")
+
 # Services strapline under the wordmark — subtle, full uppercase, wide tracked.
 BRAND_STRAPLINE = "CORPORATE TRAVEL | CHAUFFEURS | CURATED ITINERARIES | PREMIUM PILGRIMAGE"
 
-_STATUS_PILL = {
-    "confirmed":   {"label": "Confirmed",   "sub": "Official Travel Document",
-                    "fg": "#7fd0a6", "dot": "#4ea87a", "border": "#4ea87a", "bg": "rgba(78,168,122,0.12)"},
-    "rebooked":    {"label": "Rebooked",    "sub": "Updated Travel Document",
-                    "fg": "#e79a95", "dot": "#c0392b", "border": "#c0392b", "bg": "rgba(192,57,43,0.14)"},
-    "rescheduled": {"label": "Rescheduled", "sub": "Updated Travel Document",
-                    "fg": "#e6a86a", "dot": "#d17a2a", "border": "#d17a2a", "bg": "rgba(209,122,42,0.14)"},
-    "delayed":     {"label": "Delayed",     "sub": "Updated Travel Document",
-                    "fg": "#e0c675", "dot": "#c9a84c", "border": "#c9a84c", "bg": "rgba(201,168,76,0.14)"},
-    "revised":     {"label": "Revised",     "sub": "Updated Travel Document",
-                    "fg": "#e0c675", "dot": "#c9a84c", "border": "#c9a84c", "bg": "rgba(201,168,76,0.14)"},
+# Document state. The green CONFIRMED pill was retired 2026-09-09 (approved):
+# it duplicated the label beside it and read as app rather than document
+# language. The state now lives in the label itself, tinted by these colours.
+_DOC_STATE = {
+    "confirmed":   {"label": "Itinerary Confirmation",  "fg": "rgba(201,168,76,0.78)"},
+    "rebooked":    {"label": "Revised Itinerary &middot; Rebooked",    "fg": "#e79a95"},
+    "rescheduled": {"label": "Revised Itinerary &middot; Rescheduled", "fg": "#e6a86a"},
+    "delayed":     {"label": "Revised Itinerary &middot; Delayed",     "fg": "#e0c675"},
+    "revised":     {"label": "Revised Itinerary",       "fg": "#e0c675"},
 }
 
 
@@ -456,24 +479,25 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
     else:
         logo_html = (
             '<div class="logo-fallback">'
-            '<span class="logo-text-main">Pivot Travel Management</span>'
+            '<span class="logo-text-main"><b>Pivot</b> Travel Management</span>'
             '</div>'
         )
         footer_logo_html = '<span style="font-family:Inter,sans-serif;font-size:13px;font-weight:700;color:#fff;">Pivot Travel Management</span>'
 
-    # Ref strip — show booking_ref if present; crs_ref only if differs from pnr
-    booking_ref_col = f"""
-      <div class="ref-col">
-        <div class="ref-lbl">Booking Ref.</div>
-        <div class="ref-val">{booking_ref}</div>
-      </div>""" if booking_ref else ""
+    # Reference cells. They used to sit in a capsule BELOW the header; since
+    # 2026-09-09 they live inside it, beside the airline reference, and the
+    # capsule is gone (approved — the page also gets shorter for it).
+    def _ref_cell(label, value):
+        return (f'<div class="hdr-ref"><div class="hdr-ref-lbl">{label}</div>'
+                f'<div class="hdr-ref-val">{value}</div></div>')
 
-    show_crs = crs_ref and crs_ref.upper() != pnr.upper()
-    crs_col = f"""
-      <div class="ref-col">
-        <div class="ref-lbl">CRS Ref.</div>
-        <div class="ref-val">{crs_ref}</div>
-      </div>""" if show_crs else ""
+    hdr_refs = ""
+    if booking_ref:
+        hdr_refs += _ref_cell("Agency Ref.", booking_ref)
+    if crs_ref and crs_ref.upper() != pnr.upper():
+        hdr_refs += _ref_cell("CRS Ref.", crs_ref)
+    hdr_refs += _ref_cell("Booked On", booked_on)
+    hdr_refs += _ref_cell("Journey", journey_type.title())
 
     pax_html  = "\n".join(_pax_card(p) for p in passengers) if passengers else _pax_card({"name": "N/A"})
 
@@ -562,43 +586,39 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
                     f'</div>')
     terms_html   = _terms_block()
 
-    # Status pill — "confirmed" default (identical to the locked original);
-    # revised itineraries pass data["doc_status"] (rebooked/rescheduled/delayed).
-    _pill = _STATUS_PILL.get((data.get("doc_status") or "confirmed").lower(), _STATUS_PILL["confirmed"])
+    # Document state drives the label's wording and tint only — there is no
+    # status pill any more (see _DOC_STATE).
+    _st = _DOC_STATE.get((data.get("doc_status") or "confirmed").lower(), _DOC_STATE["confirmed"])
+    _reg_line = f"CR {COMPANY_CR}"
+    if COMPANY_VAT:
+        _reg_line += f" &nbsp;&middot;&nbsp; VAT {COMPANY_VAT}"
     header_html = f"""
   <div class="header">
-    <div class="brand-row">
-      {logo_html}
-      <span class="company-name">Pivot Travel Management</span>
-    </div>
-    <div class="brand-strapline">{BRAND_STRAPLINE}</div>
-    <div class="header-divider"></div>
-    <div class="header-row2">
-      <div class="doc-block">
-        <div class="confirmed-pill" style="border-color:{_pill['border']};background:{_pill['bg']};">
-          <span class="pill-dot" style="background:{_pill['dot']};box-shadow:0 0 5px {_pill['dot']};"></span>
-          <span class="pill-text" style="color:{_pill['fg']};">{_pill['label']}</span>
+    <div class="hdr-top">
+      <div class="hdr-brand">
+        {logo_html}
+        <div>
+          <div class="company-name"><b>Pivot</b> Travel Management</div>
+          <div class="company-addr">{COMPANY_ADDRESS}</div>
         </div>
-        <div class="doc-label">{_pill['sub']}</div>
       </div>
+      <div class="hdr-doc">
+        <div class="doc-label" style="color:{_st['fg']};">{_st['label']}</div>
+        <div class="doc-meta">Issued {_issued_stamp()}</div>
+        <div class="doc-meta">{_reg_line}</div>
+      </div>
+    </div>
+    <div class="header-divider"></div>
+    <div class="hdr-row">
       <div class="pnr-block">
-        <div class="pnr-value">{pnr_display}</div>
         <div class="pnr-label">{pnr_label}</div>
+        <div class="pnr-value">{pnr_display}</div>
       </div>
+      <div class="hdr-refs">{hdr_refs}</div>
     </div>
-  </div>"""
-
-    ref_html = f"""
-  <div class="ref-strip">
-    {booking_ref_col}
-    {crs_col}
-    <div class="ref-col">
-      <div class="ref-lbl">Booked On</div>
-      <div class="ref-val">{booked_on}</div>
-    </div>
-    <div class="ref-col">
-      <div class="ref-lbl">Journey Type</div>
-      <div class="ref-val">{journey_type}</div>
+    <div class="hdr-service">
+      <span class="hdr-strap">{BRAND_STRAPLINE}</span>
+      <span class="hdr-contact">HOTLINE &nbsp;{COMPANY_HOTLINE} &nbsp;&middot;&nbsp; {HEADER_EMAIL}</span>
     </div>
   </div>"""
 
@@ -626,7 +646,7 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
         # Itinerary fits one page → page 1 = itinerary + footer; page 2 = T&C + footer.
         body_html = f"""
   <div class="sheet sheet-itin">
-    {header_html}{ref_html}{content_html}{footer_html}
+    {header_html}{content_html}{footer_html}
   </div>
   <div class="sheet sheet-tc">
     {terms_html}
@@ -636,7 +656,7 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
         # Measurement pass — itinerary + its footer only, natural height.
         body_html = f"""
   <div class="page-measure">
-    {header_html}{ref_html}{content_html}{footer_html}
+    {header_html}{content_html}{footer_html}
   </div>"""
     else:
         # layout "B" — itinerary spills: no page-1 footer; cards flow, then T&C,
@@ -644,7 +664,7 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
         footer_abs = footer_html.replace('class="footer"', 'class="footer footer-abs"')
         body_html = f"""
   <div class="page-flow">
-    {header_html}{ref_html}{content_html}
+    {header_html}{content_html}
     {terms_html}
     {footer_abs}
   </div>"""
@@ -695,154 +715,161 @@ body {{
 
 /* ── Header — Model B: centred wordmark, hairline, doc-label + PNR ── */
 .header {{
+  /* 2026-09-09 (approved): shorter than the Model B header it replaces — the
+     centred logo/wordmark lockup went inline, the strapline dropped into the
+     service bar, and the reference capsule that used to sit below the header
+     moved inside it. Net saving is roughly 70px of page. */
   background: linear-gradient(150deg, #323234 0%, #1e1e20 50%, #0e0e0f 100%);
-  padding: 20px 30px 16px;
   border-bottom: 2px solid #c9a84c;
 }}
-.brand-row {{
+.hdr-top {{
   display: flex;
-  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 15px 30px 11px;
+}}
+.hdr-brand {{
+  display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 9px;
+  gap: 12px;
 }}
 .logo-img {{
-  height: 46px;
+  height: 34px;
   width: auto;
   object-fit: contain;
   display: block;
+  flex-shrink: 0;
 }}
+/* Wordmark: "Pivot" bold against the rest regular, so the name carries and the
+   descriptor recedes (approved 2026-09-09). */
 .company-name {{
   font-family: 'Cormorant Garamond', serif;
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 400;
   letter-spacing: 0.04em;
   color: #f0ead8;
+  line-height: 1;
 }}
-/* Services strapline under the wordmark (2026-07-30). Deliberately SUBTLE —
-   low-opacity white, small, wide tracking — so it fills the gap under the
-   wordmark without competing with the PNR block below the hairline. */
-.brand-strapline {{
-  text-align: center;
-  margin-top: 7px;
-  font-size: 6.5px;
-  font-weight: 500;
-  letter-spacing: 2.6px;
-  text-transform: uppercase;
-  color: rgba(255,255,255,0.30);
+.company-name b {{ font-weight: 700; }}
+.company-addr {{
+  /* One line by design — a wrapped address orphans "Arabia" and costs the
+     header the height this redesign was meant to save. */
+  font-size: 7.2px;
+  font-weight: 400;
+  letter-spacing: 0.3px;
+  color: rgba(255,255,255,0.38);
+  margin-top: 6px;
+  line-height: 1.4;
+  white-space: nowrap;
 }}
 .logo-fallback {{ display: flex; align-items: center; }}
 .logo-text-main {{
   font-family: 'Cormorant Garamond', serif;
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 400;
   letter-spacing: 0.04em;
   color: #f0ead8;
 }}
-.header-divider {{
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(201,168,76,0.55) 22%, rgba(201,168,76,0.55) 78%, transparent);
-  margin: 15px 0 13px;
-}}
-.header-row2 {{
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-}}
+.logo-text-main b {{ font-weight: 700; }}
+.hdr-doc {{ text-align: right; flex-shrink: 0; }}
 .doc-label {{
   font-size: 8px;
   font-weight: 600;
   letter-spacing: 3px;
-  color: rgba(201,168,76,0.75);
   text-transform: uppercase;
 }}
-.doc-block {{
+.doc-meta {{
+  font-size: 7px;
+  letter-spacing: 1.4px;
+  color: rgba(255,255,255,0.42);
+  text-transform: uppercase;
+  margin-top: 4px;
+  font-variant-numeric: lining-nums;
+  font-feature-settings: "lnum" 1;
+}}
+.header-divider {{
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(201,168,76,0.55) 22%, rgba(201,168,76,0.55) 78%, transparent);
+  margin: 0 30px;
+}}
+.hdr-row {{
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 12px 30px 14px;
 }}
-.confirmed-pill {{
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  border: 1.5px solid #4ea87a;
-  background: rgba(78,168,122,0.12);
-  border-radius: 20px;
-  padding: 4px 13px;
-}}
-.pill-dot {{
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #4ea87a;
-  box-shadow: 0 0 5px rgba(78,168,122,0.6);
-  flex-shrink: 0;
-}}
-.pill-text {{
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 2.2px;
-  color: #7fd0a6;
-  text-transform: uppercase;
-}}
-.pnr-block {{ text-align: right; }}
+.pnr-block {{ text-align: left; }}
 .pnr-label {{
   font-size: 7px;
   font-weight: 600;
   letter-spacing: 2px;
-  color: rgba(201,168,76,0.55);
+  color: rgba(201,168,76,0.72);
   text-transform: uppercase;
-  margin-top: 4px;
-  text-align: right;
 }}
+/* The reference is the point of the header, so it is now the largest thing in
+   it — it used to be set at 18px, smaller than the wordmark above it. */
 .pnr-value {{
   font-family: 'Cormorant Garamond', serif;
   font-style: normal;
-  font-size: 18px;
+  font-size: 34px;
   font-weight: 700;
   color: #ffffff;
   letter-spacing: 1.5px;
   line-height: 1;
+  margin-top: 6px;
   font-variant-numeric: lining-nums;
   font-feature-settings: "lnum" 1;
 }}
-
-/* ── Ref Strip — navy gradient, centred, ALL CAPS values ── */
-.ref-strip {{
-  margin: 14px 28px 0;
-  background: #f7f7f7;
-  border: 1px solid #ececec;
-  border-radius: 40px;
-  padding: 11px 24px;
-  display: flex;
-  justify-content: center;
+.hdr-refs {{ display: flex; align-items: flex-end; }}
+.hdr-ref {{
+  padding: 0 16px;
+  border-left: 1px solid rgba(255,255,255,0.09);
+  text-align: left;
 }}
-.ref-col {{
-  text-align: center;
-  padding: 0 22px;
-  border-right: 1px solid #ddd;
-}}
-.ref-col:last-child {{
-  border-right: none;
-}}
-.ref-lbl {{
-  font-size: 7px;
+.hdr-ref:first-child {{ border-left: none; }}
+.hdr-ref:last-child {{ padding-right: 0; }}
+.hdr-ref-lbl {{
+  font-size: 6.5px;
   font-weight: 600;
-  letter-spacing: 1.5px;
-  color: #c9a84c;
+  letter-spacing: 1.8px;
+  color: rgba(255,255,255,0.34);
   text-transform: uppercase;
-  margin-bottom: 4px;
 }}
-.ref-val {{
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 15px;
-  font-weight: 700;
-  color: #1a1a1a;
-  letter-spacing: 0.6px;
-  text-transform: uppercase;
+.hdr-ref-val {{
+  font-size: 10px;
+  font-weight: 500;
+  color: #f0ead8;
+  margin-top: 5px;
+  line-height: 1.35;
   font-variant-numeric: lining-nums;
   font-feature-settings: "lnum" 1;
+}}
+/* Service bar along the bottom edge of the header. The strapline lives here
+   now: a service promise is marketing and does not belong in the identity
+   block of an operational document. */
+.hdr-service {{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 7px 30px;
+  border-top: 1px solid rgba(201,168,76,0.32);
+}}
+.hdr-strap {{
+  font-size: 6.5px;
+  font-weight: 500;
+  letter-spacing: 2.2px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.30);
+}}
+.hdr-contact {{
+  font-size: 7px;
+  font-weight: 500;
+  letter-spacing: 1.2px;
+  color: rgba(224,198,117,0.92);
+  white-space: nowrap;
 }}
 
 /* ── Content ── */

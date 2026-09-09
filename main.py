@@ -567,7 +567,7 @@ def _confirmation_html(data, source_ref="", logo_cid=None):
       <table role="presentation" width="620" cellpadding="0" cellspacing="0" style="max-width:620px;width:100%;border-radius:10px;overflow:hidden;background:#faf9f5;border:1px solid #ddd6c4;">
         <tr><td style="background:#1e1e20;background:{_BRAND_CHARCOAL_GRAD};padding:20px 22px 16px;text-align:center;">
           {logo_img}
-          <div style="font-family:{_FONT_SERIF};font-size:20px;font-weight:400;letter-spacing:.8px;color:#f2efe6;">Pivot Travel Management</div>
+          <div style="font-family:{_FONT_SERIF};font-size:20px;font-weight:400;letter-spacing:.8px;color:#f2efe6;"><b style="font-weight:700;">Pivot</b> Travel Management</div>
           <div style="height:1px;background:{_BRAND_GOLD};line-height:1px;font-size:1px;max-width:150px;margin:12px auto 10px;">&nbsp;</div>
           <div style="font-family:{_FONT_MONO};font-size:11px;letter-spacing:1px;color:{_BRAND_GOLD};">BOOKING CONFIRMATION &nbsp;&middot;&nbsp; {esc(data.get("pnr"))}</div>
         </td></tr>
@@ -659,7 +659,7 @@ def _flags_html(flagged, logo_cid=None):
       <table role="presentation" width="620" cellpadding="0" cellspacing="0" style="max-width:620px;width:100%;border-radius:10px;overflow:hidden;background:#faf9f5;border:1px solid #ddd6c4;">
         <tr><td style="background:#1e1e20;background:{_BRAND_CHARCOAL_GRAD};padding:20px 22px 16px;text-align:center;">
           {logo_img}
-          <div style="font-family:{_FONT_SERIF};font-size:20px;font-weight:400;letter-spacing:.8px;color:#f2efe6;">Pivot Travel Management</div>
+          <div style="font-family:{_FONT_SERIF};font-size:20px;font-weight:400;letter-spacing:.8px;color:#f2efe6;"><b style="font-weight:700;">Pivot</b> Travel Management</div>
           <div style="height:1px;background:{_BRAND_GOLD};line-height:1px;font-size:1px;max-width:150px;margin:12px auto 10px;">&nbsp;</div>
           <div style="font-family:{_FONT_MONO};font-size:11px;letter-spacing:1px;color:#d99a2e;">⚠ MANUAL REVIEW REQUIRED &nbsp;&middot;&nbsp; {n}</div>
         </td></tr>
@@ -909,7 +909,7 @@ def _disruption_html(alerts, logo_cid=None):
       <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;border-radius:14px;overflow:hidden;background:#f6f4ef;">
         <tr><td style="background:#1e1e20;background:{_BRAND_CHARCOAL_GRAD};padding:26px 24px 20px;text-align:center;">
           {logo_img}
-          <div style="font-family:{_FONT_SERIF};font-size:22px;font-weight:400;letter-spacing:.8px;color:#f2efe6;">Pivot Travel Management</div>
+          <div style="font-family:{_FONT_SERIF};font-size:22px;font-weight:400;letter-spacing:.8px;color:#f2efe6;"><b style="font-weight:700;">Pivot</b> Travel Management</div>
           <div style="height:1px;background:{_BRAND_GOLD};line-height:1px;font-size:1px;max-width:170px;margin:15px auto;">&nbsp;</div>
           <div style="font-family:{_FONT_SANS};font-size:15px;font-weight:600;letter-spacing:1.5px;color:{_BRAND_GOLD};">⚠️ ACTION REQUIRED</div>
           <div style="font-family:{_FONT_SANS};font-size:13px;color:#b9b5ab;margin-top:6px;">{n} possible cancellation / schedule-change email(s)</div>

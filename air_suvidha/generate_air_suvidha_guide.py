@@ -83,7 +83,7 @@ def header():
   <div class="header">
     <div class="brand-row">
       {brand}
-      <span class="company-name">Pivot Travel Management</span>
+      <span class="company-name"><b>Pivot</b> Travel Management</span>
     </div>
     <div class="header-divider"></div>
     <div class="doc-row">
@@ -264,6 +264,7 @@ body {{ font-family: 'Inter', Helvetica, Arial, sans-serif; background: #fff; co
 }}
 .brand-row {{ display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; }}
 .logo-img {{ height: 46px; width: auto; object-fit: contain; display: block; }}
+.company-name b { font-weight: 700; }
 .company-name {{ font-family: 'Cormorant Garamond', Georgia, serif; font-size: 22px; font-weight: 400;
   letter-spacing: 0.04em; color: #f0ead8; }}
 .header-divider {{ height: 1px; margin: 15px 0 14px;
