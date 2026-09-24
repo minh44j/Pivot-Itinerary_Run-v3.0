@@ -1,0 +1,41 @@
+Your ticket has been created. Reservation code
+Mr. TEST PASSENGER
+ZZ9ZZ9
+As Turkish Airlines, we are very pleased to welcome you.
+Transaction date: 23 September 2026, 22:48 (GMT +03) (Istanbul Local Time) Manage booking
+Flight details
+Konya (KYA) - Riyadh (RUH) 27 September 2026 Sunday
+16:15 00:15
+IST
+Journey duration
+KYA RUH Economy Class (Y) - EcoFly
+8h
+Konya Riyadh
+Flight details
+16:15 KONYA (TÜRKİYE) Konya Airport (KYA)
+Airline - Flight no: TURKISH AIRLINES - TK2035
+Aircraft type: Narrow-body - Airbus A320
+17:45 ISTANBUL (TÜRKİYE) Istanbul Airport (IST)
+Status: Transfer and flight change
+Airline: Istanbul, Istanbul Airport
+20:20 ISTANBUL (TÜRKİYE) Istanbul Airport (IST)
+Airline - Flight no: TURKISH AIRLINES - TK140
+Aircraft type: Wide-body - Airbus A330-300
+00:15 RİYADH (SAUDİ ARABİA) King Khalid International Airport (RUH)
+Fare Rules
+Change Refund / Cancellation Baggage Allowance
+With 3.416,00 TRY penalty Not allowed - (In case of no-show) Check-in Baggage : 1 piece x 23
+With 10.249,00 TRY penalty - (In Not allowed kg
+case of no-show) Cabin baggage: 1 piece x 8 kg
+(max. size: 55x40x23 cm)
+Passenger information
+Passenger name Ticket numbers Frequent Flyer Program details
+TEST PASSENGER 0000000000000 The Frequent Flyer Program account has not been
+logged in for this passenger.
+Additional services
+Seat selection
+Passenger name Konya - Riyadh
+TEST PASSENGER KYA - IST : -
+Adult IST - RUH : 19A
+Fare details
+Flight fare SAR 0,00

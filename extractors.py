@@ -1401,6 +1401,23 @@ def _ta_norm_flight(carrier_num):
     return f"{m.group(1)} {m.group(2)}" if m else carrier_num
 
 
+# Turkish Airlines prints place names with Turkish locale capitals: RİYADH,
+# SAUDİ ARABİA, TÜRKİYE. Python lowercases U+0130 (İ) to "i" PLUS a combining
+# dot (U+0307), so a plain .title() turns RİYADH into "Ri̇yadh" — a visibly
+# broken city name on a client document. Fold the two Turkish-only letters to
+# their ASCII forms first, and drop any stray combining dot.
+_TR_FOLD = {0x0130: "I", 0x0131: "i", 0x0307: ""}
+
+
+def _tr_clean(s):
+    """Normalise Turkish dotted/dotless i; leave every other character alone."""
+    return (s or "").translate(_TR_FOLD)
+
+
+def _tr_title(s):
+    return _tr_clean(s).title()
+
+
 def extract_turkish_airlines(pdf_text, ctx=None):
     if not pdf_text:
         raise ValueError("Turkish Airlines source document not found / unreadable")
@@ -1431,6 +1448,19 @@ def extract_turkish_airlines(pdf_text, ctx=None):
     d["passengers"] = passengers or [{"name": "Not specified", "ticket_no": "Not specified",
                                       "cabin_bag": "", "checked_bag": "", "seat": ""}]
 
+    # Seat selection — "Additional services" lists one "<DEP> - <ARR> : <SEAT>"
+    # line per leg. A lone "-" means no seat was taken on that leg. The block
+    # repeats per passenger on a multi-passenger booking and its shape there is
+    # unverified, so seats are read ONLY for a single-passenger booking; more
+    # than one and they stay blank rather than being attached to the wrong
+    # traveller (§7 — wrong is worse than missing).
+    seat_by_route = {}
+    _seat_sec = re.search(r"Seat selection(.{0,1200}?)(?:\n\s*Fare details|\Z)", t, re.S | re.I)
+    if _seat_sec and len(d["passengers"]) == 1:
+        for _dep, _arr, _st in re.findall(
+                r"\b([A-Z]{3})\s*-\s*([A-Z]{3})\s*:\s*([0-9]{1,3}[A-Z])\b", _seat_sec.group(1)):
+            seat_by_route[(_dep, _arr)] = _st
+
     headers = list(_TA_DIR_RE.finditer(t))
     all_flights = []
     for i, h in enumerate(headers):
@@ -1448,9 +1478,14 @@ def extract_turkish_airlines(pdf_text, ctx=None):
         # 2026-07-30 per-leg pax: Turkish Airlines states baggage in a Fare-Rules
         # block PER DIRECTION (not per leg), so read THIS direction's own figures
         # from its full block (including the Fare Rules the `scoped` slice cuts
-        # off) and apply them to every leg in the direction. TA's PDF carries NO
-        # seat data at all (verified on both real files), so seat stays "" and the
-        # generator omits the SEAT column entirely.
+        # off) and apply them to every leg in the direction.
+        #
+        # Seats: TA's PDF DOES carry them, in an "Additional services / Seat
+        # selection" block that lists one "<DEP> - <ARR> : <SEAT>" line per leg
+        # (2026-09-24 — the note here used to say TA carried no seat data, which
+        # was true of the two 2026-07 files but not of newer ones; a seat the
+        # client paid for was being dropped). Parsed once per booking below and
+        # attached per leg by route.
         _dir_block = t[start:end]
         _dcm = re.search(r"Check-?in Baggage\s*:\s*(\d+)\s*piece[s]?\s*x\s*(\d+)", _dir_block, re.I)
         _dca = re.search(r"Cabin Baggage\s*:\s*(\d+)\s*piece[s]?\s*x\s*(\d+)", _dir_block, re.I)
@@ -1474,16 +1509,18 @@ def extract_turkish_airlines(pdf_text, ctx=None):
             dep_time, dep_city, _dep_country, dep_ap, dep_iata = s0.groups()
             arr_time, arr_city, _arr_country, arr_ap, arr_iata = s1.groups()
             dep_date, arr_date = dates[i2], dates[i2 + 1]
+            _leg_seat = seat_by_route.get((dep_iata, arr_iata), "")
+            _leg_pax = [dict(px, seat=_leg_seat) for px in _dir_pax]
             all_flights.append({
                 "flight_no": _ta_norm_flight(fnos[i2 // 2]), "airline": "Turkish Airlines",
                 "dep_iata": dep_iata, "arr_iata": arr_iata,
-                "dep_city": dep_city.title(), "arr_city": arr_city.title(),
-                "dep_airport": dep_ap.strip(), "arr_airport": arr_ap.strip(),
+                "dep_city": _tr_title(dep_city), "arr_city": _tr_title(arr_city),
+                "dep_airport": _tr_clean(dep_ap).strip(), "arr_airport": _tr_clean(arr_ap).strip(),
                 "terminal": "", "arr_terminal": "",
                 "dep_date": dep_date, "dep_time": dep_time,
                 "arr_date": arr_date, "arr_time": arr_time,
                 "cabin": cabin, "duration": _diff_hm(dep_date, dep_time, arr_date, arr_time),
-                "pax": [dict(p) for p in _dir_pax],
+                "pax": _leg_pax,
             })
     d["flights"] = all_flights
     return _finalize(d, ctx)

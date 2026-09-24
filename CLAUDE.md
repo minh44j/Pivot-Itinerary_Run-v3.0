@@ -149,6 +149,23 @@ flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
 
+- **2026-09-24 — Turkish Airlines: a mangled city name and a dropped seat:**
+  Real one-way KYA→IST→RUH ticket (T67TR3). Two defects on one document.
+  (1) **"Ri̇yadh".** Turkish Airlines prints place names with Turkish locale capitals —
+  `RİYADH (SAUDİ ARABİA)`, `TÜRKİYE`. Python lowercases U+0130 (İ) to "i" **plus a combining dot**
+  (U+0307), so the plain `.title()` produced `Ri̇yadh` — a visibly broken destination on a client
+  document. New `_tr_clean` / `_tr_title` fold the two Turkish-only letters (İ, ı) to ASCII and drop
+  a stray combining dot; every other character, accents included, is left alone (asserted:
+  `München` survives). (2) **The seat never reached the itinerary.** The same PDF carries an
+  `Additional services / Seat selection` block listing `<DEP> - <ARR> : <SEAT>` per leg — this
+  booking had 19A on the IST→RUH leg. The code's note said Turkish carried no seat data at all,
+  which was true of the two files it was written against in July and **false for newer ones**; the
+  client had paid for a seat that was silently dropped. Seats are now parsed per leg and attached by
+  route, with a lone `-` correctly meaning none. Read **only for single-passenger bookings**: the
+  block repeats per passenger and its shape there is unverified, so a seat is never attached to a
+  traveller it might not belong to (§7 — wrong is worse than missing). Zero-PII fixture reproduces
+  both. 242 tests pass.
+
 - **2026-09-09 (later) — revision counter: two copies of one booking can finally be told apart:**
   The gap left open by the header redesign, closed. A reissue produced a second PDF carrying the
   same reference, the same "Booked On" date and no way to tell which copy was current — a passenger
@@ -394,7 +411,8 @@ flight-no / airport / time; non-Confirmed status).
   now: **Alhind** per-segment (one table row per segment) · **aJet** per-leg (pax
   block repeats per segment; assigned by match POSITION relative to each segment
   block) · **Pegasus** per-direction (whole block repeats per direction) ·
-  **Turkish Airlines** per-direction baggage, no seats in the PDF ·
+  **Turkish Airlines** per-direction baggage + PER-LEG seats (the seat block was added to
+  their PDF later; parsed since 2026-09-24) ·
   **Akbar** booking-level only → `build_html` backfills from `passengers[]` so it
   still shows the allowance that genuinely applies to every leg.
   **Latent Alhind bug fixed in passing:** continuation rows (2nd+ segment) have
