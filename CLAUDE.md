@@ -149,6 +149,28 @@ flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
 
+- **2026-09-30 — "OPERATED BY: Riyadh" (a city as the carrier), and a terminal that crossed
+  between two separate tickets:**
+  Real Akbar booking AS261599740 (RX 863, RUH→KUL) shipped naming the operator **`Riyadh`**.
+  Diagnosed per §9 against the real PDF's pdfplumber text (medic run, message 1a0f2950768a5fa3),
+  which wraps the cell as `Operated by:Riyadh , Sat, 10 Oct 26 (08h:00m) Airport , Sun, 11 Oct 26`
+  / `Air` — the carrier is **Riyadh Air**, a new RUH-hub airline, split over two lines. The
+  2026-08-19 re-join only pulled a continuation back when it STARTED with
+  `Airline(s)`/`Airways`/`Aviation`, and this one is the bare word `Air`. Matching `Air` loosely
+  would have re-opened the 2026-08-20 defect — the To-column's `Airport , …` bleed begins with the
+  same three letters — so **`Air` counts only when it is the ENTIRE continuation line**. Every
+  previously-working shape is asserted unchanged (Saudi Airline, Air Sial, Flyadeal, Saudi Arabian
+  Airlines, the airport bleed, no-match).
+  **Second, found while consolidating two bookings onto one document** (RX12239 Riyadh Air RUH→KUL
+  + BMGECWP Spring Airlines KUL→CAN, three days later): `build_html`'s terminal backfill copied
+  Spring's stated **KUL Terminal 2** onto Riyadh Air's KUL arrival, where the Akbar ticket states
+  no terminal at all — and a full-service carrier into KLIA need not use the low-cost terminal.
+  The backfill's premise ("the same IATA is the same physical airport") holds for one ticket but
+  **not across separately-ticketed journeys**, so the terminal map is now keyed
+  `(reference, IATA)`. Airport NAMES stay global — a name is the same fact on every ticket, which
+  is why the static table is allowed at all (§8 2026-08-02). A single-reference booking behaves
+  exactly as before. 247 tests pass.
+
 - **2026-09-24 — Turkish Airlines: a mangled city name and a dropped seat:**
   Real one-way KYA→IST→RUH ticket (T67TR3). Two defects on one document.
   (1) **"Ri̇yadh".** Turkish Airlines prints place names with Turkish locale capitals —

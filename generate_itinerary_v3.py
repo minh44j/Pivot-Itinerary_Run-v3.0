@@ -510,19 +510,33 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
     # appears as an ARRIVAL on another leg. Build an IATA -> (airport, terminal) map
     # from every reference, then backfill each segment's arrival (and departure) so
     # destination airport details render too — not just the departure side.
+    # A TERMINAL is only evidence for legs sold on the SAME ticket (2026-09-30).
+    # On a consolidated document covering two separately-ticketed journeys, the
+    # same IATA does NOT imply the same terminal: RX12239 + BMGECWP (RUH-KUL on
+    # Riyadh Air, then KUL-CAN on Spring Airlines) had Spring's stated KUL
+    # Terminal 2 copied onto Riyadh Air's KUL arrival three days earlier, where
+    # the Akbar ticket states no terminal at all — and a full-service carrier
+    # into KLIA does not necessarily use the low-cost terminal. That is a WRONG
+    # fact rather than a missing one (§7), so the terminal map is keyed per
+    # reference. Airport NAMES stay global: an airport's name is the same fact
+    # on every ticket, which is exactly why the static table is allowed (§8
+    # 2026-08-02), and a single-reference booking behaves as it always did.
     _ap_name, _ap_term = {}, {}
     for grp in seg_groups:
         for fl in grp.get("flights", []):
             di, ai = fl.get("dep_iata", ""), fl.get("arr_iata", "")
+            _ref = fl.get("pnr", "")
             if fl.get("dep_airport"):  _ap_name.setdefault(di, fl["dep_airport"])
-            if fl.get("terminal"):     _ap_term.setdefault(di, fl["terminal"])
+            if fl.get("terminal"):     _ap_term.setdefault((_ref, di), fl["terminal"])
             if fl.get("arr_airport"):  _ap_name.setdefault(ai, fl["arr_airport"])
-            if fl.get("arr_terminal"): _ap_term.setdefault(ai, fl["arr_terminal"])
+            if fl.get("arr_terminal"): _ap_term.setdefault((_ref, ai), fl["arr_terminal"])
     for grp in seg_groups:
         for fl in grp.get("flights", []):
             di, ai = fl.get("dep_iata", ""), fl.get("arr_iata", "")
+            _ref = fl.get("pnr", "")
             if not fl.get("arr_airport")  and _ap_name.get(ai): fl["arr_airport"]  = _ap_name[ai]
-            if not fl.get("arr_terminal") and _ap_term.get(ai): fl["arr_terminal"] = _ap_term[ai]
+            if not fl.get("arr_terminal") and _ap_term.get((_ref, ai)):
+                fl["arr_terminal"] = _ap_term[(_ref, ai)]
             if not fl.get("dep_airport")  and _ap_name.get(di): fl["dep_airport"]  = _ap_name[di]
             # 2026-07-27: the DEPARTURE terminal was the one field this block never
             # backfilled (airport names went both ways, arrival terminal was filled,
@@ -531,7 +545,8 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
             # the inbound leg departing that same IST silently rendered no terminal.
             # This only ever copies a terminal the document itself stated for that
             # exact IATA; it never invents one (§7).
-            if not fl.get("terminal")     and _ap_term.get(di): fl["terminal"]     = _ap_term[di]
+            if not fl.get("terminal")     and _ap_term.get((_ref, di)):
+                fl["terminal"] = _ap_term[(_ref, di)]
 
     # Airport NAME of last resort (2026-08-02). Only Alhind states airport names
     # in a parseable form; the other four portals send the city and IATA code but

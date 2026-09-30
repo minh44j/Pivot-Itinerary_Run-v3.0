@@ -99,3 +99,42 @@ def test_backfill_does_not_cross_contaminate_airports():
     inbound = data["segments"][1]["flights"][0]
     assert inbound["terminal"] == "2"       # departs IST
     assert inbound["arr_terminal"] == "1"   # arrives DMM
+
+
+def test_a_terminal_never_crosses_between_separately_ticketed_journeys():
+    """One IATA, two tickets, two different terminals (2026-09-30).
+
+    A consolidated document can carry legs sold on different tickets — RX12239
+    (Riyadh Air RUH→KUL) then BMGECWP (Spring Airlines KUL→CAN) three days
+    later. Spring states KUL Terminal 2; the Akbar ticket states no terminal at
+    all. Copying Spring's T2 onto Riyadh Air's KUL arrival asserts a terminal
+    the airline never stated, and a full-service carrier into KLIA need not use
+    the low-cost terminal — a WRONG fact rather than a missing one (§7).
+    """
+    def _leg(ref, fno, di, ai, term, arr_term):
+        return {"flight_no": fno, "airline": "X", "pnr": ref,
+                "dep_iata": di, "arr_iata": ai, "dep_city": di, "arr_city": ai,
+                "dep_airport": "", "arr_airport": "",
+                "terminal": term, "arr_terminal": arr_term,
+                "dep_time": "10:00", "dep_date": "10 Oct 2026",
+                "arr_time": "12:00", "arr_date": "10 Oct 2026",
+                "cabin": "Economy", "duration": "2H 00M", "pax": []}
+
+    d = {
+        "pnr": "RX12239", "pnrs": ["RX12239", "BMGECWP"],
+        "booking_ref": "AS000000001", "booked_on": "30 Sep 2026",
+        "journey_type": "One-Way", "status": "Confirmed",
+        "passengers": [{"name": "Mr. Test Passenger", "ticket_no": "1"}],
+        "segments": [
+            {"type": "TRIP 1", "layovers": [],
+             "flights": [_leg("RX12239", "RX 863", "RUH", "KUL", "", "")]},
+            {"type": "TRIP 2", "layovers": [],
+             "flights": [_leg("BMGECWP", "9C 6922", "KUL", "CAN", "2", "3")]},
+        ],
+    }
+    G.build_html(d, project_dir=PROJECT_DIR, layout="A")
+    leg1, leg2 = d["segments"][0]["flights"][0], d["segments"][1]["flights"][0]
+    # Spring's stated terminals survive on Spring's own leg …
+    assert (leg2["terminal"], leg2["arr_terminal"]) == ("2", "3")
+    # … and do NOT reach the other ticket's leg into the same airport.
+    assert leg1["arr_terminal"] == ""

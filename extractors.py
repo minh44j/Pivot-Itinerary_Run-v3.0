@@ -551,8 +551,18 @@ def _akbar_airline(detail):
     # survives the cut above. Pull the continuation back when the following line
     # STARTS with a carrier-suffix word; anything else is a different column and
     # is left alone.
+    #
+    # 2026-09-30: Riyadh Air (RX, booking AS261599740) wraps the same way but its
+    # continuation is the bare word "Air":
+    #     Operated by:Riyadh , Sat, 10 Oct 26 (08h:00m) Airport , Sun, 11 Oct 26
+    #     Air
+    # so the document named the operator "Riyadh" — a city, not a carrier. "Air"
+    # is matched ONLY when it is the whole continuation line: the To-column's
+    # "Airport , ..." also begins with those three letters, and swallowing that
+    # would put an airport back in the carrier field (the 2026-08-20 defect).
     _rest = detail[m.end():]
-    _cont = re.match(r"[^\n]*\n\s*(Airlines?|Airways|Aviation)\b", _rest)
+    _cont = (re.match(r"[^\n]*\n\s*(Airlines?|Airways|Aviation)\b", _rest)
+             or re.match(r"[^\n]*\n\s*(Air)\s*$", _rest, re.M))
     if _cont and val:
         val = f"{val} {_cont.group(1)}"
     val = re.sub(r"\s+", " ", val).strip(" .-")
