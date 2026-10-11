@@ -8,7 +8,7 @@
 
 ## 1. What this project does
 
-Turns airline ticket-confirmation emails (arriving at **cs@pivot-travels.com**) into one
+Turns airline ticket-confirmation emails (arriving at **cs@pivottmc.com**) into one
 **print-ready A4 PDF booking confirmation** per booking, styled to the Pivot luxury brand.
 
 Two ways it runs:
@@ -23,9 +23,13 @@ Two ways it runs:
 - **Pivot Travel Management** *(formerly "Pivot Travel & Tourism" — do NOT use the old name)*
 - CR No. **7043148696** · VAT No. **311788697700003** · Suite 20, 2nd Floor, Mobco Building, 2762 Ibn Al Anbari Street,
   Al Amal District, Riyadh, Kingdom of Saudi Arabia
-- **info@pivot-travels.com** (canonical public contact) · www.pivot-travels.com ·
-  monitored inbox: cs@pivot-travels.com
-- **The itinerary HEADER carries `cs@pivot-travels.com` + hotline `+966 11 220 0296`**
+- **Primary domain is `pivottmc.com`** (Workspace primary changed 2026-10-11; every user
+  renamed). **`pivot-travels.com` remains an ALIAS** — mail to the old addresses still
+  delivers, so documents already in clients' hands keep working. Every client-facing
+  string in this repo now prints the NEW domain.
+- **info@pivottmc.com** (canonical public contact) · www.pivottmc.com ·
+  monitored inbox: cs@pivottmc.com
+- **The itinerary HEADER carries `cs@pivottmc.com` + hotline `+966 11 220 0296`**
   (`HEADER_EMAIL` / `COMPANY_HOTLINE`, owner's explicit call 2026-09-09, asked and confirmed): a
   client with a booking question is meant to reach the ticketing desk that watches that inbox. This
   is a deliberate exception to the line below, which still governs the T&C page and the guide.
@@ -83,7 +87,7 @@ for the CONFIRMED status only. Fonts: **Cormorant Garamond** (display/figures) +
   page is ~70px shorter and every reference reads in one place.
 - Rounded passenger cards with a gold top strip + grey value chips ·
   dark rounded segment banners (OUTBOUND / INBOUND) · rounded flight cards with a white plane-badge
-  connector · gold layover badge · dark footer with `PIVOT AUTOMATED ITINERARY | <PNR> | WWW.PIVOT-TRAVELS.COM`
+  connector · gold layover badge · dark footer with `PIVOT AUTOMATED ITINERARY | <PNR> | WWW.PIVOTTMC.COM` (`COMPANY_WEBSITE`)
   and a **second registration line** `CR 7043148696 · VAT 311788697700003`
   (`COMPANY_CR` / `COMPANY_VAT`). The VAT segment renders only when `COMPANY_VAT` is non-empty,
   so an unverified tax identifier can never reach a client document (§7).
@@ -148,6 +152,38 @@ review, do not produce a PDF**. `qc_check()` gates this (missing PNR / passenger
 flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
+
+- **2026-10-11 — Workspace primary domain moved to `pivottmc.com`; every client-facing
+  string follows, and two latent faults surfaced while doing it:**
+  The Workspace primary became `pivottmc.com` and all users were renamed;
+  `pivot-travels.com` stays an **alias**, so old addresses still deliver and documents
+  already issued keep working — which makes this a safe cutover rather than a flag day.
+  Changed: `COMPANY_EMAIL` → info@pivottmc.com (T&C page + Air Suvidha guide),
+  `HEADER_EMAIL` → cs@pivottmc.com (header service bar), and the website in all five
+  footers.
+  (1) **The website was a bare literal repeated in five places** across three files —
+  the itinerary footer, the guide footer, and the three alert/digest email footers.
+  That is the same shape of drift that let the T&C page keep printing cs@ for months
+  (§8 2026-08-02), and a domain change could easily have updated four and left the
+  fifth lying to a client. It is now the single `COMPANY_WEBSITE` constant, imported by
+  `main.py` and mirrored in the standalone guide generator exactly as `COMPANY_EMAIL` is.
+  (2) **`scan_disruptions` excluded only `-from:pivot-travels.com`.** Since staff and the
+  runner now send as pivottmc.com, that filter no longer matched our own mail and the
+  disruption watch would have begun alerting on Pivot's **own** outbound messages —
+  including cancellation requests WE send to portals. Both domains are now excluded.
+  (3) **The Air Suvidha generator had been broken since 2026-09-09.** The wordmark
+  bolding added that day wrote `.company-name b { font-weight: 700; }` with UNESCAPED
+  braces inside the CSS f-string, so `build_html` died with
+  `NameError: name 'font' is not defined` — the exact failure recorded in §8 2026-07-30
+  (`name 'box' is not defined`). Nobody noticed because the guide is a committed runtime
+  asset and had not been regenerated since. Escaped, regenerated and re-committed; the
+  guide now prints the new domain. **Regenerating that PDF is a required step whenever
+  the guide generator changes** — editing the generator alone ships nothing.
+  Verified by extracting text from a freshly rendered itinerary (header, T&C and footer)
+  and from the rebuilt guide: new domain present, old domain absent from both. The three
+  email bodies were rendered and asserted too, since a non-f-string would have printed the
+  brace literally. 247 tests pass.
+
 
 - **2026-09-30 — "OPERATED BY: Riyadh" (a city as the carrier), and a terminal that crossed
   between two separate tickets:**

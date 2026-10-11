@@ -24,7 +24,11 @@ HERE       = Path(__file__).parent
 OUT_PDF    = HERE / "air_suvidha_guide.pdf"   # the runtime asset main.py appends
 # Client-facing contact — kept in step with generate_itinerary_v3.COMPANY_EMAIL,
 # since this guide is appended to the itinerary and the two must not disagree.
-COMPANY_EMAIL = "info@pivot-travels.com"
+COMPANY_EMAIL = "info@pivottmc.com"
+# Mirrors generate_itinerary_v3.COMPANY_WEBSITE for the same reason as
+# COMPANY_EMAIL above: this generator is standalone WeasyPrint.
+COMPANY_WEBSITE = "www.pivottmc.com"
+COMPANY_WEBSITE_UC = COMPANY_WEBSITE.upper()
 PORTAL     = "airsuvidha.civilaviation.gov.in"
 PORTAL_URL = "https://airsuvidha.civilaviation.gov.in/"
 
@@ -207,7 +211,7 @@ def footer_block():
   <div class="footer">
     {logo}
     <div class="footer-text">
-      <div class="footer-line">PIVOT TRAVEL ADVISORY &nbsp;|&nbsp; AIR SUVIDHA 2.0 &nbsp;|&nbsp; WWW.PIVOT-TRAVELS.COM</div>
+      <div class="footer-line">PIVOT TRAVEL ADVISORY &nbsp;|&nbsp; AIR SUVIDHA 2.0 &nbsp;|&nbsp; {COMPANY_WEBSITE_UC}</div>
     </div>
     <div class="footer-contact">
       <div class="fc-lbl">Need help?</div>
@@ -264,7 +268,7 @@ body {{ font-family: 'Inter', Helvetica, Arial, sans-serif; background: #fff; co
 }}
 .brand-row {{ display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; }}
 .logo-img {{ height: 46px; width: auto; object-fit: contain; display: block; }}
-.company-name b { font-weight: 700; }
+.company-name b {{ font-weight: 700; }}
 .company-name {{ font-family: 'Cormorant Garamond', Georgia, serif; font-size: 22px; font-weight: 400;
   letter-spacing: 0.04em; color: #f0ead8; }}
 .header-divider {{ height: 1px; margin: 15px 0 14px;

@@ -407,7 +407,13 @@ COMPANY_VAT = "311788697700003"
 # Deliberately NOT cs@ — that is the automation's own monitored inbox, and the
 # runner both reads from and can send as it (main.IMPERSONATE_USER). A client
 # reading a PDF should be pointed at the staffed address instead.
-COMPANY_EMAIL = "info@pivot-travels.com"
+COMPANY_EMAIL = "info@pivottmc.com"
+
+# Website printed in every footer. A CONSTANT, not a literal: the same string had
+# been hard-coded in five separate footers (itinerary, Air Suvidha guide, and the
+# three alert/digest emails), so a domain change could update four of them and
+# leave the fifth lying to a client. Stored lower-case; footers upper-case it.
+COMPANY_WEBSITE = "www.pivottmc.com"
 
 # Registered address, printed under the wordmark in the header (2026-09-09).
 COMPANY_ADDRESS = ("Suite 20, 2nd Floor, Mobco Building, 2762 Ibn Al Anbari Street, "
@@ -417,7 +423,7 @@ COMPANY_ADDRESS = ("Suite 20, 2nd Floor, Mobco Building, 2762 Ibn Al Anbari Stre
 # knowing it is the automation's own inbox: a client with a booking question is
 # to reach the ticketing desk that watches it. The T&C page keeps COMPANY_EMAIL.
 COMPANY_HOTLINE = "+966 11 220 0296"
-HEADER_EMAIL = "cs@pivot-travels.com"
+HEADER_EMAIL = "cs@pivottmc.com"
 
 # Riyadh is UTC+3 year-round (no DST), so a fixed offset is exact. The runner
 # executes in CI on UTC; the stamp must read local to the issuing office.
@@ -593,7 +599,7 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
             if fi < len(layovers):
                 segs_html += _layover_bar(layovers[fi])
 
-    footer_line  = f'PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; {pnr_display} &nbsp;|&nbsp; WWW.PIVOT-TRAVELS.COM'
+    footer_line  = f'PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; {pnr_display} &nbsp;|&nbsp; {COMPANY_WEBSITE.upper()}'
     # Legal identifiers on their own second line (conventional place for them).
     # VAT is appended ONLY when COMPANY_VAT is set — see the note by that constant.
     _reg = f'CR {COMPANY_CR}'

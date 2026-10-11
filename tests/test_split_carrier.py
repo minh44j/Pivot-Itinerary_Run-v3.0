@@ -70,7 +70,7 @@ def test_both_references_render_in_header_footer_and_banners(split):
     # rather than the behaviour under test (both references reaching the header).
     assert re.search(r'class="pnr-value"[^>]*>AAA111 / BBB222<', html)
     assert "PNR References" in html
-    assert "AAA111 / BBB222 &nbsp;|&nbsp; WWW.PIVOT-TRAVELS.COM" in html
+    assert f"AAA111 / BBB222 &nbsp;|&nbsp; {G.COMPANY_WEBSITE.upper()}" in html
     assert html.count('class="seg-pnr">PNR AAA111<') == 1
     assert html.count('class="seg-pnr">PNR BBB222<') == 1
 

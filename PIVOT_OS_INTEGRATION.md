@@ -44,6 +44,10 @@ Auth, endpoint, payload shape and field mapping all confirmed.
 
 **PDF access (was item D) — RESOLVED:** the `pdf_url` is a `cs@` Google Drive link. The Drive
 output folder is shared to the **pivot-travels.com Workspace domain** (Viewer, internal — never
+> **2026-10-11:** the Workspace primary domain is now `pivottmc.com`. A Drive
+> domain-restricted share is bound to the domain it was granted to, so this share
+> must be re-pointed to `pivottmc.com` or operators signed in under their new
+> primary address may lose access to `pdf_url`. Not a code change — do it in Drive.
 "anyone with link", it's passenger PII). Operators open the link while signed into their
 `@pivot-travels.com` account; subfolders/future PDFs inherit the share. No producer change.
 

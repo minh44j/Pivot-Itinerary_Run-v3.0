@@ -81,7 +81,7 @@ Repo → **Settings → Secrets and variables → Actions → New repository sec
 |---|---|
 | `WORKLOAD_IDENTITY_PROVIDER` | the `projects/.../providers/github-provider` string from Part C |
 | `SERVICE_ACCOUNT_EMAIL` | `pivot-bot@<project>.iam.gserviceaccount.com` |
-| `IMPERSONATE_USER` | `cs@pivot-travels.com` |
+| `IMPERSONATE_USER` | `cs@pivottmc.com` |
 | `DRIVE_OUTPUT_FOLDER` | your Drive output-folder ID |
 | `AKBAR_FOLDER_NAME` | `Pivot AI - Ticket PDFs` |
 | `NOTIFY_TO` | *(optional)* override recipient; defaults to `cs@` |

@@ -14,11 +14,11 @@ to itself (self-email, "arrives in gmail inbox"). No other send/reply/forward
 action is ever taken.
 
 Auth: a Google service account with domain-wide delegation, impersonating
-IMPERSONATE_USER (cs@pivot-travels.com). See SETUP_GITHUB.md.
+IMPERSONATE_USER (cs@pivottmc.com). See SETUP_GITHUB.md.
 
 Environment variables (set as GitHub secrets):
   GOOGLE_SA_JSON       full service-account JSON (string)
-  IMPERSONATE_USER     cs@pivot-travels.com (default self-email recipient too)
+  IMPERSONATE_USER     cs@pivottmc.com (default self-email recipient too)
   DRIVE_OUTPUT_FOLDER  Drive folder ID for output PDFs
   AKBAR_FOLDER_NAME    e.g. "Pivot AI - Ticket PDFs"   (optional)
   NOTIFY_TO            override recipient (defaults to IMPERSONATE_USER) (optional)
@@ -40,7 +40,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 
 import extractors
-from generate_itinerary_v3 import build_pdf, booking_refs
+from generate_itinerary_v3 import build_pdf, booking_refs, COMPANY_WEBSITE
 
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
@@ -612,7 +612,7 @@ def _confirmation_html(data, source_ref="", logo_cid=None):
           </table>
         </td></tr>
         <tr><td style="background:#1e1e20;background:{_BRAND_CHARCOAL_GRAD};padding:12px 20px;text-align:center;">
-          <div style="font-family:{_FONT_MONO};font-size:10px;letter-spacing:1px;color:#8f8b81;">PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; {esc(data.get("pnr"))} &nbsp;|&nbsp; WWW.PIVOT-TRAVELS.COM</div>
+          <div style="font-family:{_FONT_MONO};font-size:10px;letter-spacing:1px;color:#8f8b81;">PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; {esc(data.get("pnr"))} &nbsp;|&nbsp; {COMPANY_WEBSITE.upper()}</div>
         </td></tr>
       </table>
     </td></tr>
@@ -702,7 +702,7 @@ def _flags_html(flagged, logo_cid=None):
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0">{rows}</table>
         </td></tr>
         <tr><td style="background:#1e1e20;background:{_BRAND_CHARCOAL_GRAD};padding:12px 20px;text-align:center;">
-          <div style="font-family:{_FONT_MONO};font-size:10px;letter-spacing:1px;color:#8f8b81;">PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; MANUAL REVIEW &nbsp;|&nbsp; WWW.PIVOT-TRAVELS.COM</div>
+          <div style="font-family:{_FONT_MONO};font-size:10px;letter-spacing:1px;color:#8f8b81;">PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; MANUAL REVIEW &nbsp;|&nbsp; {COMPANY_WEBSITE.upper()}</div>
         </td></tr>
       </table>
     </td></tr>
@@ -755,7 +755,7 @@ def scan_disruptions(gmail, alerted_ids, alerted_keys=None):
     NOT restricted to in:inbox on purpose — real schedule-change emails (e.g. IndiGo
     "Your Revised IndiGo Itinerary") are auto-labelled "Airline Updates" and skip the
     inbox, which is a big part of why they get missed. We exclude our OWN sent mail
-    and automation sender (pivot-travels.com) so the alert can never trigger on itself
+    and automation sender (BOTH company domains) so the alert can never trigger on itself
     or on a cancellation request WE sent to a portal. Window is dedicated + a little
     wider (default 2d) since missing a disruption is worse than reprocessing.
 
@@ -763,7 +763,7 @@ def scan_disruptions(gmail, alerted_ids, alerted_keys=None):
     window = os.environ.get("DISRUPTION_WINDOW") or "newer_than:2d"
     terms = " OR ".join(f'subject:({t})' for t in extractors.DISRUPTION_QUERY_TERMS)
     q = (f"({terms}) {window} -in:sent -in:trash -in:spam -in:drafts "
-         f"-from:pivot-travels.com")
+         f"-from:pivot-travels.com -from:pivottmc.com")
     alerted_keys = alerted_keys or set()
     res = gmail.users().messages().list(
         userId="me", q=q, maxResults=50).execute(num_retries=API_RETRIES)
@@ -959,7 +959,7 @@ def _disruption_html(alerts, logo_cid=None):
         </td></tr>
         <tr><td style="background:#1e1e20;background:{_BRAND_CHARCOAL_GRAD};padding:16px 20px;text-align:center;">
           <div style="height:1px;background:{_BRAND_GOLD};opacity:.6;line-height:1px;font-size:1px;max-width:130px;margin:0 auto 12px;">&nbsp;</div>
-          <div style="font-family:{_FONT_SANS};font-size:10px;letter-spacing:1.5px;color:#8f8b81;text-transform:uppercase;">PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; WWW.PIVOT-TRAVELS.COM</div>
+          <div style="font-family:{_FONT_SANS};font-size:10px;letter-spacing:1.5px;color:#8f8b81;text-transform:uppercase;">PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; {COMPANY_WEBSITE.upper()}</div>
         </td></tr>
       </table>
     </td></tr>

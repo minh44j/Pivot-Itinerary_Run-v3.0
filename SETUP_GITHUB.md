@@ -60,7 +60,7 @@ GitHub Actions (cron, every 15 min)
 5. Open the service account **Details** and copy its **Unique ID** (a long number) — needed next.
 
 ### 2. Authorize domain-wide delegation (Workspace admin)
-Because `cs@pivot-travels.com` is Google Workspace, the service account must be
+Because `cs@pivottmc.com` is Google Workspace, the service account must be
 allowed to impersonate it.
 1. <https://admin.google.com> → **Security → Access and data control → API controls → Domain-wide delegation → Add new**.
 2. **Client ID** = the service account Unique ID from step 1.5.
@@ -89,7 +89,7 @@ Repo → **Settings → Secrets and variables → Actions → New repository sec
 | Secret | Value |
 |---|---|
 | `GOOGLE_SA_JSON` | paste the **entire** service-account JSON file contents |
-| `IMPERSONATE_USER` | `cs@pivot-travels.com` (also the default self-email recipient) |
+| `IMPERSONATE_USER` | `cs@pivottmc.com` (also the default self-email recipient) |
 | `DRIVE_OUTPUT_FOLDER` | the Drive folder ID from step 3 |
 | `AKBAR_FOLDER_NAME` | `Pivot AI - Ticket PDFs` (only if you use Akbar) |
 | `NOTIFY_TO` | only set this if you want the PDF emailed somewhere OTHER than `cs@` (optional — defaults to self-email) |
@@ -114,7 +114,7 @@ Re-validate any portal any time (e.g. if a sender changes their template):
 ```bash
 pip install -r requirements.txt
 export GOOGLE_SA_JSON="$(cat your-sa.json)"
-export IMPERSONATE_USER="cs@pivot-travels.com"
+export IMPERSONATE_USER="cs@pivottmc.com"
 python tools/test_extractor.py Pegasus      # then aJet, Alhind, "Akbar Travels"
 ```
 Confirm the printed JSON has the right PNR, names, segments, times, and `QC: PASS`.
