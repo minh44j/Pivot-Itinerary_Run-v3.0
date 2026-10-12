@@ -68,15 +68,27 @@ Palette: charcoal→black gradient `#323234 / #1e1e20 / #0e0e0f` for header/foot
 banners; **white body** with light `#f7f7f7` chips; gold `#c9a84c`; emerald `#4ea87a/#7fd0a6`
 for the CONFIRMED status only. Fonts: **Cormorant Garamond** (display/figures) + **Inter** (body).
 
-- **Header (Reference Block, approved 2026-09-09 — replaces Model B):** three bands inside one
-  dark panel. (1) **Brand row** — feather logo + wordmark INLINE (no longer centred/stacked), where
-  `Pivot` is bold 700 against `Travel Management` at 400 (`.company-name b`), 24px; the registered
-  `COMPANY_ADDRESS` runs on ONE line beneath it (`white-space: nowrap` — a wrap orphans "Arabia" and
-  costs the height this header exists to save). Right-aligned opposite: the **document label**, then
-  `Issued <date> · <HH:MM> AST` and the `CR · VAT` line. (2) Gold hairline. (3) **Reference row** —
-  `PNR Reference` label above the reference at **34px** (it was 18px, smaller than the wordmark, which
-  is why the header read flat), with `Agency Ref. / CRS Ref. / Booked On / Journey` as hairline-divided
-  cells on the right. There is intentionally **no "Booking Confirmation" title text**.
+- **Header (One Rail, approved 2026-10-12 — replaces the 2026-09-09 Reference Block):** TWO bands
+  inside one dark panel, 110px tall (was 120px with three bands).
+  (1) **Brand row** — feather logo at 40px + wordmark INLINE, `Pivot` bold 700 against
+  `Travel Management` at 400 (`.hdr-name b`), **30px**. Right-aligned opposite, a three-line stack:
+  the **document label**, then `Issued <date> · <HH:MM> AST[ · Revision N]`, then
+  `COMPANY_HOTLINE · HEADER_EMAIL` on its own line. The contact MUST stay a separate line — appended
+  to the issue stamp it becomes one `nowrap` line that runs off the page and clips both the state
+  label and the email.
+  (2) Gold hairline, then the **reference rail** — `PNR Reference` label above the reference at
+  **34px**, then `Agency Ref. / CRS Ref. / Booked On / Journey` as hairline-divided cells that each
+  take an **equal share** of the remaining width (`.rail-cell { flex: 1 1 0 }`). That share is the
+  whole point: when the cells were a fixed-width group huddled right, the space between them and a
+  left-aligned reference was a DEAD GAP whose size varied with the reference's length — enormous at
+  a 6-character PNR, small at 13 — and could not be designed out. Verified at both lengths and on the
+  longest disruption label (`Revised Itinerary · Rescheduled`), all 110px.
+  There is intentionally **no "Booking Confirmation" title text**.
+  **Retired from the header** (owner's call, 2026-10-12): the registered `COMPANY_ADDRESS` (the
+  wordmark took the space; the address still prints on the T&C page) and the service strip carrying
+  `BRAND_STRAPLINE`. Both constants are KEPT defined but rendered nowhere, so either can be restored
+  in one line. Nothing mirrors them — the alert/digest emails and the Air Suvidha guide have their
+  own simpler headers with no address, strapline or rail.
 - **No status pill** (retired 2026-09-09, approved). The green CONFIRMED pill duplicated the label
   beside it and read as app rather than document language. The state now lives in the label itself,
   tinted by `_DOC_STATE`: `Itinerary Confirmation` in gold, `Revised Itinerary · Rescheduled` etc. in
@@ -152,6 +164,29 @@ review, do not produce a PDF**. `qc_check()` gates this (missing PNR / passenger
 flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
+
+- **2026-10-12 — itinerary header redesigned (One Rail): the dead gap in the reference row is gone:**
+  Asked and confirmed twice per §5, chosen from three directions drawn and rendered through the REAL
+  generator rather than mocked up. The complaint was measurable, not a matter of taste: the
+  2026-09-09 reference row left **a dead gap through its middle** — the reference sat left, the four
+  cells huddled right as a fixed-width group, and the space between them was a function of the
+  reference's length. On a 13-character Riyadh Air locator it was tolerable; on a 6-character PNR it
+  was most of the row. It could not be closed while the cells were a group, so each cell now takes an
+  equal share of the width and the rail spans the page. Rendered at both lengths and on the longest
+  disruption label: **110px in every case, down from 120px**.
+  Also at the owner's call: the **registered address is out of the header** and the wordmark grew
+  into the space (24px → 30px, logo 34 → 40px), and the **service strip carrying the strapline is
+  gone**. The address still prints on the T&C page, so the document does not lose it; both
+  `COMPANY_ADDRESS` and `BRAND_STRAPLINE` are kept defined but rendered nowhere.
+  The hotline and cs@ had been riding on the strapline row, so they moved into the right-hand stack
+  as **their own line**. Appending them to the issue stamp was tried first and produced a single
+  `nowrap` line that **overran the page edge, clipping both the state label and the email** — caught
+  by rendering the candidate, not by reading it.
+  Verified: 247 tests pass (checked by swapping the real file in, not by shadowing it on
+  `PYTHONPATH`, which silently kept using the repo copy and proved nothing); three states rendered
+  and measured. Confined to the itinerary header — grep confirmed nothing else renders the address,
+  the strapline or any `.hdr-*` class, and the emails and guide keep their own simpler headers.
+
 
 - **2026-10-11 — Workspace primary domain moved to `pivottmc.com`; every client-facing
   string follows, and two latent faults surfaced while doing it:**

@@ -415,7 +415,10 @@ COMPANY_EMAIL = "info@pivottmc.com"
 # leave the fifth lying to a client. Stored lower-case; footers upper-case it.
 COMPANY_WEBSITE = "www.pivottmc.com"
 
-# Registered address, printed under the wordmark in the header (2026-09-09).
+# Registered address. NO LONGER RENDERED IN THE HEADER (removed 2026-10-12 at
+# the owner's request so the wordmark could grow). The address still prints on
+# the Terms page, which carries its own copy, so the document does not lose it.
+# Kept defined: it is a canonical company fact and putting it back is one line.
 COMPANY_ADDRESS = ("Suite 20, 2nd Floor, Mobco Building, 2762 Ibn Al Anbari Street, "
                    "Al Amal District, Riyadh, Kingdom of Saudi Arabia")
 
@@ -440,6 +443,8 @@ def _issued_stamp() -> str:
     return datetime.now(timezone.utc).astimezone(_AST).strftime("%d %b %Y &middot; %H:%M AST")
 
 # Services strapline under the wordmark — subtle, full uppercase, wide tracked.
+# NO LONGER RENDERED: the service strip that carried this was removed from the
+# header on 2026-10-12 (owner's request). Kept defined so it can be restored.
 BRAND_STRAPLINE = "CORPORATE TRAVEL | CHAUFFEURS | CURATED ITINERARIES | PREMIUM PILGRIMAGE"
 
 # Document state. The green CONFIRMED pill was retired 2026-09-09 (approved):
@@ -507,6 +512,11 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
 
     hdr_cells = "".join(
         f'<div class="hdr-cell"><div class="hdr-lbl">{lbl}</div>'
+        f'<div class="hdr-val">{val}</div></div>' for lbl, val in _cells)
+
+    # One cell per reference value, each taking an equal share of the rail.
+    rail_cells = "".join(
+        f'<div class="rail-cell"><div class="hdr-lbl">{lbl}</div>'
         f'<div class="hdr-val">{val}</div></div>' for lbl, val in _cells)
 
     pax_html  = "\n".join(_pax_card(p) for p in passengers) if passengers else _pax_card({"name": "N/A"})
@@ -629,21 +639,19 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
       {logo_html}
       <div class="hdr-id">
         <div class="hdr-name"><b>Pivot</b> Travel Management</div>
-        <div class="hdr-state" style="color:{_st['fg']};">{_st['label']}</div>
-        <div class="hdr-addr">{COMPANY_ADDRESS}</div>
-        <div class="hdr-issued">Issued {_issued_stamp()}{_rev_stamp}</div>
+        <div class="hdr-meta">
+          <div class="hdr-state" style="color:{_st['fg']};">{_st['label']}</div>
+          <div class="hdr-issued">Issued {_issued_stamp()}{_rev_stamp}</div>
+          <div class="hdr-contact-line">{COMPANY_HOTLINE} &nbsp;&middot;&nbsp; {HEADER_EMAIL}</div>
+        </div>
       </div>
     </div>
-    <div class="hdr-service">
-      <span class="hdr-strap">{BRAND_STRAPLINE}</span>
-      <span class="hdr-contact">{COMPANY_HOTLINE} &nbsp;&middot;&nbsp; {HEADER_EMAIL}</span>
-    </div>
-    <div class="hdr-row">
-      <div class="pnr-block">
+    <div class="hdr-rail">
+      <div class="rail-pnr">
         <div class="hdr-lbl hdr-lbl-pnr">{pnr_label}</div>
         <div class="pnr-value">{pnr_display}</div>
       </div>
-      <div class="hdr-refs">{hdr_cells}</div>
+      {rail_cells}
     </div>
   </div>"""
 
@@ -1404,6 +1412,73 @@ body {{
 @media print {{
   body {{ background: #fff; }}
 }}
+
+/* ── Header, redesigned 2026-10-12 (asked and confirmed twice per §5) ────────
+   Two bands where there were three. The old reference row left a DEAD GAP
+   through its middle: the reference sat left, the four cells huddled right as a
+   fixed-width group, and the space between them varied with the reference's
+   length - enormous at a 6-character PNR, small at 13. It could not be designed
+   out while the cells were a group, so each cell now takes an EQUAL SHARE of
+   the width and the rail spans the page. Verified at both lengths; the header is
+   110px either way (it was 120px).
+
+   Also at the owner's call: the registered address is gone from the header and
+   the wordmark takes the space it freed (24px -> 30px); the service strip with
+   the strapline is gone entirely. The hotline and cs@ had been riding on the
+   strapline row, so they become a third line in the right-hand stack - a
+   SEPARATE line, because appending them to the issue stamp made one nowrap line
+   that ran off the page and clipped both the state label and the email. */
+.hdr-service {{ display: none; }}
+.hdr-top {{
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 30px 14px;
+}}
+.logo-img {{ height: 40px; }}
+.hdr-id {{
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}}
+.hdr-name {{ font-size: 30px; }}
+.hdr-meta {{
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  text-align: right;
+}}
+.hdr-issued {{ font-size: 7.5px; }}
+.hdr-contact-line {{
+  font-size: 7.5px;
+  font-weight: 500;
+  letter-spacing: 1.4px;
+  color: rgba(224,198,117,0.90);
+  line-height: 1;
+  white-space: nowrap;
+  font-variant-numeric: lining-nums;
+  font-feature-settings: "lnum" 1;
+}}
+/* `last baseline`: each cell is a tight label-over-value stack, and aligning the
+   stacks on their LAST baseline puts every value on the 34px reference's
+   baseline while its label stays close above it. */
+.hdr-rail {{
+  display: flex;
+  align-items: last baseline;
+  padding: 13px 30px 14px;
+  border-top: 1px solid rgba(201,168,76,0.30);
+}}
+.rail-pnr {{ flex: 0 0 auto; padding-right: 26px; }}
+.rail-cell {{
+  flex: 1 1 0;
+  min-width: 0;
+  border-left: 1px solid rgba(255,255,255,0.10);
+  padding-left: 14px;
+}}
+
 </style>
 </head>
 <body>
