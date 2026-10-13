@@ -149,6 +149,23 @@ def test_india_arrival(data, expected):
     ("Action Required: Submit Your Air Suvidha Self-Declaration Form", False),  # AI Express form
     ("RE: ALQ06072026120450106- REISSUE REQUEST", False),   # B2B reissue chatter
     ("Flight reissue request", False),                       # our own reissue request
+    # OUR OWN cancellation/refund requests to the Alhind / Akbar B2B desk. Their
+    # reply comes from THEIR domain, so `-from:<our domains>` can't filter it, and
+    # the subject carries our own "cancellation" wording — these alerted for months
+    # (real shapes, 2026-10-13; refs synthesised). An airline NOTIFIES; it does not
+    # send us a "REQUEST", so the standalone noun is the discriminator.
+    ("RE: ALQ00000000000000000- CANCELLATION AND REFUND REQUEST", False),
+    ("RE: ALQ00000000000000000- REQUEST FOR TICKET CANCELLATION //  Airline Ref:AAA111", False),
+    ("RE: ALQ00000000000000000- CANCELLATION OF RETURN FLIGHT AND REFUND REQUEST", False),
+    ("Re: ALQ00000000000000000- REQUEST FOR FULL REFUND", False),
+    ("RE: ALQ00000000000000000- REFUND REQUEST", False),
+    # ...but the SAME B2B desk forwards genuine airline disruptions, which must
+    # still alert — neither of these frames itself as a request:
+    ("FLIGHT CANCELLATION INFORMATION //AAA111", True),      # Himalaya, via Alhind
+    ("RE: ALQ00000000000000000- FLIGHT DISRUPTED", True),     # Alhind B2B, genuine
+    # "requested" is NOT the bare noun — the rule fails OPEN here, per §7
+    # (a rare false alarm beats a missed cancellation).
+    ("Your flight is cancelled - action requested", True),
     ("Flyadeal Notification - Gate Change", False),          # gate change (airport-level, not schedule)
     ("Action required for your Google Account", False),      # unrelated account mail
 ])
