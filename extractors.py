@@ -1769,12 +1769,40 @@ DISRUPTION_KEYWORDS = [
 ]
 
 
+# NEGATIVE rule, checked BEFORE the keywords. We routinely ASK Alhind / Akbar to
+# cancel, refund or reissue a ticket; their B2B desk then replies inside that
+# thread. The reply is from THEIR domain (so `-from:<our domains>` can't catch it)
+# and its subject carries our own words — "CANCELLATION AND REFUND REQUEST",
+# "REQUEST FOR TICKET CANCELLATION" — so "cancel" matched and the watch raised an
+# ACTION REQUIRED alert for a cancellation WE initiated and already know about.
+#
+# The discriminator, checked against every real example in the cs@ mailbox: a
+# subject framing the matter as a REQUEST is our own ticket thread; an airline
+# NOTIFIES, it does not send us requests. Verified 2026-10-13 — present in 6/6 of
+# our own request threads and 0/4 genuine disruptions, including the two that come
+# from Alhind's own address ("FLIGHT CANCELLATION INFORMATION //<ref>" forwarded
+# from Himalaya, and "RE: ALQ...- FLIGHT DISRUPTED"), which both still alert.
+#
+# Matched as a WHOLE WORD on purpose: every real subject uses the bare noun
+# ("... REFUND REQUEST"), while an airline might plausibly write "action
+# requested" — and `\brequest\b` leaves that one alerting. Fails OPEN, per §7:
+# a rare false alarm beats a missed cancellation.
+_DISRUPTION_EXCLUDE_RE = re.compile(r"\brequest\b", re.I)
+
+
 def disruption_match(subject):
     """Return the first disruption keyword found in `subject` (case-insensitive
     substring match), or "" if none. Pure/offline — the authoritative filter
     behind main.scan_disruptions, so the exact rule is unit-tested without Gmail.
-    Cross-checked against real airline/B2B disruption subjects (see note above)."""
+    Cross-checked against real airline/B2B disruption subjects (see note above).
+
+    A subject that frames the matter as OUR OWN request (see
+    `_DISRUPTION_EXCLUDE_RE`) never matches, however many disruption keywords it
+    also contains — it is our B2B cancellation/refund thread coming back, not a
+    disruption the airline is telling us about."""
     s = (subject or "").lower()
+    if _DISRUPTION_EXCLUDE_RE.search(s):
+        return ""
     for kw in DISRUPTION_KEYWORDS:
         if kw in s:
             return kw

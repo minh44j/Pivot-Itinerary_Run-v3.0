@@ -165,6 +165,25 @@ flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
 
+- **2026-10-13 — our OWN cancellation requests to Alhind / Akbar no longer raise alerts:**
+  Staff ask the Alhind/Akbar B2B desk to cancel, refund or reissue a ticket; the desk
+  replies inside that thread, and the watch raised an ⚠️ ACTION REQUIRED alert for a
+  cancellation **we initiated and already knew about**. `-from:<our domains>` cannot
+  catch it — the reply comes from THEIR domain, carrying our own wording
+  (`RE: ALQ...- CANCELLATION AND REFUND REQUEST`, `REQUEST FOR TICKET CANCELLATION`),
+  so `disruption_match` saw "cancel" and fired. Fix: a NEGATIVE rule
+  (`_DISRUPTION_EXCLUDE_RE`) checked BEFORE the keywords — **a subject framing the
+  matter as a REQUEST is our own ticket thread; an airline NOTIFIES, it does not send
+  us requests.** Checked against every real example in the mailbox: the standalone noun
+  is in **6/6** of our request threads and **0/4** genuine disruptions — including the
+  two that arrive from Alhind's OWN address (`FLIGHT CANCELLATION INFORMATION //<ref>`
+  forwarded from Himalaya, and `RE: ALQ...- FLIGHT DISRUPTED`), which both still alert.
+  Deliberately matched as a WHOLE WORD (`\brequest\b`): every real subject uses the bare
+  noun, while an airline might plausibly write "action requested" — that one still
+  alerts, so the rule **fails open** per §7. The Gmail query is unchanged (it stays the
+  coarse net; `disruption_match` keeps the final say, so the rule is unit-tested
+  offline). 255 tests pass.
+
 - **2026-10-12 — itinerary header redesigned (One Rail): the dead gap in the reference row is gone:**
   Asked and confirmed twice per §5, chosen from three directions drawn and rendered through the REAL
   generator rather than mocked up. The complaint was measurable, not a matter of taste: the
