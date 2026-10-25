@@ -469,7 +469,13 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
     pnr_label    = "PNR Reference" if len(refs) < 2 else "PNR References"
     booking_ref  = data.get("booking_ref") or ""
     crs_ref      = data.get("crs_ref") or ""
-    booked_on    = data.get("booked_on", "N/A")
+    # _na(), not a .get() default: the default only fires when the KEY IS
+    # ABSENT, so a key present-but-empty slipped through unprotected and the
+    # rail drew a bare "BOOKED ON" label with nothing under it. extract_pegasus
+    # sets booked_on = "" explicitly, and _finalize only backfills it when a ctx
+    # date is supplied - so the cloud runner masked this and every manual build
+    # (\process uploads included) showed the empty label. Missing = N/A (§6).
+    booked_on    = _na(data.get("booked_on", ""))
     # Journey type label: exactly ONE-WAY or ROUND TRIP (no RETURN / MULTI-CITY /
     # CONNECTING wording — locked rule).
     _jt = (data.get("journey_type") or "ONE-WAY").upper()

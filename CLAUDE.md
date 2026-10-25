@@ -165,6 +165,24 @@ flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
 
+- **2026-10-25 — "BOOKED ON" could print as a bare label with nothing under it:**
+  Found while hand-building a Saudia DOH→JED document from a portal quote screen. The
+  header rail drew **`BOOKED ON` with no value beneath it**, out of alignment with
+  `JOURNEY` beside it, because an empty value collapses the cell. Cause:
+  `booked_on = data.get("booked_on", "N/A")` — a `.get()` default fires only when the KEY
+  IS ABSENT, so a key present-but-empty went through unprotected, unlike every other field,
+  which passes through `_na()`. Now `_na(data.get("booked_on", ""))`: missing renders **N/A** (§6).
+  **Not only a hand-built-data problem:** `extract_pegasus` sets `booked_on = ""` outright
+  and `_finalize` backfills it only when a ctx date is supplied. The cloud runner passes the
+  email date, which masked it in production — but **every manual build and every `\process`
+  upload would have shipped the empty label to a client**. Both routes were tested before fixing.
+  "Booked On" is the ONLY cell that can be reached empty: Agency Ref. and CRS Ref. are appended
+  only when they hold a value, and Journey always resolves to ONE-WAY or ROUND TRIP.
+  New `tests/test_booked_on_na.py` locks in both shapes (absent key, present-but-empty), the
+  real-date case, and the Pegasus production shape; the suite was re-run with the fix REVERTED
+  to confirm the tests actually catch it (3 fail). 260 tests pass.
+
+
 - **2026-10-13 — our OWN cancellation requests to Alhind / Akbar no longer raise alerts:**
   Staff ask the Alhind/Akbar B2B desk to cancel, refund or reissue a ticket; the desk
   replies inside that thread, and the watch raised an ⚠️ ACTION REQUIRED alert for a
