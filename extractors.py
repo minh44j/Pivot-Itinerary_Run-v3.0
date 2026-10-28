@@ -1442,10 +1442,31 @@ def extract_turkish_airlines(pdf_text, ctx=None):
     sec = re.search(r"Passenger information(.*?)Passenger contact information", t, re.S)
     if sec:
         pax_block = sec.group(1)
-    passengers = [
-        {"name": nm.title(), "ticket_no": tkt, "seat": "", "cabin_bag": "", "checked_bag": ""}
-        for nm, tkt in re.findall(r"(?m)^([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜ '\-]+?)\s+(\d{10,})\b", pax_block)
-    ]
+    # A long name WRAPS inside its narrow column: the ticket number sits on the
+    # first line and the rest of the name drops to the line below, ahead of the
+    # next column's lower-case text, e.g.
+    #     MUSTAFA BULENT 2352530146363 The Frequent Flyer Program account ...
+    #     KARAARSLAN logged in for this passenger.
+    # Reading only the first line printed "Mustafa Bulent" with the surname
+    # missing (real booking UVLPZR, 2026-10-28). Leading ALL-CAPS words on the
+    # following line(s) are the name's continuation; the first lower- or
+    # mixed-case word ("logged", "Earn") is a different column and ends it.
+    _NAME_WORD = r"[A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜ'\-]*"
+    passengers = []
+    _lines = pax_block.splitlines()
+    for _i, _ln in enumerate(_lines):
+        _mm = re.match(r"([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜ '\-]+?)\s+(\d{10,})\b", _ln)
+        if not _mm:
+            continue
+        _nm = _mm.group(1)
+        for _nxt in _lines[_i + 1:]:
+            _cont = re.match(rf"((?:{_NAME_WORD}\s+)*{_NAME_WORD})(?=\s|$)", _nxt.strip())
+            # a following passenger's own row, or a line that is not caps-led
+            if not _cont or re.search(r"\d{10,}", _nxt):
+                break
+            _nm += " " + _cont.group(1)
+        passengers.append({"name": _tr_title(_nm), "ticket_no": _mm.group(2), "seat": "",
+                           "cabin_bag": "", "checked_bag": ""})
     # baggage is per-booking in these samples (not per-passenger) — apply to all pax.
     # See the "3-column table interleaving" note above for why "kg" isn't required
     # immediately after the weight number.
