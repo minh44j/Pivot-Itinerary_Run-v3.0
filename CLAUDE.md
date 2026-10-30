@@ -148,6 +148,32 @@ flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
 
+- **2026-10-31 — the three internal e-mails redesigned around "what do I do next?" (new `email_templates.py`):**
+  Owner: "make it more useable and easy to understand", for the alert e-mail and for the e-mail that arrives
+  with each itinerary. Before: the confirmation was a monospace data readout, the manual-review digest showed
+  a raw reason string and a bare message id, and the disruption alert listed From / Subject / Received / Preview
+  / Ref — nothing said which booking was hit, how urgent it was, or where to click.
+  **Confirmation** (`Booking Confirmation — <PNR> (<portal>) · RUH→COK · 17 Dec`; the old prefix is kept so any
+  mail filter still matches): a green "Itinerary ready" bar with the next step, the PNR large, route + date,
+  a **"Worth a look"** box that lists what a person should check before forwarding — Revision N, India arrival
+  (Air Suvidha page included), two airline references, a missing Booked-on date or ticket number (reported,
+  never filled in) — then travellers + tickets and one card per flight with its **seat per passenger per leg**
+  (this also retires `_bags_vary_by_leg`: allowances are now shown per leg). **Manual review**: a headline in
+  plain words ("A flight number, airport or time could not be read from the ticket"), the technical detail in
+  small type, an **Open the e-mail** button (Gmail deep link) and a three-line fix list. **Disruption alert**:
+  "3 flight alerts to deal with — 1 cancellation, 1 schedule change, 1 delay", a 3-step what-to-do box, then a
+  card per alert, most urgent first, with a severity pill, the **airline named** (`extractors.sender_label`),
+  the booking ref / flight / route / date / times **read from the subject and preview only**
+  (`extractors.disruption_summary`, same patterns as the dedup fingerprint; absent when not stated, and labelled
+  "confirm in the e-mail"), what the airline wrote, the draft-revised-itinerary note, and an **Open the airline
+  e-mail** button. The subject now carries the counts and the booking refs
+  (`⚠️ ACTION REQUIRED — 1 cancellation, 1 delay (8JS4ID, UCHMPF)`). Times are listed with `·`, never `→`, because
+  the order in an airline's sentence is not reliably old-then-new and an arrow would assert one.
+  The templates live in a pure module so the offline suite can import them (`main.py` imports Google at load, so
+  it never could be tested); `main.py` now only builds the message, attaches the logo and PDF, and sends.
+  `tests/test_email_templates.py` (22 tests). 295 pass. The Gmail deep link uses the API message id and is
+  best-effort; the Source ref stays printed beside it.
+
 - **2026-10-30 — itinerary redesigned to Apple's guidelines; Inter only; dark bands gone; CR/VAT off the footer:**
   The owner asked for a redesign "according to the Apple design skill". Three completely different
   layouts (Poster, Timeline, Bento) and a refresh of the old look were rendered through the real data

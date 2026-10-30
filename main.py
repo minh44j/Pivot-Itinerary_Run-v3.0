@@ -41,6 +41,7 @@ from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 
 import extractors
 from generate_itinerary_v3 import build_pdf, booking_refs, COMPANY_WEBSITE
+import email_templates
 
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
@@ -407,228 +408,15 @@ def upload_to_drive(drive, pdf_path, date_sub):
 # message is ever touched, replied to, forwarded, or deleted). It additionally
 # holds gmail.send for exactly ONE purpose — emailing the finished PDF back to
 # itself so the confirmation "arrives in gmail inbox" alongside the source email.
-def _b(v):
-    """Body-safe field: blank/None -> 'N/A' (same convention as the PDF)."""
-    v = (str(v).strip() if v is not None else "")
-    return v or "N/A"
-
-
-def _build_email_body(data, source_ref=""):
-    """Full-detail internal summary for the cs@ inbox. Reads ONLY fields already
-    present on `data` (no extra extraction). Every missing value renders 'N/A'.
-    The confirmation PDF itself is attached; this body is the at-a-glance copy."""
-    lines = []
-    # A split-carrier booking has one airline reference per airline; list them all
-    # so the desk can check in on either leg (see generate_itinerary_v3.booking_refs).
-    _refs = booking_refs(data)
-    lines.append(f"PNR: {_b(' / '.join(_refs) if _refs else data.get('pnr'))}")
-    booking_ref = (data.get("booking_ref") or "").strip()
-    if booking_ref and booking_ref != (data.get("pnr") or "").strip():
-        lines.append(f"Booking Ref: {booking_ref}")
-    crs_ref = (data.get("crs_ref") or "").strip()
-    if crs_ref and crs_ref != (data.get("pnr") or "").strip():
-        lines.append(f"CRS Ref: {crs_ref}")
-    lines.append(f"Portal: {_b(data.get('portal'))}")
-    lines.append(f"Journey: {_b(data.get('journey_type'))}")
-    lines.append(f"Booked On: {_b(data.get('booked_on'))}")
-
-    passengers = data.get("passengers", [])
-    lines.append("")
-    lines.append(f"Passengers ({len(passengers)}):")
-    for p in passengers:
-        lines.append(f"  • {_b(p.get('name'))}  — Ticket: {_b(p.get('ticket_no'))} | "
-                     f"Seat: {_b(p.get('seat'))}")
-
-    lines.append("")
-    lines.append("Itinerary:")
-    for seg in data.get("segments", []):
-        flights = seg.get("flights", [])
-        if not flights:
-            continue
-        stype = seg.get("type", "FLIGHT")
-        first, last = flights[0], flights[-1]
-        lines.append(f"  {stype}  {_b(first.get('dep_iata'))} → {_b(last.get('arr_iata'))}   "
-                     f"{_b(first.get('dep_date'))}")
-        for f in flights:
-            extra = "   ".join(x for x in [f"({f.get('duration')})" if f.get('duration') else "",
-                                           (f.get("cabin") or "")] if x)
-            lines.append(f"    {_b(f.get('flight_no'))}   {_b(f.get('dep_time'))} → "
-                         f"{_b(f.get('arr_time'))}   {extra}".rstrip())
-
-    if extractors.india_arrival(data):
-        lines.append("")
-        lines.append("India arrival — the Air Suvidha 2.0 health-declaration guide is "
-                     "included as extra page(s) in the attached PDF.")
-    if source_ref:
-        lines.append("")
-        lines.append(f"Source Ref: {source_ref}")
-    lines.append("")
-    lines.append("PDF attached. (Automated — PIVOT AUTOMATED ITINERARY)")
-    return "\n".join(lines)
-
-
-def _bags_vary_by_leg(data):
-    """True when a passenger's allowance is not the same on every leg.
-
-    Split-carrier bookings sell two airlines under one reference and each states
-    its own allowance (32 Kg on Flyadeal out, 1 x 23 Kg on Saudia back, real
-    booking AS261347760). The passenger card carries ONE booking-level value, so
-    printing it as "the" allowance states a wrong fact for at least one leg (§7).
-    When they differ the digest moves the allowance onto the individual legs.
-    """
-    seen, names = set(), set()
-    for seg in data.get("segments", []):
-        for f in seg.get("flights", []):
-            for x in (f.get("pax") or []):
-                nm = (x.get("name") or "").strip()
-                names.add(nm)
-                seen.add((nm, (x.get("cabin_bag") or "").strip(),
-                          (x.get("checked_bag") or "").strip()))
-    return len(seen) > len(names)
-
-
-def _confirmation_html(data, source_ref="", logo_cid=None):
-    """Ops-only confirmation body — a TECHNICAL monospace data readout inside the
-    Pivot brand chrome (light masthead: feather logo on a dark tile + Inter wordmark;
-    light footer). Everything EXCEPT the company wordmark is monospace, for a fast,
-    scannable internal view (this email is never sent to a client). The full PDF is
-    attached; _build_email_body is the plain-text fallback. Brand constants +
-    _email_logo_bytes are module-level, resolved at call time."""
-    import html as _html
-
-    def esc(v):
-        v = (str(v).strip() if v is not None else "")
-        return _html.escape(v) if v else "N/A"
-
-    pnr_raw = (data.get("pnr") or "").strip()
-    logo_img = (f'<span style="display:inline-block;background:#1e1e20;border-radius:11px;padding:7px;line-height:0;margin:0 0 10px;">'
-                f'<img src="cid:{logo_cid}" width="28" height="28" alt="Pivot" style="display:block;border:0;"></span>' if logo_cid else "")
-
-    def sect(title):
-        return (f'<tr><td colspan="2" style="padding:18px 0 6px;border-bottom:1px solid #d9d2c0;">'
-                f'<span style="font-family:{_FONT_MONO};font-size:12px;font-weight:700;'
-                f'letter-spacing:2px;color:#85660f;">{title}</span></td></tr>')
-
-    def kv(k, v, vcolor="#1e1c17", bold=False):
-        w = "600" if bold else "400"
-        return (f'<tr>'
-                f'<td valign="top" width="120" style="font-family:{_FONT_MONO};font-size:12px;'
-                f'color:#5b6470;padding:3px 14px 3px 0;white-space:nowrap;">{k}</td>'
-                f'<td style="font-family:{_FONT_MONO};font-size:12px;color:{vcolor};'
-                f'font-weight:{w};padding:3px 0;line-height:1.5;">{v}</td></tr>')
-
-    rows = ""
-    rows += sect("BOOKING")
-    _refs = booking_refs(data)
-    rows += kv("PNR" if len(_refs) < 2 else "PNRs",
-               esc(" / ".join(_refs) if _refs else data.get("pnr")), bold=True)
-    br = (data.get("booking_ref") or "").strip()
-    if br and br != pnr_raw:
-        rows += kv("BOOKING REF", esc(br))
-    crs = (data.get("crs_ref") or "").strip()
-    if crs and crs != pnr_raw:
-        rows += kv("CRS REF", esc(crs))
-    rows += kv("STATUS", "CONFIRMED", vcolor="#2f8f5b", bold=True)
-    rows += kv("JOURNEY", esc(data.get("journey_type")))
-    rows += kv("BOOKED ON", esc(data.get("booked_on")))
-    rows += kv("PORTAL", esc(data.get("portal")))
-
-    pax = data.get("passengers", [])
-    per_leg_bags = _bags_vary_by_leg(data)
-    rows += sect(f"PASSENGERS ({len(pax)})")
-    if not pax:
-        rows += kv("[1]", "N/A")
-    for i, p in enumerate(pax, 1):
-        bag = "/".join(x for x in [(p.get("cabin_bag") or "").strip(),
-                                   (p.get("checked_bag") or "").strip()] if x) or "N/A"
-        seat = (p.get("seat") or "").strip() or "N/A"
-        # See _bags_vary_by_leg: one value cannot describe a booking whose legs
-        # allow different amounts, so point at the per-leg figures instead.
-        bag_html = ("per leg &darr;" if per_leg_bags else esc(bag))
-        val = (f'<b>{esc(p.get("name"))}</b><br>'
-               f'<span style="color:#6b6355;">TKT {esc(p.get("ticket_no"))}'
-               f' &nbsp; SEAT {esc(seat)} &nbsp; BAG {bag_html}</span>')
-        rows += kv(f"[{i}]", val)
-
-    rows += sect("ITINERARY")
-    segs = data.get("segments", [])
-    if not segs:
-        rows += kv("", "N/A")
-    for seg in segs:
-        flights = seg.get("flights", [])
-        if not flights:
-            continue
-        first, last = flights[0], flights[-1]
-        head = (f'{esc(seg.get("type","FLIGHT")).upper()} &nbsp; '
-                f'{esc(first.get("dep_iata"))}&rarr;{esc(last.get("arr_iata"))} &nbsp; '
-                f'{esc(first.get("dep_date"))}')
-        rows += (f'<tr><td colspan="2" style="font-family:{_FONT_MONO};font-size:11px;'
-                 f'font-weight:700;letter-spacing:1px;color:#85660f;padding:10px 0 2px;">'
-                 f'{head}</td></tr>')
-        for f in flights:
-            meta = "  ".join(x for x in [(f.get("cabin") or "").strip(),
-                                         (f.get("duration") or "").strip()] if x)
-            if per_leg_bags:
-                for x in (f.get("pax") or []):
-                    _b2 = "/".join(v for v in [(x.get("cabin_bag") or "").strip(),
-                                               (x.get("checked_bag") or "").strip()] if v)
-                    if _b2:
-                        meta += f'  BAG {x.get("name", "")} {_b2}' if len(f.get("pax") or []) > 1 \
-                                else f"  BAG {_b2}"
-            line = (f'{esc(f.get("flight_no"))} &nbsp; '
-                    f'{esc(f.get("dep_iata"))} {esc(f.get("dep_time"))}&rarr;'
-                    f'{esc(f.get("arr_iata"))} {esc(f.get("arr_time"))}'
-                    f'{("  &nbsp; " + _html.escape(meta)) if meta else ""}')
-            rows += (f'<tr><td colspan="2" style="font-family:{_FONT_MONO};font-size:12px;'
-                     f'color:#1e1c17;padding:2px 0 2px 14px;">{line}</td></tr>')
-
-    if extractors.india_arrival(data):
-        rows += sect("NOTE")
-        rows += (f'<tr><td colspan="2" style="font-family:{_FONT_MONO};font-size:12px;'
-                 f'color:#8a5a12;padding:4px 0;">IN arrival &mdash; Air Suvidha 2.0 guide '
-                 f'appended to the attached PDF.</td></tr>')
-
-    rows += sect("META")
-    if source_ref:
-        rows += kv("SOURCE REF", esc(source_ref))
-    rows += kv("ATTACHMENT", f"{esc('-'.join(booking_refs(data)) or data.get('pnr'))}.pdf")
-
-    return f'''<!DOCTYPE html><html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');</style>
-</head><body style="margin:0;padding:0;background:#f5f5f7;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f7;padding:20px 0;">
-    <tr><td align="center">
-      <table role="presentation" width="620" cellpadding="0" cellspacing="0" style="max-width:620px;width:100%;border-radius:10px;overflow:hidden;background:#ffffff;border:1px solid #e3e3e8;">
-        <tr><td style="background:#ffffff;border-bottom:2px solid {_BRAND_GOLD};padding:20px 22px 16px;text-align:center;">
-          {logo_img}
-          <div style="font-family:{_FONT_SERIF};font-size:20px;font-weight:400;letter-spacing:-.3px;color:#1d1d1f;"><b style="font-weight:700;">Pivot</b> Travel Management</div>
-          <div style="height:1px;background:{_BRAND_GOLD};line-height:1px;font-size:1px;max-width:150px;margin:12px auto 10px;">&nbsp;</div>
-          <div style="font-family:{_FONT_MONO};font-size:11px;letter-spacing:1px;color:#85660f;font-weight:600;">BOOKING CONFIRMATION &nbsp;&middot;&nbsp; {esc(data.get("pnr"))}</div>
-        </td></tr>
-        <tr><td style="padding:6px 24px 20px;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-            {rows}
-          </table>
-        </td></tr>
-        <tr><td style="background:#ffffff;border-top:1px solid #e3e3e8;padding:12px 20px;text-align:center;">
-          <div style="font-family:{_FONT_MONO};font-size:10px;letter-spacing:1px;color:#5b6470;">PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; {esc(data.get("pnr"))} &nbsp;|&nbsp; {COMPANY_WEBSITE.upper()}</div>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body></html>'''
-
-
 def email_pdf(send_gmail, sender, pdf_path, data, source_ref=""):
     to = _env("NOTIFY_TO") or sender                       # default recipient = sender
     m = EmailMessage()
-    m["Subject"] = f"Booking Confirmation — {data.get('pnr')} ({data.get('portal')})"
+    m["Subject"] = email_templates.confirmation_subject(data)
     m["From"] = sender                                     # SENDER_USER or cs@
     m["To"] = to
-    m.set_content(_build_email_body(data, source_ref))     # text/plain fallback
+    m.set_content(email_templates.confirmation_text(data, source_ref))     # text/plain fallback
     logo = _email_logo_bytes()
-    m.add_alternative(_confirmation_html(data, source_ref, logo_cid=("pivotlogo" if logo else None)),
+    m.add_alternative(email_templates.confirmation_html(data, source_ref, logo_cid=("pivotlogo" if logo else None)),
                       subtype="html")                      # branded HTML
     if logo:                                               # inline feather (cid, not data:)
         m.get_payload()[-1].add_related(logo, "image", "png", cid="<pivotlogo>", disposition="inline")
@@ -649,89 +437,17 @@ def email_pdf(send_gmail, sender, pdf_path, data, source_ref=""):
 # This sends ONE private digest per run to the cs@ inbox. Because it stays in the
 # inbox (never the public repo/log), it can safely carry the subject + message_id
 # needed to locate and fix each booking.
-def _flags_html(flagged, logo_cid=None):
-    """Ops-only manual-review digest — same TECHNICAL monospace readout as the
-    confirmation (brand chrome + Inter wordmark),
-    with an amber MANUAL REVIEW header. Lists each flagged booking's portal,
-    reason, subject and Source Ref so staff can locate + process it by hand."""
-    import html as _html
-
-    def esc(v):
-        v = (str(v).strip() if v is not None else "")
-        return _html.escape(v) if v else "N/A"
-
-    def sect(title):
-        return (f'<tr><td colspan="2" style="padding:18px 0 6px;border-bottom:1px solid #d9d2c0;">'
-                f'<span style="font-family:{_FONT_MONO};font-size:12px;font-weight:700;'
-                f'letter-spacing:2px;color:#85660f;">{title}</span></td></tr>')
-
-    def kv(k, v, vcolor="#1e1c17"):
-        return (f'<tr><td valign="top" width="110" style="font-family:{_FONT_MONO};font-size:12px;'
-                f'color:#5b6470;padding:3px 14px 3px 0;white-space:nowrap;">{k}</td>'
-                f'<td style="font-family:{_FONT_MONO};font-size:12px;color:{vcolor};'
-                f'padding:3px 0;line-height:1.5;">{v}</td></tr>')
-
-    n = len(flagged)
-    logo_img = (f'<span style="display:inline-block;background:#1e1e20;border-radius:11px;padding:7px;line-height:0;margin:0 0 10px;">'
-                f'<img src="cid:{logo_cid}" width="28" height="28" alt="Pivot" style="display:block;border:0;"></span>' if logo_cid else "")
-    rows = ""
-    for i, f in enumerate(flagged, 1):
-        rows += sect(f"[{i}] {esc(f.get('portal')).upper()}")
-        rows += kv("REASON", esc(f.get("reason")), vcolor="#b0592a")
-        if f.get("subject"):
-            rows += kv("SUBJECT", esc(f.get("subject")))
-        rows += kv("SOURCE REF", esc(f.get("id")))
-    rows += (f'<tr><td colspan="2" style="font-family:{_FONT_MONO};font-size:11px;color:#5b6470;'
-             f'padding:16px 0 0;line-height:1.6;">Locate each in the cs@ inbox by its SOURCE REF '
-             f'(Gmail message id) and process it manually.</td></tr>')
-
-    return f'''<!DOCTYPE html><html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');</style>
-</head><body style="margin:0;padding:0;background:#f5f5f7;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f7;padding:20px 0;">
-    <tr><td align="center">
-      <table role="presentation" width="620" cellpadding="0" cellspacing="0" style="max-width:620px;width:100%;border-radius:10px;overflow:hidden;background:#ffffff;border:1px solid #e3e3e8;">
-        <tr><td style="background:#ffffff;border-bottom:2px solid {_BRAND_GOLD};padding:20px 22px 16px;text-align:center;">
-          {logo_img}
-          <div style="font-family:{_FONT_SERIF};font-size:20px;font-weight:400;letter-spacing:-.3px;color:#1d1d1f;"><b style="font-weight:700;">Pivot</b> Travel Management</div>
-          <div style="height:1px;background:{_BRAND_GOLD};line-height:1px;font-size:1px;max-width:150px;margin:12px auto 10px;">&nbsp;</div>
-          <div style="font-family:{_FONT_MONO};font-size:11px;letter-spacing:1px;color:#b45309;font-weight:600;">⚠ MANUAL REVIEW REQUIRED &nbsp;&middot;&nbsp; {n}</div>
-        </td></tr>
-        <tr><td style="padding:6px 24px 20px;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">{rows}</table>
-        </td></tr>
-        <tr><td style="background:#ffffff;border-top:1px solid #e3e3e8;padding:12px 20px;text-align:center;">
-          <div style="font-family:{_FONT_MONO};font-size:10px;letter-spacing:1px;color:#5b6470;">PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; MANUAL REVIEW &nbsp;|&nbsp; {COMPANY_WEBSITE.upper()}</div>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body></html>'''
-
-
 def email_flags(send_gmail, sender, flagged):
     if not flagged:
         return False
     to = _env("NOTIFY_TO") or sender
-    lines = [f"{len(flagged)} booking(s) need manual review:", ""]
-    for f in flagged:
-        lines.append(f"• Portal:     {f.get('portal')}")
-        lines.append(f"  Reason:     {f.get('reason')}")
-        if f.get("subject"):
-            lines.append(f"  Subject:    {f.get('subject')}")
-        lines.append(f"  Source Ref: {f.get('id')}")
-        lines.append("")
-    lines.append("Find each in the cs@ inbox by its Source Ref (Gmail message id) "
-                 "and process it manually.")
-    lines.append("(Automated — PIVOT AUTOMATED ITINERARY)")
     m = EmailMessage()
-    m["Subject"] = f"Itinerary — {len(flagged)} booking(s) need manual review"
+    m["Subject"] = email_templates.flags_subject(flagged)
     m["From"] = sender
     m["To"] = to
-    m.set_content("\n".join(lines))                # plain-text fallback
+    m.set_content(email_templates.flags_text(flagged))   # plain-text fallback
     logo = _email_logo_bytes()
-    m.add_alternative(_flags_html(flagged, logo_cid=("pivotlogo" if logo else None)),
+    m.add_alternative(email_templates.flags_html(flagged, logo_cid=("pivotlogo" if logo else None)),
                       subtype="html")              # branded technical HTML
     if logo:                                       # inline feather (cid, not data:)
         m.get_payload()[-1].add_related(logo, "image", "png", cid="<pivotlogo>", disposition="inline")
@@ -807,25 +523,8 @@ def scan_disruptions(gmail, alerted_ids, alerted_keys=None):
     return alerts
 
 
-# Alert e-mail is skinned to the Pivot itinerary brand (light page, 2026-10-30):
-# white masthead with a gold hairline, feather logo on a small dark tile + "Pivot Travel
-# Management" wordmark, SF/Inter throughout, light footer. Severity is kept as a small coloured PILL on each card's dark strip
-# so urgency still reads at a glance (cancellation=red, schedule change=orange,
-# delay=amber). `rank` sorts the most urgent (cancellations) to the top.
-_BRAND_GOLD = "#c9a84c"
-_BRAND_CHARCOAL_GRAD = "linear-gradient(135deg,#323234 0%,#1e1e20 55%,#0e0e0f 100%)"
-# One sans stack: Apple Mail/iOS resolve -apple-system to SF, other clients get Inter (loaded below) or the
-# system sans. The serif and the monospace readout were retired with the itinerary redesign (2026-10-30);
-# the names stay so nothing that references them breaks.
-_FONT_SANS = "-apple-system,'SF Pro Display','Inter','Segoe UI',Roboto,Helvetica,Arial,sans-serif"
-_FONT_SERIF = _FONT_SANS
-_FONT_MONO = _FONT_SANS
-_DISRUPTION_STYLE = {
-    "cancellation":    {"label": "CANCELLATION",    "emoji": "🔴", "accent": "#B23A3A", "rank": 0},
-    "schedule_change": {"label": "SCHEDULE CHANGE", "emoji": "🟠", "accent": "#C07A2B", "rank": 1},
-    "delay":           {"label": "DELAY",           "emoji": "🟡", "accent": "#C99A3A", "rank": 2},
-}
-
+# The e-mail bodies live in email_templates.py (pure, so the offline tests can import them); this
+# module only builds the message, attaches the logo + PDFs and sends it.
 _EMAIL_LOGO = None
 
 
@@ -847,128 +546,6 @@ def _email_logo_bytes():
     return _EMAIL_LOGO
 
 
-def _disruption_enrich(alerts):
-    """Attach the category + its style to each alert and sort most-urgent first."""
-    out = []
-    for a in alerts:
-        cat = extractors.disruption_category(
-            a.get("subject", ""), a.get("snippet", ""), a.get("keyword", ""))
-        style = _DISRUPTION_STYLE[cat]
-        out.append({**a, "category": cat, "style": style})
-    out.sort(key=lambda a: a["style"]["rank"])
-    return out
-
-
-def _disruption_text(alerts):
-    """Plain-text fallback body (for clients that don't render HTML)."""
-    n = len(alerts)
-    lines = [f"ACTION REQUIRED — {n} possible cancellation / schedule-change "
-             f"email(s) found in the mailbox:", ""]
-    for a in alerts:
-        st = a["style"]
-        lines.append(f"[{st['label']}]  {a.get('from')}")
-        lines.append(f"  Subject:    {a.get('subject')}")
-        lines.append(f"  Received:   {a.get('date')}")
-        if a.get("snippet"):
-            lines.append(f"  Preview:    {a['snippet']}")
-        lines.append(f"  Source Ref: {a.get('id')}")
-        if a.get("revised_pdf"):
-            lines.append(f"  >> Auto-draft REVISED itinerary attached "
-                         f"({os.path.basename(a['revised_pdf'])}) — VERIFY against the "
-                         f"airline email before sending to the client.")
-        lines.append("")
-    lines.append("Open each in the cs@ inbox (search its Source Ref or subject), confirm")
-    lines.append("whether it is a genuine cancellation / schedule change, and forward it to")
-    lines.append("the affected client so it is never missed.")
-    lines.append("(Automated watch — PIVOT AUTOMATED ITINERARY)")
-    return "\n".join(lines)
-
-
-def _disruption_html(alerts, logo_cid=None):
-    """Structured HTML digest skinned to the Pivot itinerary brand — charcoal/gold
-    Model-B header with the feather logo + wordmark, one card per alert with a dark
-    segment-style strip carrying a coloured severity pill, and a dark footer. Uses
-    tables + inline styles only (Gmail / Outlook / Apple Mail safe)."""
-    import html as _html
-
-    def esc(v):
-        return _html.escape(str(v).strip()) if v is not None and str(v).strip() else "N/A"
-
-    n = len(alerts)
-    # Inline CID reference (the image is attached by email_disruptions). Outlook
-    # renders cid: images in-body; data: URIs it strips into a junk attachment.
-    logo_img = (f'<span style="display:inline-block;background:#1e1e20;border-radius:11px;padding:7px;line-height:0;margin:0 0 10px;">'
-                f'<img src="cid:{logo_cid}" width="30" height="30" alt="Pivot" style="display:block;border:0;"></span>' if logo_cid else "")
-
-    def row(k, v):
-        return (f'<tr><td style="font-family:{_FONT_SANS};font-size:11px;color:#5b6470;'
-                f'text-transform:uppercase;letter-spacing:.5px;vertical-align:top;'
-                f'padding:5px 12px 5px 0;white-space:nowrap;">{k}</td>'
-                f'<td style="font-family:{_FONT_SANS};font-size:13px;color:#26241f;'
-                f'line-height:1.55;padding:5px 0;">{v}</td></tr>')
-
-    cards = []
-    for a in alerts:
-        st = a["style"]
-        details = "".join([
-            row("From",     f'<b>{esc(a.get("from"))}</b>'),
-            row("Subject",  esc(a.get("subject"))),
-            row("Received", esc(a.get("date"))),
-            row("Preview",  f'<span style="color:#5a5344;">{esc(a.get("snippet"))}</span>'),
-            row("Ref",      f'<span style="color:#a99f8a;font-family:monospace;font-size:12px;">{esc(a.get("id"))}</span>'),
-        ])
-        revised_note = ""
-        if a.get("revised_pdf"):
-            revised_note = (
-                f'<div style="margin-top:12px;background:#eaf6ee;border:1px solid #bfe2cb;'
-                f'border-radius:8px;padding:9px 12px;font-family:{_FONT_SANS};font-size:12px;color:#1f6b3b;">'
-                f'📎 <b>Auto-draft revised itinerary attached</b> '
-                f'({esc(os.path.basename(a["revised_pdf"]))}) — verify against the airline '
-                f'email, then forward to the client.</div>')
-        cards.append(f'''
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;border:1px solid #e7e1d3;border-radius:12px;border-collapse:separate;overflow:hidden;">
-        <tr><td style="background:#f5f5f7;padding:11px 16px;">
-          <span style="display:inline-block;background:{st['accent']};color:#ffffff;font-family:{_FONT_SANS};font-size:11px;font-weight:700;letter-spacing:1.2px;padding:5px 12px;border-radius:20px;">{st['emoji']}&nbsp; {st['label']}</span>
-        </td></tr>
-        <tr><td style="background:{_BRAND_GOLD};font-size:2px;line-height:2px;height:2px;">&nbsp;</td></tr>
-        <tr><td style="background:#ffffff;padding:14px 18px;">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">{details}</table>
-          {revised_note}
-        </td></tr>
-      </table>''')
-
-    return f'''<!DOCTYPE html><html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');</style>
-</head><body style="margin:0;padding:0;background:#f5f5f7;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f7;padding:22px 0;">
-    <tr><td align="center">
-      <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;border-radius:14px;overflow:hidden;background:#ffffff;">
-        <tr><td style="background:#ffffff;border-bottom:2px solid {_BRAND_GOLD};padding:26px 24px 20px;text-align:center;">
-          {logo_img}
-          <div style="font-family:{_FONT_SERIF};font-size:22px;font-weight:400;letter-spacing:-.3px;color:#1d1d1f;"><b style="font-weight:700;">Pivot</b> Travel Management</div>
-          <div style="height:1px;background:{_BRAND_GOLD};line-height:1px;font-size:1px;max-width:170px;margin:15px auto;">&nbsp;</div>
-          <div style="font-family:{_FONT_SANS};font-size:15px;font-weight:700;letter-spacing:1.5px;color:#b3261e;">⚠️ ACTION REQUIRED</div>
-          <div style="font-family:{_FONT_SANS};font-size:13px;color:#5b6470;margin-top:6px;">{n} possible cancellation / schedule-change email(s)</div>
-        </td></tr>
-        <tr><td style="padding:22px 22px 6px;">
-          {''.join(cards)}
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:2px 0 4px;">
-            <tr><td style="background:#f7f2e4;border:1px solid #e6dcc0;border-radius:10px;padding:13px 16px;font-family:{_FONT_SANS};font-size:12.5px;color:#4a4436;line-height:1.6;">
-              <b style="color:#8a6d1f;">Next step:</b> open each in the cs@ inbox (search its <i>Ref</i> or subject), confirm it is a genuine cancellation / schedule change, then <b>forward it to the affected client</b> so it is never missed.
-            </td></tr>
-          </table>
-        </td></tr>
-        <tr><td style="background:#ffffff;border-top:1px solid #e3e3e8;padding:16px 20px;text-align:center;">
-          <div style="height:1px;background:{_BRAND_GOLD};opacity:.6;line-height:1px;font-size:1px;max-width:130px;margin:0 auto 12px;">&nbsp;</div>
-          <div style="font-family:{_FONT_SANS};font-size:10px;letter-spacing:1.5px;color:#5b6470;text-transform:uppercase;">PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; {COMPANY_WEBSITE.upper()}</div>
-        </td></tr>
-      </table>
-    </td></tr>
-  </table>
-</body></html>'''
-
-
 def email_disruptions(send_gmail, sender, alerts):
     """Send ONE private ACTION-REQUIRED digest of possible cancellation /
     schedule-change emails, so they stop getting buried. Colour-coded HTML
@@ -978,14 +555,14 @@ def email_disruptions(send_gmail, sender, alerts):
     if not alerts:
         return False
     to = _env("DISRUPTION_NOTIFY_TO") or _env("NOTIFY_TO") or sender
-    enriched = _disruption_enrich(alerts)
+    enriched = email_templates.enrich(alerts)
     m = EmailMessage()
-    m["Subject"] = f"⚠️ ACTION REQUIRED — {len(alerts)} flight cancellation/change alert(s)"
+    m["Subject"] = email_templates.disruption_subject(enriched)
     m["From"] = sender
     m["To"] = to
-    m.set_content(_disruption_text(enriched))          # text/plain fallback
+    m.set_content(email_templates.disruption_text(enriched))          # text/plain fallback
     logo = _email_logo_bytes()
-    m.add_alternative(_disruption_html(enriched, logo_cid=("pivotlogo" if logo else None)),
+    m.add_alternative(email_templates.disruption_html(enriched, logo_cid=("pivotlogo" if logo else None)),
                       subtype="html")                  # rich HTML
     # Embed the feather logo as an INLINE cid: image on the HTML part (renders
     # in-body in Outlook; a data: URI would be stripped into a junk attachment).

@@ -1894,6 +1894,64 @@ def disruption_facts(text=""):
     return "|".join(sorted(facts))
 
 
+# Sender domain -> the airline / portal name a person recognises. Used ONLY to label an alert; an
+# unknown domain falls back to its second-level name, title-cased ("flynas.com" -> "Flynas").
+_SENDER_NAMES = {
+    "turkishairlines.com": "Turkish Airlines", "thy.com": "Turkish Airlines", "ajet.com": "aJet",
+    "flypgs.com": "Pegasus", "goindigo.in": "IndiGo", "goindigo.com": "IndiGo", "saudia.com": "Saudia",
+    "flynas.com": "flynas", "flyadeal.com": "flyadeal", "airindia.com": "Air India",
+    "airindiaexpress.com": "Air India Express", "gulfair.com": "Gulf Air", "flydubai.com": "flydubai",
+    "emirates.com": "Emirates", "qatarairways.com": "Qatar Airways", "etihad.com": "Etihad",
+    "lufthansa.com": "Lufthansa", "airarabia.com": "Air Arabia", "alhindsanchar.com": "Alhind",
+    "akbartravels.com": "Akbar Travels", "consolidator.aero": "Consolidator", "tconsolidator.com": "Consolidator",
+}
+
+
+def sender_label(sender=""):
+    """'Turkish Airlines <onlineticket@mail.turkishairlines.com>' -> 'Turkish Airlines'."""
+    m = re.search(r"@([A-Za-z0-9.\-]+)", sender or "")
+    if not m:
+        return (sender or "").strip() or "Unknown sender"
+    dom = m.group(1).lower()
+    for known, name in _SENDER_NAMES.items():
+        if dom == known or dom.endswith("." + known):
+            return name
+    parts = dom.split(".")
+    core = parts[-3] if len(parts) >= 3 and parts[-2] in ("co", "com", "org", "net") else (parts[-2] if len(parts) >= 2 else dom)
+    return core.title()
+
+
+def disruption_summary(subject="", preview="", sender=""):
+    """What a person needs to see at a glance about a disruption notice — pulled with the SAME patterns
+    the dedup fingerprint uses, from the subject + preview only (nothing is guessed or inferred).
+    Every field is optional; a missing one is simply absent, never invented."""
+    text = f"{subject}  {preview}"
+    pnr = ""
+    for m in _DISRUPTION_PNR_RE.finditer(text):
+        c = m.group(1).upper()
+        if c not in _DISRUPTION_STOPWORDS:
+            pnr = c
+            break
+    flights, routes, dates, times = [], [], [], []
+    for m in _FACT_FLIGHT.finditer(text):
+        f = f"{m.group(1)} {m.group(2)}"
+        if f not in flights:
+            flights.append(f)
+    for m in _FACT_ROUTE.finditer(text):
+        r = f"{m.group(1)} → {m.group(2)}"
+        if r not in routes:
+            routes.append(r)
+    for m in _FACT_DATE.finditer(text):
+        d = re.sub(r"\s+", " ", m.group(1)).strip().title()
+        if d not in dates:
+            dates.append(d)
+    for m in _FACT_HHMM.finditer(text):
+        if m.group(1) not in times:
+            times.append(m.group(1))
+    return {"pnr": pnr, "airline": sender_label(sender), "flights": flights[:3], "routes": routes[:2],
+            "dates": dates[:2], "times": times[:3]}
+
+
 def revision_key(refs) -> str:
     """Public-safe key for the revision counter: a truncated SHA-256 of the
     booking's reference(s).
