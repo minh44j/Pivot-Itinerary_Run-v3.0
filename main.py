@@ -489,8 +489,8 @@ def _bags_vary_by_leg(data):
 
 def _confirmation_html(data, source_ref="", logo_cid=None):
     """Ops-only confirmation body — a TECHNICAL monospace data readout inside the
-    Pivot brand chrome (charcoal/gold header: feather logo + Cormorant wordmark;
-    dark footer). Everything EXCEPT the company wordmark is monospace, for a fast,
+    Pivot brand chrome (light masthead: feather logo on a dark tile + Inter wordmark;
+    light footer). Everything EXCEPT the company wordmark is monospace, for a fast,
     scannable internal view (this email is never sent to a client). The full PDF is
     attached; _build_email_body is the plain-text fallback. Brand constants +
     _email_logo_bytes are module-level, resolved at call time."""
@@ -501,19 +501,19 @@ def _confirmation_html(data, source_ref="", logo_cid=None):
         return _html.escape(v) if v else "N/A"
 
     pnr_raw = (data.get("pnr") or "").strip()
-    logo_img = (f'<img src="cid:{logo_cid}" width="34" height="34" alt="Pivot" '
-                f'style="display:inline-block;border:0;margin:0 0 8px;">' if logo_cid else "")
+    logo_img = (f'<span style="display:inline-block;background:#1e1e20;border-radius:11px;padding:7px;line-height:0;margin:0 0 10px;">'
+                f'<img src="cid:{logo_cid}" width="28" height="28" alt="Pivot" style="display:block;border:0;"></span>' if logo_cid else "")
 
     def sect(title):
         return (f'<tr><td colspan="2" style="padding:18px 0 6px;border-bottom:1px solid #d9d2c0;">'
                 f'<span style="font-family:{_FONT_MONO};font-size:12px;font-weight:700;'
-                f'letter-spacing:2px;color:{_BRAND_GOLD};">{title}</span></td></tr>')
+                f'letter-spacing:2px;color:#85660f;">{title}</span></td></tr>')
 
     def kv(k, v, vcolor="#1e1c17", bold=False):
         w = "600" if bold else "400"
         return (f'<tr>'
                 f'<td valign="top" width="120" style="font-family:{_FONT_MONO};font-size:12px;'
-                f'color:#8a8266;padding:3px 14px 3px 0;white-space:nowrap;">{k}</td>'
+                f'color:#5b6470;padding:3px 14px 3px 0;white-space:nowrap;">{k}</td>'
                 f'<td style="font-family:{_FONT_MONO};font-size:12px;color:{vcolor};'
                 f'font-weight:{w};padding:3px 0;line-height:1.5;">{v}</td></tr>')
 
@@ -563,7 +563,7 @@ def _confirmation_html(data, source_ref="", logo_cid=None):
                 f'{esc(first.get("dep_iata"))}&rarr;{esc(last.get("arr_iata"))} &nbsp; '
                 f'{esc(first.get("dep_date"))}')
         rows += (f'<tr><td colspan="2" style="font-family:{_FONT_MONO};font-size:11px;'
-                 f'font-weight:700;letter-spacing:1px;color:{_BRAND_GOLD};padding:10px 0 2px;">'
+                 f'font-weight:700;letter-spacing:1px;color:#85660f;padding:10px 0 2px;">'
                  f'{head}</td></tr>')
         for f in flights:
             meta = "  ".join(x for x in [(f.get("cabin") or "").strip(),
@@ -595,24 +595,24 @@ def _confirmation_html(data, source_ref="", logo_cid=None):
 
     return f'''<!DOCTYPE html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<style>@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&display=swap');</style>
-</head><body style="margin:0;padding:0;background:#e7e4dd;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#e7e4dd;padding:20px 0;">
+<style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');</style>
+</head><body style="margin:0;padding:0;background:#f5f5f7;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f7;padding:20px 0;">
     <tr><td align="center">
-      <table role="presentation" width="620" cellpadding="0" cellspacing="0" style="max-width:620px;width:100%;border-radius:10px;overflow:hidden;background:#faf9f5;border:1px solid #ddd6c4;">
-        <tr><td style="background:#1e1e20;background:{_BRAND_CHARCOAL_GRAD};padding:20px 22px 16px;text-align:center;">
+      <table role="presentation" width="620" cellpadding="0" cellspacing="0" style="max-width:620px;width:100%;border-radius:10px;overflow:hidden;background:#ffffff;border:1px solid #e3e3e8;">
+        <tr><td style="background:#ffffff;border-bottom:2px solid {_BRAND_GOLD};padding:20px 22px 16px;text-align:center;">
           {logo_img}
-          <div style="font-family:{_FONT_SERIF};font-size:20px;font-weight:400;letter-spacing:.8px;color:#f2efe6;"><b style="font-weight:700;">Pivot</b> Travel Management</div>
+          <div style="font-family:{_FONT_SERIF};font-size:20px;font-weight:400;letter-spacing:-.3px;color:#1d1d1f;"><b style="font-weight:700;">Pivot</b> Travel Management</div>
           <div style="height:1px;background:{_BRAND_GOLD};line-height:1px;font-size:1px;max-width:150px;margin:12px auto 10px;">&nbsp;</div>
-          <div style="font-family:{_FONT_MONO};font-size:11px;letter-spacing:1px;color:{_BRAND_GOLD};">BOOKING CONFIRMATION &nbsp;&middot;&nbsp; {esc(data.get("pnr"))}</div>
+          <div style="font-family:{_FONT_MONO};font-size:11px;letter-spacing:1px;color:#85660f;font-weight:600;">BOOKING CONFIRMATION &nbsp;&middot;&nbsp; {esc(data.get("pnr"))}</div>
         </td></tr>
         <tr><td style="padding:6px 24px 20px;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
             {rows}
           </table>
         </td></tr>
-        <tr><td style="background:#1e1e20;background:{_BRAND_CHARCOAL_GRAD};padding:12px 20px;text-align:center;">
-          <div style="font-family:{_FONT_MONO};font-size:10px;letter-spacing:1px;color:#8f8b81;">PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; {esc(data.get("pnr"))} &nbsp;|&nbsp; {COMPANY_WEBSITE.upper()}</div>
+        <tr><td style="background:#ffffff;border-top:1px solid #e3e3e8;padding:12px 20px;text-align:center;">
+          <div style="font-family:{_FONT_MONO};font-size:10px;letter-spacing:1px;color:#5b6470;">PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; {esc(data.get("pnr"))} &nbsp;|&nbsp; {COMPANY_WEBSITE.upper()}</div>
         </td></tr>
       </table>
     </td></tr>
@@ -651,7 +651,7 @@ def email_pdf(send_gmail, sender, pdf_path, data, source_ref=""):
 # needed to locate and fix each booking.
 def _flags_html(flagged, logo_cid=None):
     """Ops-only manual-review digest — same TECHNICAL monospace readout as the
-    confirmation (brand chrome + Cormorant wordmark; everything else monospace),
+    confirmation (brand chrome + Inter wordmark),
     with an amber MANUAL REVIEW header. Lists each flagged booking's portal,
     reason, subject and Source Ref so staff can locate + process it by hand."""
     import html as _html
@@ -663,17 +663,17 @@ def _flags_html(flagged, logo_cid=None):
     def sect(title):
         return (f'<tr><td colspan="2" style="padding:18px 0 6px;border-bottom:1px solid #d9d2c0;">'
                 f'<span style="font-family:{_FONT_MONO};font-size:12px;font-weight:700;'
-                f'letter-spacing:2px;color:{_BRAND_GOLD};">{title}</span></td></tr>')
+                f'letter-spacing:2px;color:#85660f;">{title}</span></td></tr>')
 
     def kv(k, v, vcolor="#1e1c17"):
         return (f'<tr><td valign="top" width="110" style="font-family:{_FONT_MONO};font-size:12px;'
-                f'color:#8a8266;padding:3px 14px 3px 0;white-space:nowrap;">{k}</td>'
+                f'color:#5b6470;padding:3px 14px 3px 0;white-space:nowrap;">{k}</td>'
                 f'<td style="font-family:{_FONT_MONO};font-size:12px;color:{vcolor};'
                 f'padding:3px 0;line-height:1.5;">{v}</td></tr>')
 
     n = len(flagged)
-    logo_img = (f'<img src="cid:{logo_cid}" width="34" height="34" alt="Pivot" '
-                f'style="display:inline-block;border:0;margin:0 0 8px;">' if logo_cid else "")
+    logo_img = (f'<span style="display:inline-block;background:#1e1e20;border-radius:11px;padding:7px;line-height:0;margin:0 0 10px;">'
+                f'<img src="cid:{logo_cid}" width="28" height="28" alt="Pivot" style="display:block;border:0;"></span>' if logo_cid else "")
     rows = ""
     for i, f in enumerate(flagged, 1):
         rows += sect(f"[{i}] {esc(f.get('portal')).upper()}")
@@ -681,28 +681,28 @@ def _flags_html(flagged, logo_cid=None):
         if f.get("subject"):
             rows += kv("SUBJECT", esc(f.get("subject")))
         rows += kv("SOURCE REF", esc(f.get("id")))
-    rows += (f'<tr><td colspan="2" style="font-family:{_FONT_MONO};font-size:11px;color:#8a8266;'
+    rows += (f'<tr><td colspan="2" style="font-family:{_FONT_MONO};font-size:11px;color:#5b6470;'
              f'padding:16px 0 0;line-height:1.6;">Locate each in the cs@ inbox by its SOURCE REF '
              f'(Gmail message id) and process it manually.</td></tr>')
 
     return f'''<!DOCTYPE html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<style>@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&display=swap');</style>
-</head><body style="margin:0;padding:0;background:#e7e4dd;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#e7e4dd;padding:20px 0;">
+<style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');</style>
+</head><body style="margin:0;padding:0;background:#f5f5f7;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f7;padding:20px 0;">
     <tr><td align="center">
-      <table role="presentation" width="620" cellpadding="0" cellspacing="0" style="max-width:620px;width:100%;border-radius:10px;overflow:hidden;background:#faf9f5;border:1px solid #ddd6c4;">
-        <tr><td style="background:#1e1e20;background:{_BRAND_CHARCOAL_GRAD};padding:20px 22px 16px;text-align:center;">
+      <table role="presentation" width="620" cellpadding="0" cellspacing="0" style="max-width:620px;width:100%;border-radius:10px;overflow:hidden;background:#ffffff;border:1px solid #e3e3e8;">
+        <tr><td style="background:#ffffff;border-bottom:2px solid {_BRAND_GOLD};padding:20px 22px 16px;text-align:center;">
           {logo_img}
-          <div style="font-family:{_FONT_SERIF};font-size:20px;font-weight:400;letter-spacing:.8px;color:#f2efe6;"><b style="font-weight:700;">Pivot</b> Travel Management</div>
+          <div style="font-family:{_FONT_SERIF};font-size:20px;font-weight:400;letter-spacing:-.3px;color:#1d1d1f;"><b style="font-weight:700;">Pivot</b> Travel Management</div>
           <div style="height:1px;background:{_BRAND_GOLD};line-height:1px;font-size:1px;max-width:150px;margin:12px auto 10px;">&nbsp;</div>
-          <div style="font-family:{_FONT_MONO};font-size:11px;letter-spacing:1px;color:#d99a2e;">⚠ MANUAL REVIEW REQUIRED &nbsp;&middot;&nbsp; {n}</div>
+          <div style="font-family:{_FONT_MONO};font-size:11px;letter-spacing:1px;color:#b45309;font-weight:600;">⚠ MANUAL REVIEW REQUIRED &nbsp;&middot;&nbsp; {n}</div>
         </td></tr>
         <tr><td style="padding:6px 24px 20px;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0">{rows}</table>
         </td></tr>
-        <tr><td style="background:#1e1e20;background:{_BRAND_CHARCOAL_GRAD};padding:12px 20px;text-align:center;">
-          <div style="font-family:{_FONT_MONO};font-size:10px;letter-spacing:1px;color:#8f8b81;">PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; MANUAL REVIEW &nbsp;|&nbsp; {COMPANY_WEBSITE.upper()}</div>
+        <tr><td style="background:#ffffff;border-top:1px solid #e3e3e8;padding:12px 20px;text-align:center;">
+          <div style="font-family:{_FONT_MONO};font-size:10px;letter-spacing:1px;color:#5b6470;">PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; MANUAL REVIEW &nbsp;|&nbsp; {COMPANY_WEBSITE.upper()}</div>
         </td></tr>
       </table>
     </td></tr>
@@ -807,17 +807,19 @@ def scan_disruptions(gmail, alerted_ids, alerted_keys=None):
     return alerts
 
 
-# Alert e-mail is skinned to the Pivot itinerary brand (Model B / dark luxury):
-# charcoal->black gradient chrome, gold #c9a84c hairline + accents, feather logo +
-# "Pivot Travel Management" wordmark, Cormorant Garamond (display) + Inter (body),
-# dark footer. Severity is kept as a small coloured PILL on each card's dark strip
+# Alert e-mail is skinned to the Pivot itinerary brand (light page, 2026-10-30):
+# white masthead with a gold hairline, feather logo on a small dark tile + "Pivot Travel
+# Management" wordmark, SF/Inter throughout, light footer. Severity is kept as a small coloured PILL on each card's dark strip
 # so urgency still reads at a glance (cancellation=red, schedule change=orange,
 # delay=amber). `rank` sorts the most urgent (cancellations) to the top.
 _BRAND_GOLD = "#c9a84c"
 _BRAND_CHARCOAL_GRAD = "linear-gradient(135deg,#323234 0%,#1e1e20 55%,#0e0e0f 100%)"
-_FONT_SERIF = "'Cormorant Garamond',Georgia,'Times New Roman',serif"
-_FONT_SANS = "'Inter',-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
-_FONT_MONO = "'SF Mono','Menlo','Consolas','Roboto Mono','Courier New',monospace"
+# One sans stack: Apple Mail/iOS resolve -apple-system to SF, other clients get Inter (loaded below) or the
+# system sans. The serif and the monospace readout were retired with the itinerary redesign (2026-10-30);
+# the names stay so nothing that references them breaks.
+_FONT_SANS = "-apple-system,'SF Pro Display','Inter','Segoe UI',Roboto,Helvetica,Arial,sans-serif"
+_FONT_SERIF = _FONT_SANS
+_FONT_MONO = _FONT_SANS
 _DISRUPTION_STYLE = {
     "cancellation":    {"label": "CANCELLATION",    "emoji": "🔴", "accent": "#B23A3A", "rank": 0},
     "schedule_change": {"label": "SCHEDULE CHANGE", "emoji": "🟠", "accent": "#C07A2B", "rank": 1},
@@ -895,11 +897,11 @@ def _disruption_html(alerts, logo_cid=None):
     n = len(alerts)
     # Inline CID reference (the image is attached by email_disruptions). Outlook
     # renders cid: images in-body; data: URIs it strips into a junk attachment.
-    logo_img = (f'<img src="cid:{logo_cid}" width="40" height="40" alt="Pivot" '
-                f'style="display:inline-block;border:0;margin:0 0 10px;">' if logo_cid else "")
+    logo_img = (f'<span style="display:inline-block;background:#1e1e20;border-radius:11px;padding:7px;line-height:0;margin:0 0 10px;">'
+                f'<img src="cid:{logo_cid}" width="30" height="30" alt="Pivot" style="display:block;border:0;"></span>' if logo_cid else "")
 
     def row(k, v):
-        return (f'<tr><td style="font-family:{_FONT_SANS};font-size:11px;color:#9a8f77;'
+        return (f'<tr><td style="font-family:{_FONT_SANS};font-size:11px;color:#5b6470;'
                 f'text-transform:uppercase;letter-spacing:.5px;vertical-align:top;'
                 f'padding:5px 12px 5px 0;white-space:nowrap;">{k}</td>'
                 f'<td style="font-family:{_FONT_SANS};font-size:13px;color:#26241f;'
@@ -925,7 +927,7 @@ def _disruption_html(alerts, logo_cid=None):
                 f'email, then forward to the client.</div>')
         cards.append(f'''
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;border:1px solid #e7e1d3;border-radius:12px;border-collapse:separate;overflow:hidden;">
-        <tr><td style="background:#1e1e20;background:{_BRAND_CHARCOAL_GRAD};padding:11px 16px;">
+        <tr><td style="background:#f5f5f7;padding:11px 16px;">
           <span style="display:inline-block;background:{st['accent']};color:#ffffff;font-family:{_FONT_SANS};font-size:11px;font-weight:700;letter-spacing:1.2px;padding:5px 12px;border-radius:20px;">{st['emoji']}&nbsp; {st['label']}</span>
         </td></tr>
         <tr><td style="background:{_BRAND_GOLD};font-size:2px;line-height:2px;height:2px;">&nbsp;</td></tr>
@@ -937,17 +939,17 @@ def _disruption_html(alerts, logo_cid=None):
 
     return f'''<!DOCTYPE html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<style>@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600&display=swap');</style>
-</head><body style="margin:0;padding:0;background:#eae7e0;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eae7e0;padding:22px 0;">
+<style>@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');</style>
+</head><body style="margin:0;padding:0;background:#f5f5f7;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f7;padding:22px 0;">
     <tr><td align="center">
-      <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;border-radius:14px;overflow:hidden;background:#f6f4ef;">
-        <tr><td style="background:#1e1e20;background:{_BRAND_CHARCOAL_GRAD};padding:26px 24px 20px;text-align:center;">
+      <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;border-radius:14px;overflow:hidden;background:#ffffff;">
+        <tr><td style="background:#ffffff;border-bottom:2px solid {_BRAND_GOLD};padding:26px 24px 20px;text-align:center;">
           {logo_img}
-          <div style="font-family:{_FONT_SERIF};font-size:22px;font-weight:400;letter-spacing:.8px;color:#f2efe6;"><b style="font-weight:700;">Pivot</b> Travel Management</div>
+          <div style="font-family:{_FONT_SERIF};font-size:22px;font-weight:400;letter-spacing:-.3px;color:#1d1d1f;"><b style="font-weight:700;">Pivot</b> Travel Management</div>
           <div style="height:1px;background:{_BRAND_GOLD};line-height:1px;font-size:1px;max-width:170px;margin:15px auto;">&nbsp;</div>
-          <div style="font-family:{_FONT_SANS};font-size:15px;font-weight:600;letter-spacing:1.5px;color:{_BRAND_GOLD};">⚠️ ACTION REQUIRED</div>
-          <div style="font-family:{_FONT_SANS};font-size:13px;color:#b9b5ab;margin-top:6px;">{n} possible cancellation / schedule-change email(s)</div>
+          <div style="font-family:{_FONT_SANS};font-size:15px;font-weight:700;letter-spacing:1.5px;color:#b3261e;">⚠️ ACTION REQUIRED</div>
+          <div style="font-family:{_FONT_SANS};font-size:13px;color:#5b6470;margin-top:6px;">{n} possible cancellation / schedule-change email(s)</div>
         </td></tr>
         <tr><td style="padding:22px 22px 6px;">
           {''.join(cards)}
@@ -957,9 +959,9 @@ def _disruption_html(alerts, logo_cid=None):
             </td></tr>
           </table>
         </td></tr>
-        <tr><td style="background:#1e1e20;background:{_BRAND_CHARCOAL_GRAD};padding:16px 20px;text-align:center;">
+        <tr><td style="background:#ffffff;border-top:1px solid #e3e3e8;padding:16px 20px;text-align:center;">
           <div style="height:1px;background:{_BRAND_GOLD};opacity:.6;line-height:1px;font-size:1px;max-width:130px;margin:0 auto 12px;">&nbsp;</div>
-          <div style="font-family:{_FONT_SANS};font-size:10px;letter-spacing:1.5px;color:#8f8b81;text-transform:uppercase;">PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; {COMPANY_WEBSITE.upper()}</div>
+          <div style="font-family:{_FONT_SANS};font-size:10px;letter-spacing:1.5px;color:#5b6470;text-transform:uppercase;">PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; {COMPANY_WEBSITE.upper()}</div>
         </td></tr>
       </table>
     </td></tr>

@@ -106,9 +106,14 @@ the page is smaller than 10px except the footer (8.5px). Chosen by the owner fro
   line, the black segment pills, the gold-outlined plane badge, the `OPERATED BY / CABIN CLASS / DURATION`
   chips (the same airline name was printed twice — now one line), the Cormorant serif.
   `COMPANY_ADDRESS` and `BRAND_STRAPLINE` remain defined and unrendered, as before.
-- **Not yet migrated (follow-up):** the three alert/digest emails and the Air Suvidha guide still use
-  the old dark header and the serif. The guide is appended after the itinerary, so it reads as a separate
-  document. Restyling them is a separate change (and the guide PDF must be regenerated when it happens, §8 2026-10-11).
+- **Mirrored the same day:** the three alert/digest emails in `main.py` (confirmation digest, manual-review
+  digest, disruption alert) — light white masthead with the logo on a dark tile, one sans stack
+  (`-apple-system` → SF on Apple Mail/iOS, Inter elsewhere), light footer, gold text darkened to `#85660f`;
+  and the Air Suvidha guide (`air_suvidha/generate_air_suvidha_guide.py`, regenerated PDF committed).
+  The guide now renders with **Chromium** like the itinerary — WeasyPrint garbled every bold (700) heading
+  with the variable Inter — and inlines the same `assets/fonts`. It is still ONE page and still appended
+  after the itinerary by `main._append_air_suvidha`. **Regenerate `air_suvidha_guide.pdf` whenever that
+  generator changes** (§8 2026-10-11).
 
 **⚠️ Design is locked.** Before changing any layout/CSS, ask the user twice for explicit
 confirmation, then apply the SAME change everywhere the generator lives.

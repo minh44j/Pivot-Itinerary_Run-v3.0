@@ -6,13 +6,12 @@ Trimmed to essentials: What it is · What to prepare · How to complete it.
 Removed vs v3: the "Keep in mind" repetition, the status pill, the QR block,
 and the heavy row of micro-labels/dividers — for calmer spacing and hierarchy.
 
-Design language still mirrors the approved itinerary v3:
-  charcoal-graphite header/footer (#323234 -> #0e0e0f), gold accent #c9a84c,
-  Cormorant Garamond (italic titles) + Inter body, softly rounded cards.
+Design language mirrors the itinerary redesign (2026-10-30): light page, logo on a small dark tile,
+  Inter only, gold as ornament (gold TEXT is #85660f for contrast), softly rounded cards, light footer.
 
 Government attribution renders as a clean text line by default. If you drop
 `moca_logo.png` and/or `mohfw_logo.png` next to this script, they are picked up
-automatically (no code change). Renders with WeasyPrint.
+automatically (no code change). Renders with Chromium (Playwright).
 """
 import base64
 import io
@@ -44,6 +43,21 @@ def _qr_b64(data):
 
 
 QR_B64 = _qr_b64(PORTAL_URL)
+
+
+def _font_faces():
+    """Inter (variable, latin + latin-ext) from the repo, inlined as base64 so the guide renders
+    offline and identically everywhere (same files the itinerary generator embeds)."""
+    ranges = {"latin": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD",
+              "latin-ext": "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF"}
+    out = []
+    for name in ("latin-ext", "latin"):
+        f = HERE.parent / "assets" / "fonts" / f"inter-var-{name}.woff2"
+        if f.exists():
+            out.append("@font-face {{ font-family: 'Inter'; font-style: normal; font-weight: 400 800; "
+                       f"src: url(data:font/woff2;base64,{base64.b64encode(f.read_bytes()).decode()}) format('woff2'); "
+                       f"unicode-range: {ranges[name]}; }}".replace("{{", "{").replace("}}", "}"))
+    return "\n".join(out)
 
 
 def _find(name):
@@ -79,8 +93,8 @@ def icon(name, cls="ic"):
 
 # ── Header ───────────────────────────────────────────────────────────────────
 def header():
-    """Model B header — identical treatment to the itinerary: centred feather
-    logo + Cormorant wordmark, gold hairline, then the document title below."""
+    """Light masthead — same treatment as the itinerary: feather logo on a small dark tile
+    beside the Inter wordmark, a gold rule, then the document title below."""
     brand = (f'<img class="logo-img" src="data:image/png;base64,{LOGO_B64}" alt="Pivot">'
              if LOGO_B64 else "")
     return f"""
@@ -222,6 +236,7 @@ def footer_block():
 
 # ── HTML assembly ────────────────────────────────────────────────────────────
 def build_html():
+    FONT_FACES = _font_faces()
     body = f"""
   <div class="sheet">
     {header()}
@@ -240,45 +255,40 @@ def build_html():
 <meta charset="UTF-8">
 <title>Air Suvidha 2.0 — Passenger Guide</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Inter:wght@300;400;500;600;700&display=swap');
+{FONT_FACES}
 
 *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
 @page {{ size: A4; margin: 0; }}
 
 :root {{
   --pg: 16mm;
-  --gold: #c9a84c;
-  --gold-lt: #e4c97a;
-  --ink: #0b1724;
+  --gold: #c9a84c;        /* ornament: rules, dots, the logo ring */
+  --gold-ink: #85660f;    /* gold TEXT: 5.4:1 on white */
+  --ink: #1d1d1f;
   --body: #46525f;
-  --chip: #f7f7f7;
-  --bd: #e8eaee;
+  --sec: #5b6470;
+  --chip: #f5f5f7;
+  --bd: #e3e3e8;
 }}
 
 body {{ font-family: 'Inter', Helvetica, Arial, sans-serif; background: #fff; color: var(--ink);
   -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
-.sheet {{ width: 210mm; height: 297mm; position: relative; background: #fff; overflow: hidden; padding-bottom: 30mm; }}
+.sheet {{ width: 210mm; height: 297mm; position: relative; background: #fff; overflow: hidden; padding-bottom: 26mm; }}
 .ic svg, .fact-ic svg, .card-ic svg, .step-ic svg, .tag-ic svg {{ display: block; }}
 
-/* ── Header — Model B, identical to the itinerary: centred wordmark + hairline ── */
-.header {{
-  background: linear-gradient(150deg, #323234 0%, #1e1e20 50%, #0e0e0f 100%);
-  border-bottom: 2px solid var(--gold);
-  padding: 22px var(--pg) 18px;
-}}
-.brand-row {{ display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; }}
-.logo-img {{ height: 46px; width: auto; object-fit: contain; display: block; }}
+/* ── Masthead — same language as the itinerary: light page, logo on a small dark tile ── */
+.header {{ background: #fff; border-bottom: 2px solid var(--gold); padding: 20px var(--pg) 16px; }}
+.brand-row {{ display: flex; flex-direction: row; align-items: center; gap: 12px; }}
+.logo-img {{ box-sizing: content-box; height: 26px; width: auto; padding: 8px; border-radius: 11px;
+  background: linear-gradient(160deg, #323234, #0e0e0f); display: block; flex-shrink: 0; }}
 .company-name b {{ font-weight: 700; }}
-.company-name {{ font-family: 'Cormorant Garamond', Georgia, serif; font-size: 22px; font-weight: 400;
-  letter-spacing: 0.04em; color: #f0ead8; }}
-.header-divider {{ height: 1px; margin: 15px 0 14px;
-  background: linear-gradient(90deg, transparent, rgba(201,168,76,0.55) 22%, rgba(201,168,76,0.55) 78%, transparent); }}
-.doc-row {{ text-align: center; }}
-.doc-title {{ font-family: 'Cormorant Garamond', Georgia, serif; font-size: 30px; font-style: italic;
-  color: #f0ead8; line-height: 1; }}
-.t-bold {{ font-style: normal; font-weight: 700; color: #fff; }}
-.t-gold {{ font-style: normal; font-weight: 600; color: var(--gold); }}
-.doc-sub {{ font-size: 10.5px; color: #b7bcc4; margin-top: 7px; letter-spacing: 0.2px; }}
+.company-name {{ font-size: 22px; font-weight: 400; letter-spacing: -0.4px; color: var(--ink); }}
+.header-divider {{ height: 1px; margin: 14px 0 12px; background: var(--bd); }}
+.doc-row {{ text-align: left; }}
+.doc-title {{ font-size: 30px; font-weight: 700; letter-spacing: -0.8px; color: var(--ink); line-height: 1; }}
+.t-bold {{ font-weight: 700; color: var(--ink); }}
+.t-gold {{ font-weight: 700; color: var(--gold-ink); }}
+.doc-sub {{ font-size: 11.5px; color: var(--sec); margin-top: 7px; }}
 
 /* ── Government attribution ── */
 .govt-strip {{ display: flex; align-items: center; gap: 14px; padding: 9px var(--pg);
@@ -286,89 +296,81 @@ body {{ font-family: 'Inter', Helvetica, Arial, sans-serif; background: #fff; co
 .govt-logos {{ display: flex; align-items: center; gap: 10px; flex-shrink: 0; }}
 .govt-logo {{ height: 26px; width: auto; object-fit: contain; }}
 .govt-text {{ display: flex; flex-direction: column; gap: 1px; flex: 1; }}
-.govt-1 {{ font-size: 10px; font-weight: 700; color: var(--ink); letter-spacing: 0.2px; }}
-.govt-2 {{ font-size: 9px; color: #6b7a8d; }}
-.govt-date {{ font-size: 8px; font-weight: 600; letter-spacing: 1.2px; text-transform: uppercase;
-  color: var(--gold); flex-shrink: 0; }}
+.govt-1 {{ font-size: 11px; font-weight: 700; color: var(--ink); }}
+.govt-2 {{ font-size: 10px; color: var(--sec); }}
+.govt-date {{ font-size: 10px; font-weight: 600; color: var(--gold-ink); flex-shrink: 0; }}
 
 /* ── Content + sections ── */
-.content {{ padding: 22px var(--pg) 0; }}
-.section {{ margin-top: 24px; }}
+.content {{ padding: 18px var(--pg) 0; }}
+.section {{ margin-top: 20px; }}
 .section:first-child {{ margin-top: 4px; }}
-.sec-hdr {{ display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }}
+.sec-hdr {{ display: flex; align-items: center; gap: 10px; margin-bottom: 11px; }}
 .sec-dot {{ width: 7px; height: 7px; border-radius: 50%; background: var(--gold); flex-shrink: 0; }}
-.sec-title {{ font-size: 9.5px; font-weight: 700; letter-spacing: 2.4px; text-transform: uppercase; color: var(--gold); }}
+.sec-title {{ font-size: 14px; font-weight: 700; letter-spacing: -0.2px; color: var(--ink); }}
 .sec-rule {{ flex: 1; height: 1px; background: var(--bd); }}
 
 /* ── Intro ── */
-.intro {{ display: flex; gap: 24px; align-items: center; border: 1px solid var(--bd); border-radius: 16px;
-  padding: 20px 24px; position: relative; overflow: hidden; box-shadow: 0 3px 12px rgba(0,0,0,0.04); }}
+.intro {{ display: flex; gap: 24px; align-items: center; border: 1px solid var(--bd); border-radius: 18px;
+  padding: 18px 22px; position: relative; overflow: hidden; }}
 .intro::before {{ content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-  background: linear-gradient(90deg, var(--gold), var(--gold-lt) 50%, var(--gold)); }}
+  background: linear-gradient(90deg, var(--gold), #e4c97a 50%, var(--gold)); }}
 .intro-main {{ flex: 1; min-width: 0; }}
 .intro-qr {{ display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0; }}
 .qr-img {{ width: 88px; height: 88px; border: 1px solid var(--bd); border-radius: 10px; padding: 5px; background: #fff; }}
-.qr-cap {{ font-size: 7.5px; font-weight: 600; letter-spacing: 1.2px; text-transform: uppercase; color: var(--gold); }}
-.intro-copy {{ font-size: 11px; line-height: 1.6; color: var(--body); }}
+.qr-cap {{ font-size: 9.5px; font-weight: 600; color: var(--sec); }}
+.intro-copy {{ font-size: 11.5px; line-height: 1.6; color: var(--body); }}
 .intro-copy strong {{ color: var(--ink); font-weight: 700; }}
-.portal {{ display: flex; align-items: baseline; gap: 10px; margin: 14px 0 0; }}
-.portal-lbl {{ font-size: 7.5px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--gold); }}
-.portal-url {{ font-family: 'Cormorant Garamond', Georgia, serif; font-size: 19px; font-weight: 700;
-  color: var(--ink); letter-spacing: 0.3px; }}
-.facts {{ display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }}
+.portal {{ display: flex; align-items: baseline; gap: 10px; margin: 12px 0 0; }}
+.portal-lbl {{ font-size: 10px; font-weight: 600; color: var(--sec); }}
+.portal-url {{ font-size: 16px; font-weight: 700; color: var(--ink); letter-spacing: -0.2px; }}
+.facts {{ display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }}
 .fact {{ display: flex; align-items: center; gap: 6px; background: var(--chip); border: 1px solid var(--bd);
-  border-radius: 18px; padding: 6px 14px; font-size: 9.5px; font-weight: 600; color: #3d4452; }}
-.fact-ic {{ color: var(--gold); }}
+  border-radius: 18px; padding: 6px 13px; font-size: 10.5px; font-weight: 600; color: #3d4452; }}
+.fact-ic {{ color: var(--gold-ink); }}
 .fact-ic svg {{ width: 13px; height: 13px; }}
 
 /* ── Prepare (2x2) ── */
-.prep-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }}
-.card {{ border: 1px solid var(--bd); border-radius: 16px; padding: 16px 18px; background: #fff;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.035); }}
-.card-head {{ display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }}
-.card-ic {{ color: var(--gold); flex-shrink: 0; }}
+.prep-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }}
+.card {{ border: 1px solid var(--bd); border-radius: 18px; padding: 15px 18px; background: #fff; }}
+.card-head {{ display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }}
+.card-ic {{ color: var(--gold-ink); flex-shrink: 0; }}
 .card-ic svg {{ width: 18px; height: 18px; }}
-.card-title {{ font-family: 'Cormorant Garamond', Georgia, serif; font-size: 16px; font-weight: 700; color: var(--ink); }}
+.card-title {{ font-size: 13.5px; font-weight: 700; color: var(--ink); letter-spacing: -0.1px; }}
 .card-list {{ list-style: none; }}
 .card-list li {{ display: grid; grid-template-columns: 10px 1fr; gap: 8px; align-items: start;
-  font-size: 10px; color: var(--body); line-height: 1.4; margin-bottom: 7px; }}
+  font-size: 10.5px; color: var(--body); line-height: 1.4; margin-bottom: 6px; }}
 .card-list li:last-child {{ margin-bottom: 0; }}
 .card-list .dot {{ width: 5px; height: 5px; border-radius: 50%; background: var(--gold); margin-top: 5px; }}
 
 /* ── Steps (3 across) ── */
-.step-grid {{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }}
-.step {{ border: 1px solid var(--bd); border-radius: 16px; padding: 18px; background: #fff;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.035); position: relative; overflow: hidden; }}
+.step-grid {{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }}
+.step {{ border: 1px solid var(--bd); border-radius: 18px; padding: 16px; background: #fff;
+  position: relative; overflow: hidden; }}
 .step::before {{ content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-  background: linear-gradient(90deg, var(--gold), var(--gold-lt)); }}
-.step-top {{ display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }}
+  background: linear-gradient(90deg, var(--gold), #e4c97a); }}
+.step-top {{ display: flex; align-items: center; justify-content: space-between; margin-bottom: 11px; }}
 .step-num {{ width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(150deg, #323234, #0e0e0f);
-  color: var(--gold); font-family: 'Cormorant Garamond', Georgia, serif; font-size: 17px; font-weight: 700;
+  color: var(--gold); font-size: 14px; font-weight: 700;
   display: flex; align-items: center; justify-content: center; border: 1.5px solid var(--gold); }}
-.step-badge {{ color: #c8ccd3; }}
+.step-badge {{ color: var(--sec); }}
 .step-ic svg {{ width: 20px; height: 20px; }}
-.step-title {{ font-family: 'Cormorant Garamond', Georgia, serif; font-size: 16px; font-weight: 700;
-  color: var(--ink); line-height: 1.15; }}
-.step-tag {{ display: inline-flex; align-items: center; gap: 5px; font-size: 8px; font-weight: 600;
-  letter-spacing: 0.5px; text-transform: uppercase; color: var(--gold); margin: 5px 0 9px; }}
+.step-title {{ font-size: 13.5px; font-weight: 700; color: var(--ink); line-height: 1.15; letter-spacing: -0.1px; }}
+.step-tag {{ display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600;
+  color: var(--gold-ink); margin: 5px 0 8px; }}
 .tag-ic svg {{ width: 11px; height: 11px; }}
-.step-body {{ font-size: 10px; line-height: 1.5; color: var(--body); }}
+.step-body {{ font-size: 10.5px; line-height: 1.5; color: var(--body); }}
 .step-body strong {{ color: var(--ink); font-weight: 700; }}
 
-/* ── Footer ── */
-.footer {{
-  background: linear-gradient(150deg, #323234 0%, #1e1e20 55%, #0e0e0f 100%);
-  border-top: 2px solid var(--gold); padding: 12px var(--pg);
-  display: flex; align-items: center; gap: 16px;
-  position: absolute; left: 0; right: 0; bottom: 0;
-}}
-.footer-logo {{ height: 26px; width: 26px; object-fit: contain; opacity: 0.85; flex-shrink: 0; }}
+/* ── Footer — light, like the itinerary ── */
+.footer {{ background: #fff; border-top: 1px solid var(--bd); padding: 11px var(--pg);
+  display: flex; align-items: center; gap: 14px; position: absolute; left: 0; right: 0; bottom: 0; }}
+.footer-logo {{ box-sizing: content-box; height: 16px; width: auto; padding: 5px; border-radius: 8px;
+  background: linear-gradient(160deg, #323234, #0e0e0f); flex-shrink: 0; }}
 .footer-text {{ flex: 1; }}
-.footer-line {{ font-size: 8px; letter-spacing: 1.8px; text-transform: uppercase; font-weight: 600;
-  color: rgba(255,255,255,0.42); }}
-.footer-contact {{ text-align: right; flex-shrink: 0; padding-left: 16px; border-left: 1px solid rgba(201,168,76,0.25); }}
-.fc-lbl {{ font-size: 7px; text-transform: uppercase; letter-spacing: 1px; color: rgba(201,168,76,0.75); font-weight: 600; }}
-.fc-val {{ font-size: 9px; color: #e8e2d2; font-weight: 600; white-space: nowrap; margin-top: 2px; }}
+.footer-line {{ font-size: 9px; letter-spacing: 1.4px; text-transform: uppercase; font-weight: 600; color: var(--sec); }}
+.footer-contact {{ text-align: right; flex-shrink: 0; padding-left: 14px; border-left: 1px solid var(--bd); }}
+.fc-lbl {{ font-size: 9px; color: var(--sec); font-weight: 600; }}
+.fc-val {{ font-size: 10.5px; color: var(--ink); font-weight: 650; white-space: nowrap; margin-top: 1px; }}
 </style>
 </head>
 <body>
@@ -378,8 +380,24 @@ body {{ font-family: 'Inter', Helvetica, Arial, sans-serif; background: #fff; co
 
 
 def main():
-    from weasyprint import HTML
-    HTML(string=build_html(), base_url=str(HERE)).write_pdf(str(OUT_PDF))
+    # Chromium (Playwright), the same renderer as the itinerary. WeasyPrint was dropped on 2026-10-30:
+    # with the variable Inter it garbled every bold (700) heading into unreadable glyphs.
+    import tempfile, os
+    from playwright.sync_api import sync_playwright
+    f = tempfile.NamedTemporaryFile(suffix=".html", delete=False, mode="w", encoding="utf-8")
+    f.write(build_html())
+    f.close()
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page()
+            page.emulate_media(media="screen")
+            page.goto(f"file://{f.name}", wait_until="networkidle")
+            page.pdf(path=str(OUT_PDF), format="A4", print_background=True,
+                     margin={"top": "0", "bottom": "0", "left": "0", "right": "0"})
+            browser.close()
+    finally:
+        os.unlink(f.name)
     print(f"Wrote {OUT_PDF}")
 
 
