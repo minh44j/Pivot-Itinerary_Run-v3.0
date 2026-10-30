@@ -68,11 +68,14 @@ def test_both_references_render_in_header_footer_and_banners(split):
     # Matched loosely on purpose: the element carries an inline grid placement
     # since 2026-09-09, so asserting the exact tag text pinned attribute order
     # rather than the behaviour under test (both references reaching the header).
-    assert re.search(r'class="pnr-value"[^>]*>AAA111 / BBB222<', html)
-    assert "PNR References" in html
-    assert f"AAA111 / BBB222 &nbsp;|&nbsp; {G.COMPANY_WEBSITE.upper()}" in html
-    assert html.count('class="seg-pnr">PNR AAA111<') == 1
-    assert html.count('class="seg-pnr">PNR BBB222<') == 1
+    assert re.search(r'class="pnr"[^>]*>AAA111 / BBB222<', html)
+    assert "PNR references" in html
+    # footer is a Chromium template now (page numbers); it carries both references too
+    assert f"AAA111 / BBB222 &nbsp;|&nbsp; {G.COMPANY_WEBSITE.upper()}" in G._footer_template("AAA111 / BBB222")
+    # each leg carries ITS OWN reference chip (a mixed-carrier segment no longer shows one carrier's
+    # reference over every leg)
+    assert html.count('class="chip">PNR AAA111<') == 1
+    assert html.count('class="chip">PNR BBB222<') == 1
 
 
 def test_single_reference_booking_is_untouched():
@@ -81,10 +84,9 @@ def test_single_reference_booking_is_untouched():
     d = E.extract_akbar((FIX / "akbar_oneway.txt").read_text(encoding="utf-8"),
                         {"date": "20 Aug 2026"})
     html = G.build_html(d, project_dir=str(PROJ), layout="A")
-    assert 'class="seg-pnr"' not in html
-    assert 'class="seg-meta"' not in html
-    assert "PNR Reference<" in html
-    assert "PNR References" not in html
+    assert 'class="chip"' not in html
+    assert "PNR reference<" in html
+    assert "PNR references" not in html
 
 
 @pytest.mark.parametrize("data,expected", [

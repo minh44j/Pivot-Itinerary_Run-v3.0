@@ -62,75 +62,53 @@ Process only when sender AND subject both match. Ignore everything else. Turkish
 several OTHER subjects from the same address (Gate Change Information, Flight Delay Information,
 Seat Selection Details) — none of those are booking confirmations; only the exact subject above is.
 
-## 5. The design (LOCKED — Model B header, dark luxury)
+## 5. The design (LOCKED — Apple-guidelines redesign, approved 2026-10-30)
 
-Palette: charcoal→black gradient `#323234 / #1e1e20 / #0e0e0f` for header/footer/segment
-banners; **white body** with light `#f7f7f7` chips; gold `#c9a84c`; emerald `#4ea87a/#7fd0a6`
-for the CONFIRMED status only. Fonts: **Cormorant Garamond** (display/figures) + **Inter** (body).
+Light page, **Inter only** (variable, optical sizing; inlined from `assets/fonts/` so a render needs
+no network — Cormorant Garamond is retired). Ink `#1d1d1f`, secondary `#5b6470` (6.0:1 on white),
+hairline `#e3e3e8`, grouped surface `#f5f5f7`. Gold `#c9a84c` is an **ornament** (rules, the plane
+line, the logo ring); gold **text** is `#85660f` (5.4:1). Every text style passes WCAG AA; nothing on
+the page is smaller than 10px except the footer (8.5px). Chosen by the owner from rendered candidates
+(three layouts and a refresh were drawn through the real engine first); applied the same day.
 
-- **Header (One Rail, approved 2026-10-12 — replaces the 2026-09-09 Reference Block):** TWO bands
-  inside one dark panel, 110px tall (was 120px with three bands).
-  (1) **Brand row** — feather logo at 40px + wordmark INLINE, `Pivot` bold 700 against
-  `Travel Management` at 400 (`.hdr-name b`), **30px**. Right-aligned opposite, a three-line stack:
-  the **document label**, then `Issued <date> · <HH:MM> AST[ · Revision N]`, then
-  `COMPANY_HOTLINE · HEADER_EMAIL` on its own line. The contact MUST stay a separate line — appended
-  to the issue stamp it becomes one `nowrap` line that runs off the page and clips both the state
-  label and the email.
-  (2) Gold hairline, then the **reference rail** — `PNR Reference` label above the reference at
-  **34px**, then `Agency Ref. / CRS Ref. / Booked On / Journey` as hairline-divided cells that each
-  take an **equal share** of the remaining width (`.rail-cell { flex: 1 1 0 }`). That share is the
-  whole point: when the cells were a fixed-width group huddled right, the space between them and a
-  left-aligned reference was a DEAD GAP whose size varied with the reference's length — enormous at
-  a 6-character PNR, small at 13 — and could not be designed out. Verified at both lengths and on the
-  longest disruption label (`Revised Itinerary · Rescheduled`), all 110px.
-  There is intentionally **no "Booking Confirmation" title text**.
-  **Retired from the header** (owner's call, 2026-10-12): the registered `COMPANY_ADDRESS` (the
-  wordmark took the space; the address still prints on the T&C page) and the service strip carrying
-  `BRAND_STRAPLINE`. Both constants are KEPT defined but rendered nowhere, so either can be restored
-  in one line. Nothing mirrors them — the alert/digest emails and the Air Suvidha guide have their
-  own simpler headers with no address, strapline or rail.
-- **No status pill** (retired 2026-09-09, approved). The green CONFIRMED pill duplicated the label
-  beside it and read as app rather than document language. The state now lives in the label itself,
-  tinted by `_DOC_STATE`: `Itinerary Confirmation` in gold, `Revised Itinerary · Rescheduled` etc. in
-  the disruption's colour. `data["doc_status"]` still drives it exactly as before.
-- **"Official Travel Document" is retired** (2026-09-09). A *travel document* is a passport or visa
-  and *official* implies state issue; this page is neither. The label is now **Itinerary Confirmation**.
-- **The ref-strip capsule is gone** — its four values moved up into the header's reference row, so the
-  page is ~70px shorter and every reference reads in one place.
-- Rounded passenger cards with a gold top strip + grey value chips ·
-  dark rounded segment banners (OUTBOUND / INBOUND) · rounded flight cards with a white plane-badge
-  connector · gold layover badge · dark footer with `PIVOT AUTOMATED ITINERARY | <PNR> | WWW.PIVOTTMC.COM` (`COMPANY_WEBSITE`)
-  and a **second registration line** `CR 7043148696 · VAT 311788697700003`
-  (`COMPANY_CR` / `COMPANY_VAT`). The VAT segment renders only when `COMPANY_VAT` is non-empty,
-  so an unverified tax identifier can never reach a client document (§7).
-- **Baggage + seat live on the FLIGHT card, not the passenger card** (2026-07-30, approved):
-  one row per passenger inside each flight card (`PASSENGER | CABIN | CHECKED | SEAT`). They are
-  per-SEGMENT facts — extra baggage is often bought on one leg only, and seats differ per leg.
-  A column is **omitted entirely** when no passenger on that leg has a value. The flight card's
-  pill row holds `OPERATED BY` + `CABIN CLASS` (+ `DURATION` when known) — the duplicate
-  `FLIGHT NO.` pill was removed because the flight number already sits on the centre connector;
-  `OPERATED BY` was removed with it on 2026-07-30 and **restored by request the same day** (the
-  operating carrier can differ from the marketing one, so it earns its own pill).
-  Passenger card is now just `PASSENGER NAME | TICKET NO.`, so long names no longer wrap.
-- **Split-carrier bookings** (approved 2026-08-20): when a booking carries more than one
-  airline reference, the header shows them joined (`B9PS6D / 8XMVR7`) under the label
-  `PNR References`, and each segment banner gains a gold outlined `PNR <ref>` chip beside its
-  date. Both are **suppressed entirely** on single-reference bookings, whose markup stays
-  byte-identical to the locked original.
-- **Terms & Conditions:** static 8-clause page, always issued by "Pivot Travel Management".
-- **Pagination (two-pass in `build_pdf`):** *Layout A* (itinerary fits 1 page → page 1 itinerary +
-  footer, page 2 T&C + footer). *Layout B* (spills → cards flow, T&C fills the tail, one footer
-  pinned to the bottom of the last page). Rules held: footer pinned to page bottom; segment banner
-  never orphaned from its first card (`page-break-after: avoid`); cards never split
-  (`page-break-inside: avoid`); pages 2+ get a 12mm top margin.
-
-- **NO `box-shadow` anywhere** (removed 2026-07-30, approved). PDF has no shadow primitive, so
-  Chromium rasterises each one into an image + soft mask; Apple's PDFKit (iOS Quick Look/Files,
-  macOS Preview) then paints the shadow's **bounding box as a flat grey rectangle** — a visible
-  "backdrop" behind every card. Cards carry 1px borders + radii, so nothing was lost. Do NOT
-  reintroduce shadows, and note an `@media print` override CANNOT fix it (§10 renders with
-  `emulate_media("screen")`, so print rules never apply). Exception kept on purpose: the tiny
-  `0 0 5px` glow on the CONFIRMED pill dot.
+- **Masthead:** one quiet line. The feather logo sits in a small dark rounded **tile** (the mark is
+  light-on-dark, so it needs a dark ground; no brightness/invert filter, §3) beside the wordmark
+  (`Pivot` 700 / `Travel Management` 400). Right-aligned stack: the document label (`_DOC_STATE`, tinted
+  by `ink`), `Issued <date> · <HH:MM> AST[ · Revision N]`, and `COMPANY_HOTLINE · HEADER_EMAIL` on its
+  own line. **There is no dark header band and no dark footer band** — the "black trim" went at the
+  owner's request.
+- **Hero:** `PNR reference` (or `PNR references`) with the reference set large (54px; 46/38px for long
+  or split values). Below it the facts row — `Agency ref. / CRS ref. / Booked on / Journey` — each cell
+  an equal share of the width, hairline-divided. `Booked on` is the one cell that can be empty, so it
+  goes through `_na()` (§8 2026-10-25).
+- **Travellers:** an inset grouped list, one row per passenger: name left, `Ticket no.` right.
+- **Journeys:** a heading per segment (`Outbound` / `Inbound` / `Flight`, route, weekday date), then one
+  **boarding-pass card per flight**: carrier line (`SV 774  Operated by Saudi Airline` · `Economy · 4h 45m`),
+  codes + times + dates + cities + airport/terminal, a **perforation with side notches** (the signature),
+  and a per-passenger table `Passenger | Cabin | Checked | Seat`. **The seat is the boldest figure.**
+  A column is omitted entirely when no passenger on that leg has a value. Layovers are a grey pill
+  between cards.
+- **Split-carrier bookings:** the header shows the references joined (`B9PS6D / 8XMVR7`) under
+  `PNR references`, and **each flight card carries its own `PNR <ref>` chip** (it used to sit on the
+  segment banner, which mis-labelled a mixed-carrier segment with only its first carrier's reference —
+  seen on 72CH2K, TK legs `UR8ANH` + SV leg `72CH2K`). Chips are suppressed on single-reference bookings.
+- **Terms & conditions:** the eight clauses at 10px in two columns, always on a fresh last page, always
+  issued by "Pivot Travel Management".
+- **Footer:** Chromium footer template on every page — `PIVOT AUTOMATED ITINERARY | <PNR> | WWW.PIVOTTMC.COM`
+  and `Page n of N`. **CR and VAT are no longer printed** (owner's call, 2026-10-30); `COMPANY_CR` /
+  `COMPANY_VAT` stay defined, unrendered, so restoring them is one line in `_footer_template`.
+- **Pagination:** browser-driven, single pass. Cards never split, a segment heading stays with its
+  first card, layover pills stay with the card before them, T&C starts a new page. (The old two-pass
+  Layout A/B measuring is gone; `build_html(..., layout=)` still accepts the argument and ignores it.)
+- **NO `box-shadow` anywhere** (still true; §8 2026-07-30 explains why Apple's PDF viewer paints shadows
+  as grey slabs). The perforation notches are bordered half-circles, not shadows.
+- **Retired with the old design:** the dark header + reference rail, the dark footer and its second CR/VAT
+  line, the black segment pills, the gold-outlined plane badge, the `OPERATED BY / CABIN CLASS / DURATION`
+  chips (the same airline name was printed twice — now one line), the Cormorant serif.
+  `COMPANY_ADDRESS` and `BRAND_STRAPLINE` remain defined and unrendered, as before.
+- **Not yet migrated (follow-up):** the three alert/digest emails and the Air Suvidha guide still use
+  the old dark header and the serif. The guide is appended after the itinerary, so it reads as a separate
+  document. Restyling them is a separate change (and the guide PDF must be regenerated when it happens, §8 2026-10-11).
 
 **⚠️ Design is locked.** Before changing any layout/CSS, ask the user twice for explicit
 confirmation, then apply the SAME change everywhere the generator lives.
@@ -164,6 +142,35 @@ review, do not produce a PDF**. `qc_check()` gates this (missing PNR / passenger
 flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
+
+- **2026-10-30 — itinerary redesigned to Apple's guidelines; Inter only; dark bands gone; CR/VAT off the footer:**
+  The owner asked for a redesign "according to the Apple design skill". Three completely different
+  layouts (Poster, Timeline, Bento) and a refresh of the old look were rendered through the real data
+  before anything was applied; the owner chose the boarding-pass layout (§5) and asked for no CR/VAT.
+  **Why it was worth doing — measured, not taste:** on the old render **18 of 37 text styles failed WCAG
+  AA** (gold `#c9a84c` on white is 2.29:1 and carried the labels, section titles, flight numbers and
+  dates; the airport line was 2.84:1, the airline name 2.85:1, the footer ~3:1), and the smallest text was
+  6.5px (4.9pt) — about 3pt once an A4 page is shrunk to a phone, below Apple's 11pt floor. New render:
+  0 failures, lowest contrast 5.38:1, smallest body text 10px.
+  **Fonts:** SF Pro was requested; it cannot be used (Apple's licence covers Apple-platform apps and
+  mock-ups, not documents sent to clients, and the Linux runner does not have it). Inter with optical
+  sizing is the open (SIL OFL) equivalent. The variable `latin` + `latin-ext` subsets are committed in
+  `assets/fonts/` and **inlined as base64**, so rendering needs no network and cannot fall back to a system
+  face (this also retires the 2026-10 sandbox problem where Chromium silently used Liberation). Latin-ext
+  carries the Turkish letters in names (verified: `Şükrü Güllü İbrahim Çağlar` renders in Inter).
+  **Code:** `generate_itinerary_v3.py` rewritten around the same data-prep (the airport/terminal/name
+  backfills and the per-leg pax fallback are carried over verbatim); helpers, constants, `_norm_bag`, the
+  T&C wording and `booking_refs` are unchanged. `build_pdf` is single-pass and uses Chromium's footer
+  template for `Page n of N`. `_flight_card` keeps its name but takes `(flight, multi=False)`.
+  **Tests:** 273 pass. Markup-coupled assertions were moved to the new classes (`hdr-val` → `fact`,
+  `pnr-value` → `pnr`, `seg-pnr` → per-flight `chip`) without weakening what they check; the old
+  `_pax_card` test became "the Traveller row never shows baggage or seat". `tests/test_new_design.py`
+  adds guards: no serif, font inlined and latin-ext present, no dark bands, footer has reference + website
+  and **no CR/VAT**, seat column, state colours, gold-text token.
+  **Cost, stated plainly:** a round trip still fits one itinerary page plus the terms page; the 3-leg
+  UR8ANH / 72CH2K booking still spills its last leg onto a second page, exactly as the old layout did.
+  The footer is now a Chromium template, so a PDF is no longer one self-contained HTML render with a
+  footer pinned inside it. The three alert emails and the Air Suvidha guide are NOT yet restyled (§5).
 
 - **2026-10-25 — "BOOKED ON" could print as a bare label with nothing under it:**
   Found while hand-building a Saudia DOH→JED document from a portal quote screen. The

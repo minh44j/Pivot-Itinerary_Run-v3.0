@@ -1,7 +1,7 @@
 """
 Offline regression test for the "Booked On" header cell.
 
-The header rail draws four cells. Three of them are conditional — Agency Ref.
+The header facts row draws four cells. Three of them are conditional — Agency Ref.
 and CRS Ref. are only appended when they hold a value, and Journey always
 resolves to ONE-WAY or ROUND TRIP — so "Booked On" is the ONLY cell that can be
 reached with nothing in it.
@@ -54,7 +54,7 @@ def _booking(**over):
 def _booked_on_value(html):
     """The text of the cell whose label is BOOKED ON, or None if it has none."""
     m = re.search(
-        r'<div class="hdr-lbl">Booked On</div>\s*<div class="hdr-val">(.*?)</div>',
+        r'<div class="fact"><div class="k">Booked on</div><div class="v">(.*?)</div>',
         html, re.S)
     return None if m is None else m.group(1).strip()
 

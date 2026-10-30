@@ -64,12 +64,20 @@ def test_akbar_has_no_per_leg_data_but_generator_fills_it():
             assert f["pax"][0]["name"] == data["passengers"][0]["name"]
 
 
-def test_passenger_card_no_longer_shows_baggage_or_seat():
-    html = G._pax_card({"name": "Mr. Test Pax", "ticket_no": "123",
-                        "cabin_bag": "8kg", "checked_bag": "23kg", "seat": "10J"})
-    assert "TICKET NO." in html and "PASSENGER NAME" in html
-    for gone in ("CABIN BAGGAGE", "CHECKED BAGGAGE", "SEAT", "8kg", "23kg", "10J"):
-        assert gone not in html, f"{gone!r} should have moved to the flight card"
+def test_traveller_row_no_longer_shows_baggage_or_seat():
+    """The Travellers list is identity only (name + ticket); baggage and seat live on the flight card."""
+    data = E._finalize({
+        "portal": "T", "pnr": "TEST01", "status": "Confirmed", "booked_on": "01 Jan 2026",
+        "passengers": [{"name": "Mr. Test Pax", "ticket_no": "1234567890123",
+                        "cabin_bag": "8kg", "checked_bag": "23kg", "seat": "10J"}],
+        "flights": [dict(_leg([]), pax=[{"name": "Mr. Test Pax", "cabin_bag": "8kg",
+                                         "checked_bag": "23kg", "seat": "10J"}])],
+    })
+    html = G.build_html(data, project_dir=ROOT)
+    travellers = html.split('class="sec-t">Travellers')[1].split('class="seg"')[0]
+    assert "Ticket no." in travellers and "Mr. Test Pax" in travellers and "1234567890123" in travellers
+    for gone in ("8kg", "23kg", "10J", "Seat", "Checked"):
+        assert gone not in travellers, f"{gone!r} should live on the flight card, not the traveller row"
 
 
 def _leg(pax):
@@ -85,8 +93,8 @@ def test_seat_column_omitted_when_no_leg_has_a_seat():
     render a row of N/A."""
     html = G._flight_card(_leg([{"name": "A B", "cabin_bag": "8kg",
                                 "checked_bag": "23kg", "seat": ""}]))
-    assert "CHECKED" in html
-    assert "SEAT" not in html
+    assert "<th>Checked</th>" in html
+    assert "<th>Seat</th>" not in html
 
 
 def test_per_leg_values_render_independently():

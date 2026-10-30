@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """
-Pivot Travel Management — Itinerary PDF Generator v3
-Design: 7BBKYN approved reference.
-White header · light ref strip · dark navy segment bars · white flight cards · dark navy footer.
-Gold accent #c9a84c · Navy #0b1724 · Fonts: Cormorant Garamond + Inter.
+Pivot Travel Management — Itinerary PDF Generator v4  (Apple-guidelines redesign, 2026-10-30)
+
+Layout: light page, no dark header/footer bands · one large PNR reference · grouped traveller
+list · boarding-pass flight cards (perforation + notches) · per-leg passenger table with the
+seat as the boldest figure · light footer with page numbers.
+Type: Inter only (variable, optical sizing) — inlined from assets/fonts so rendering needs no
+network. Gold #c9a84c is an accent/ornament; gold TEXT is #85660f (5.4:1 on white).
 
 Usage:
     python3 generate_itinerary_v3.py --data '<json>' --out-dir '/path/'
@@ -64,174 +67,6 @@ def booking_refs(data: dict) -> list:
             out.append(r)
     return out
 
-
-def _segment_header(seg_type: str, flights: list, seg_pnr: str = "") -> str:
-    if not flights:
-        return ""
-    first    = flights[0]
-    last     = flights[-1]
-    dep_city = first.get("dep_city", first.get("dep_iata", "")).upper()
-    arr_city = last.get("arr_city",  last.get("arr_iata",  "")).upper()
-    dep_date = first.get("dep_date", "")
-    label    = seg_type.upper()
-    route    = f"{dep_city} TO {arr_city}"
-    full_date = _weekday_date(dep_date)
-    # seg_pnr is passed ONLY when the booking carries more than one reference —
-    # repeating the single ref that already sits in the header would be noise.
-    # The single-reference markup below is byte-identical to the locked original.
-    right = (f'<span class="seg-meta"><span class="seg-pnr">PNR {seg_pnr}</span>'
-             f'<span class="seg-date">{full_date}</span></span>') if seg_pnr else \
-            f'<span class="seg-date">{full_date}</span>'
-    return f"""
-    <div class="seg-header">
-      <span class="seg-route">&#x2794; {label} &mdash; {route}</span>
-      {right}
-    </div>"""
-
-
-def _flight_card(seg: dict, standalone: bool = False) -> str:
-    dep_iata     = seg.get("dep_iata", "???")
-    arr_iata     = seg.get("arr_iata", "???")
-    dep_city     = seg.get("dep_city", "")
-    arr_city     = seg.get("arr_city", "")
-    dep_airport  = seg.get("dep_airport", "")
-    arr_airport  = seg.get("arr_airport", "")
-    dep_terminal = seg.get("terminal", "")
-    arr_terminal = seg.get("arr_terminal", "")
-    dep_date     = seg.get("dep_date", "")
-    dep_time     = seg.get("dep_time", "")
-    arr_date     = seg.get("arr_date", "")
-    arr_time     = seg.get("arr_time", "")
-    flight_no    = _na(seg.get("flight_no", "N/A"))
-    airline      = _na(seg.get("airline", "N/A"))
-    cabin        = _na(seg.get("cabin", "N/A"))
-    duration     = seg.get("duration", "")
-
-    dep_sub = dep_airport or ""
-    if dep_terminal and dep_sub:
-        dep_sub += f" &middot; Terminal {dep_terminal}"
-    elif dep_terminal:
-        dep_sub = f"Terminal {dep_terminal}"
-    arr_sub = arr_airport or ""
-    if arr_terminal and arr_sub:
-        arr_sub += f" &middot; Terminal {arr_terminal}"
-    elif arr_terminal:
-        arr_sub = f"Terminal {arr_terminal}"
-
-    dep_sub_html  = f'<div class="ap-detail">{dep_sub}</div>' if dep_sub else ""
-    arr_sub_html  = f'<div class="ap-detail">{arr_sub}</div>' if arr_sub else ""
-    duration_html = (
-        f'<div class="meta-item">'
-        f'<span class="meta-lbl">DURATION</span>'
-        f'<span class="meta-val">{duration}</span>'
-        f'</div>'
-    ) if duration else ""
-
-    # ── per-passenger, PER-LEG baggage + seat (2026-07-30 approved change) ──
-    # Each flight carries its own pax list so extra baggage bought on one segment,
-    # or a different seat per leg, renders on the leg it actually applies to.
-    # A column is OMITTED ENTIRELY when no passenger on this leg has that value
-    # (per approved decision) rather than padded with N/A — so portals that never
-    # send seats (Turkish Airlines) or per-leg baggage (Akbar) stay clean.
-    leg_pax = seg.get("pax") or []
-    rows, show_cabin, show_checked, show_seat = [], False, False, False
-    for p in leg_pax:
-        _pt = p.get("pax_type", "")
-        c = _norm_bag(p.get("cabin_bag", ""), _pt)
-        k = _norm_bag(p.get("checked_bag", ""), _pt)
-        s = (p.get("seat") or "").strip()
-        # same rule as before: every fare includes a cabin piece, so if a checked
-        # allowance is stated but cabin isn't, show 1Pcs rather than nothing.
-        if c == "N/A" and k != "N/A":
-            c = "1Pcs"
-        if c != "N/A":
-            show_cabin = True
-        if k != "N/A":
-            show_checked = True
-        if s:
-            show_seat = True
-        rows.append((_title_name(p.get("name", "N/A")), c, k, s))
-
-    pax_rows_html = ""
-    if rows and (show_cabin or show_checked or show_seat):
-        head = '<div class="lp-cell lp-name">PASSENGER</div>'
-        if show_cabin:
-            head += '<div class="lp-cell">CABIN</div>'
-        if show_checked:
-            head += '<div class="lp-cell">CHECKED</div>'
-        if show_seat:
-            head += '<div class="lp-cell">SEAT</div>'
-        body = ""
-        for nm, c, k, s in rows:
-            body += '<div class="lp-row">'
-            body += f'<div class="lp-cell lp-name">{nm}</div>'
-            if show_cabin:
-                body += f'<div class="lp-cell">{c}</div>'
-            if show_checked:
-                body += f'<div class="lp-cell">{k}</div>'
-            if show_seat:
-                body += f'<div class="lp-cell">{s or "&mdash;"}</div>'
-            body += '</div>'
-        pax_rows_html = (f'<div class="leg-pax">'
-                         f'<div class="lp-row lp-head">{head}</div>{body}</div>')
-
-    card_cls = "flight-card standalone" if standalone else "flight-card"
-    return f"""
-    <div class="{card_cls}">
-      <div class="route-row">
-        <div class="ap-block">
-          <div class="iata">{dep_iata}</div>
-          <div class="ap-city">{dep_city}</div>
-          {dep_sub_html}
-          <div class="flight-time">{dep_time}</div>
-          <div class="flight-date">{dep_date}</div>
-        </div>
-
-        <div class="connector">
-          <div class="conn-info">
-            <div class="conn-flight-no">{flight_no}</div>
-            <div class="conn-airline">{airline}</div>
-          </div>
-          <div class="conn-line-wrap">
-            <div class="conn-dot"></div>
-            <div class="conn-line"><div class="plane-icon">&#9992;</div></div>
-            <div class="conn-dot"></div>
-          </div>
-        </div>
-
-        <div class="ap-block ap-right">
-          <div class="iata">{arr_iata}</div>
-          <div class="ap-city">{arr_city}</div>
-          {arr_sub_html}
-          <div class="flight-time">{arr_time}</div>
-          <div class="flight-date">{arr_date}</div>
-        </div>
-      </div>
-
-      <div class="meta-row">
-        <div class="meta-item">
-          <span class="meta-lbl">OPERATED BY</span>
-          <span class="meta-val">{airline}</span>
-        </div>
-        <div class="meta-item">
-          <span class="meta-lbl">CABIN CLASS</span>
-          <span class="meta-val">{cabin}</span>
-        </div>
-        {duration_html}
-      </div>
-      {pax_rows_html}
-    </div>"""
-
-
-def _layover_bar(layover: dict) -> str:
-    airport  = layover.get("airport", "")
-    duration = layover.get("duration", "")
-    return f"""
-    <div class="layover-bar">
-      <div class="lay-line"></div>
-      <div class="lay-badge">LAYOVER &nbsp;{airport} &middot; {duration}</div>
-      <div class="lay-line"></div>
-    </div>"""
 
 
 def _title_name(name: str) -> str:
@@ -329,77 +164,44 @@ def _norm_bag(v: str, pax_type: str = "") -> str:
     return s
 
 
-def _pax_card(pax: dict) -> str:
-    """Identity only: NAME + TICKET NO.
-
-    2026-07-30 (approved design change): baggage and seat moved OFF this card and
-    onto per-passenger rows inside each FLIGHT card. They are per-SEGMENT facts —
-    a passenger can buy extra baggage on the return leg only, or hold a different
-    seat on each leg — which a single booking-level value cannot express. Dropping
-    them here also frees the full card width so long names no longer wrap.
-    """
-    name = _title_name(pax.get("name", "N/A"))
-    tkt  = _na(pax.get("ticket_no", "N/A"))
-    return f"""
-    <div class="pax-card">
-      <div class="pax-col pax-name-col">
-        <div class="pax-lbl">PASSENGER NAME</div>
-        <div class="pax-name">{name}</div>
-      </div>
-      <div class="pax-col">
-        <div class="pax-lbl">TICKET NO.</div>
-        <div class="pax-val">{tkt}</div>
-      </div>
-    </div>"""
-
 
 # ── Terms & Conditions (static, identical on every itinerary) ─────────────────
-def _terms_block() -> str:
-    items = [
-        ("1.", "Ticket Validity &amp; Changes",
-         "Travel is valid only for the date, flight, and class specified. Name changes are not permitted after ticketing. Date or routing changes are subject to carrier fare rules and applicable fees. Refunds are governed by the purchased fare conditions. Unused outbound segments may result in automatic cancellation of onward flights (no-show policy)."),
-        ("2.", "Check-In &amp; Boarding",
-         "Passengers must arrive at the airport with sufficient time to complete check-in and boarding. Check-in deadlines and gate closing times are set by the operating carrier &mdash; confirm prior to travel. Denied boarding due to late arrival is not the liability of Pivot Travel Management. Valid photo ID or passport matching the ticket name is mandatory at all times."),
-        ("3.", "Baggage &mdash; Inclusions",
-         "Cabin and checked baggage allowances are determined by the operating carrier and fare class purchased. Confirm weight limits, piece count, and size restrictions directly with the carrier before travel. Allowances are per passenger and non-transferable."),
-        ("4.", "Baggage &mdash; Exclusions &amp; Restrictions",
-         "Excess baggage charges apply for any baggage exceeding permitted allowances and are payable directly to the carrier at airport rates. Prohibited items include explosives, flammable materials, compressed gases, and all items restricted under IATA Dangerous Goods Regulations. Liquids in cabin baggage are subject to airport security limits. Spare lithium batteries and power banks must be carried in cabin baggage only. Pivot Travel Management and the carrier accept no liability for fragile, valuable, or perishable items in checked baggage."),
-        ("5.", "Travel Documents &amp; Visa",
-         "Passengers are solely responsible for holding valid passports, visas, transit permits, and any health documentation required for all points of travel including transit countries. Pivot Travel Management may provide general guidance only. Denied boarding or deportation due to inadequate documents does not entitle the passenger to a refund."),
-        ("6.", "Flight Disruptions",
-         "In the event of cancellation, significant delay, or denied boarding, passenger rights are governed by the operating carrier's conditions of carriage and applicable GACA regulations. Pivot Travel Management will assist where possible but holds no financial liability for disruptions caused by the carrier, weather, force majeure, or events beyond its control."),
-        ("7.", "Liability &amp; Governing Law",
-         "Pivot Travel Management acts solely as a ticketing agent. Its liability is limited to the agency service fee paid. These terms are governed by the laws of the Kingdom of Saudi Arabia. Disputes are subject to the jurisdiction of the competent courts of Riyadh, KSA, without prejudice to applicable GACA regulations and international conventions."),
-        ("8.", "Confidentiality",
-         "This confirmation and all associated travel details, passenger information, pricing, and documentation are strictly confidential and issued solely for the named passenger(s). Disclosure, reproduction, or distribution to any third party without the prior written consent of Pivot Travel Management is prohibited. All client data is handled in accordance with the applicable data-protection regulations of the Kingdom of Saudi Arabia."),
-    ]
-    items_html = "\n".join(
-        f'<div class="tc-item"><span class="tc-n"><span class="tc-acc">{n}</span> {h}</span>{body}</div>'
-        for (n, h, body) in items
-    )
-    return f"""
-  <div class="tc">
-    <div class="tc-title">TERMS &amp; CONDITIONS <span class="tc-acc">&mdash;</span> FLIGHT BOOKING CONFIRMATION</div>
-    <div class="tc-issued">Issued by Pivot Travel Management &middot; Suite 20, 2762 Ibn Al Anbari Street, Al Amal District, Riyadh, Kingdom of Saudi Arabia &middot; Clarifications: {COMPANY_EMAIL}</div>
-    <div class="tc-rule"></div>
-    <div class="tc-cols">
-      {items_html}
-    </div>
-  </div>"""
+_TERMS = [
+    ("1.", "Ticket Validity &amp; Changes",
+     "Travel is valid only for the date, flight, and class specified. Name changes are not permitted after ticketing. Date or routing changes are subject to carrier fare rules and applicable fees. Refunds are governed by the purchased fare conditions. Unused outbound segments may result in automatic cancellation of onward flights (no-show policy)."),
+    ("2.", "Check-In &amp; Boarding",
+     "Passengers must arrive at the airport with sufficient time to complete check-in and boarding. Check-in deadlines and gate closing times are set by the operating carrier &mdash; confirm prior to travel. Denied boarding due to late arrival is not the liability of Pivot Travel Management. Valid photo ID or passport matching the ticket name is mandatory at all times."),
+    ("3.", "Baggage &mdash; Inclusions",
+     "Cabin and checked baggage allowances are determined by the operating carrier and fare class purchased. Confirm weight limits, piece count, and size restrictions directly with the carrier before travel. Allowances are per passenger and non-transferable."),
+    ("4.", "Baggage &mdash; Exclusions &amp; Restrictions",
+     "Excess baggage charges apply for any baggage exceeding permitted allowances and are payable directly to the carrier at airport rates. Prohibited items include explosives, flammable materials, compressed gases, and all items restricted under IATA Dangerous Goods Regulations. Liquids in cabin baggage are subject to airport security limits. Spare lithium batteries and power banks must be carried in cabin baggage only. Pivot Travel Management and the carrier accept no liability for fragile, valuable, or perishable items in checked baggage."),
+    ("5.", "Travel Documents &amp; Visa",
+     "Passengers are solely responsible for holding valid passports, visas, transit permits, and any health documentation required for all points of travel including transit countries. Pivot Travel Management may provide general guidance only. Denied boarding or deportation due to inadequate documents does not entitle the passenger to a refund."),
+    ("6.", "Flight Disruptions",
+     "In the event of cancellation, significant delay, or denied boarding, passenger rights are governed by the operating carrier's conditions of carriage and applicable GACA regulations. Pivot Travel Management will assist where possible but holds no financial liability for disruptions caused by the carrier, weather, force majeure, or events beyond its control."),
+    ("7.", "Liability &amp; Governing Law",
+     "Pivot Travel Management acts solely as a ticketing agent. Its liability is limited to the agency service fee paid. These terms are governed by the laws of the Kingdom of Saudi Arabia. Disputes are subject to the jurisdiction of the competent courts of Riyadh, KSA, without prejudice to applicable GACA regulations and international conventions."),
+    ("8.", "Confidentiality",
+     "This confirmation and all associated travel details, passenger information, pricing, and documentation are strictly confidential and issued solely for the named passenger(s). Disclosure, reproduction, or distribution to any third party without the prior written consent of Pivot Travel Management is prohibited. All client data is handled in accordance with the applicable data-protection regulations of the Kingdom of Saudi Arabia."),
+]
 
 
-# ── HTML Builder ──────────────────────────────────────────────────────────────
-# Header status pill. Default "confirmed" (emerald) is IDENTICAL to the locked
-# original — a normal confirmation renders byte-for-byte as before. The other
-# states are used ONLY by revised itineraries (main.build_revised_itinerary sets
-# data["doc_status"]) so a revised document is instantly distinguishable and its
-# colour matches the alert e-mail's coding (cancellation→red, schedule→orange,
-# delay→amber). Colours are inline-overridden on the existing pill geometry.
+def _terms_html() -> str:
+    body = "".join(
+        f'<div class="it"><h3><em>{n}</em>{h}</h3><p>{b}</p></div>' for (n, h, b) in _TERMS)
+    return (f'<div class="tc"><h1>Terms &amp; conditions</h1>'
+            f'<div class="sub">Flight booking confirmation &middot; Issued by Pivot Travel Management &middot; '
+            f'{COMPANY_ADDRESS_SHORT} &middot; Clarifications: {COMPANY_EMAIL}</div>'
+            f'<div class="cols">{body}</div></div>')
+
+
 # ── Company identifiers (footer) ─────────────────────────────────────────────
 # Both canonical (CLAUDE.md §2). The footer renders the VAT segment only when
 # COMPANY_VAT is non-empty, so an unverified tax identifier can never reach a
 # client document (§7 never fabricate). VAT supplied by the owner 2026-07-30
 # from the registration certificate; 15 digits, the Saudi ZATCA format.
+# NO LONGER RENDERED (owner's call, 2026-10-30: the footer carries the reference and website only).
+# Kept defined — they are canonical company facts and restoring them is one line in build_pdf.
 COMPANY_CR = "7043148696"
 COMPANY_VAT = "311788697700003"
 
@@ -451,15 +253,194 @@ BRAND_STRAPLINE = "CORPORATE TRAVEL | CHAUFFEURS | CURATED ITINERARIES | PREMIUM
 # it duplicated the label beside it and read as app rather than document
 # language. The state now lives in the label itself, tinted by these colours.
 _DOC_STATE = {
-    "confirmed":   {"label": "Itinerary Confirmation",  "fg": "rgba(201,168,76,0.78)"},
-    "rebooked":    {"label": "Revised Itinerary &middot; Rebooked",    "fg": "#e79a95"},
-    "rescheduled": {"label": "Revised Itinerary &middot; Rescheduled", "fg": "#e6a86a"},
-    "delayed":     {"label": "Revised Itinerary &middot; Delayed",     "fg": "#e0c675"},
-    "revised":     {"label": "Revised Itinerary",       "fg": "#e0c675"},
+    "confirmed":   {"label": "Itinerary Confirmation",  "fg": "rgba(201,168,76,0.78)", "ink": "#1d1d1f"},
+    "rebooked":    {"label": "Revised Itinerary &middot; Rebooked",    "fg": "#e79a95", "ink": "#b3261e"},
+    "rescheduled": {"label": "Revised Itinerary &middot; Rescheduled", "fg": "#e6a86a", "ink": "#b45309"},
+    "delayed":     {"label": "Revised Itinerary &middot; Delayed",     "fg": "#e0c675", "ink": "#85660f"},
+    "revised":     {"label": "Revised Itinerary",       "fg": "#e0c675", "ink": "#85660f"},
 }
 
 
+
+# Terms-page address line: the short form printed there since the T&C page existed.
+COMPANY_ADDRESS_SHORT = "Suite 20, 2762 Ibn Al Anbari Street, Al Amal District, Riyadh, Kingdom of Saudi Arabia"
+
+# ── Fonts ────────────────────────────────────────────────────────────────────
+# Inter (variable: optical size + weight), inlined as base64 so a render needs no network and
+# cannot silently fall back to a system face. Latin-ext carries the Turkish letters in names.
+_FONT_DIR = Path(__file__).parent / "assets" / "fonts"
+_FONT_RANGES = {
+    "latin": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD",
+    "latin-ext": "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF",
+}
+
+
+def _font_face_css(subsets=("latin-ext", "latin")) -> str:
+    out = []
+    for name in subsets:
+        p = _FONT_DIR / f"inter-var-{name}.woff2"
+        if p.exists():
+            b64 = base64.b64encode(p.read_bytes()).decode()
+            out.append("@font-face{font-family:'Inter';font-style:normal;font-weight:400 800;font-display:block;"
+                       f"src:url(data:font/woff2;base64,{b64}) format('woff2');unicode-range:{_FONT_RANGES[name]};}}")
+    return "".join(out)
+
+
+def _dur(d: str) -> str:
+    """'4H 45M' -> '4h 45m' (formatting only; the value is the source's)."""
+    m = re.match(r"^\s*(\d+)\s*H\s*(\d+)?\s*M?\s*$", d or "", re.I)
+    return f"{int(m.group(1))}h {int(m.group(2) or 0):02d}m" if m else (d or "")
+
+
+def _sentence(s: str) -> str:
+    s = (s or "").strip()
+    return s[:1].upper() + s[1:].lower()
+
+
+_CSS = r'''
+:root{--ink:#1d1d1f;--sec:#5b6470;--hair:#e3e3e8;--grp:#f5f5f7;--gold:#c9a84c;--gold-ink:#85660f}
+*{box-sizing:border-box;margin:0;padding:0}
+@page{size:A4;margin:12mm 14mm 18mm 14mm}
+html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{font-family:'Inter',-apple-system,'Helvetica Neue',Arial,sans-serif;color:var(--ink);font-size:12px;line-height:1.4;
+     font-variant-numeric:tabular-nums;font-optical-sizing:auto;background:#fff}
+.top{display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;border-bottom:1px solid var(--hair)}
+.brand{display:flex;align-items:center;gap:12px}
+.tile{width:42px;height:42px;border-radius:10px;background:linear-gradient(160deg,#323234,#0e0e0f);display:flex;align-items:center;
+      justify-content:center;outline:1px solid rgba(201,168,76,.55);outline-offset:-1px;flex:none}
+.tile img{height:25px;width:auto}
+.wordmark{font-size:22px;font-weight:400;letter-spacing:-.4px;color:var(--ink);line-height:1}
+.wordmark b{font-weight:700}
+.doc{text-align:right;line-height:1.35}
+.doc-state{font-size:12.5px;font-weight:650}
+.doc-meta{font-size:10.5px;color:var(--sec)}
+.hero{padding:16px 0 12px}
+.eyebrow{font-size:11px;font-weight:600;color:var(--sec);margin-bottom:4px}
+.pnr{font-weight:700;color:var(--ink);line-height:1;letter-spacing:-1.8px}
+.facts{display:flex;margin-top:12px;border-top:1px solid var(--hair)}
+.fact{flex:1 1 0;min-width:0;padding:9px 14px 0 0}
+.fact + .fact{padding-left:16px;border-left:1px solid var(--hair)}
+.fact .k{font-size:10.5px;font-weight:600;color:var(--sec);margin-bottom:3px}
+.fact .v{font-size:14px;font-weight:650}
+.sec-t{font-size:15px;font-weight:700;margin:4px 0 8px}
+.group{background:var(--grp);border-radius:16px;overflow:hidden;page-break-inside:avoid}
+.row{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:10px 18px}
+.row + .row{border-top:1px solid var(--hair)}
+.row .name{font-size:16px;font-weight:650}
+.row .tk{text-align:right}
+.row .tk .k{font-size:10.5px;color:var(--sec);font-weight:600}
+.row .tk .v{font-size:14px;font-weight:650;letter-spacing:.3px}
+.seg{margin-top:18px}
+.seg-h{break-after:avoid;page-break-after:avoid;display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:8px}
+.seg-h .t{font-size:20px;font-weight:700;letter-spacing:-.2px}
+.seg-h .r{font-size:13px;color:var(--sec);font-weight:500;margin-left:8px}
+.seg-h .d{font-size:13px;font-weight:650;white-space:nowrap}
+.chip{display:inline-block;margin-right:8px;border:1px solid var(--gold);color:var(--gold-ink);border-radius:999px;
+      padding:1px 9px;font-size:10.5px;font-weight:650;letter-spacing:.4px;vertical-align:1px}
+.card{position:relative;border:1px solid var(--hair);border-radius:20px;background:#fff;page-break-inside:avoid;break-inside:avoid}
+.route{padding:14px 24px 12px}
+.carrier{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.carrier .a{font-size:12.5px;color:var(--sec);font-weight:500}
+.carrier .a b{color:var(--gold-ink);font-weight:700;font-size:14px;letter-spacing:.4px;margin-right:6px}
+.carrier .du{font-size:12.5px;font-weight:650}
+.leg{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(70px,.5fr) minmax(0,1.5fr);align-items:start;column-gap:8px}
+.end.r{text-align:right}
+.code{font-weight:700;font-size:38px;line-height:.95;letter-spacing:-1.4px}
+.time{font-size:25px;font-weight:700;letter-spacing:-.4px;margin-top:5px;line-height:1}
+.date{font-size:12px;color:var(--sec);font-weight:600;margin-top:3px}
+.city{font-size:13.5px;font-weight:650;margin-top:6px}
+.ap{font-size:11.5px;color:var(--sec);line-height:1.3;margin-top:1px}
+.mid{align-self:start;margin-top:18px;display:flex;align-items:center;gap:6px}
+.mid i{flex:1;height:0;border-top:1.5px solid var(--gold)}
+.mid span{font-family:'DejaVu Sans',sans-serif;font-size:13px;color:var(--sec);line-height:1}
+.perf{position:relative;height:0;border-top:1.5px dashed #d4d4da;margin:0 14px}
+.perf::before,.perf::after{content:'';position:absolute;top:-10px;width:10px;height:20px;background:#fff;border:1px solid var(--hair)}
+.perf::before{left:-15px;border-left:none;border-radius:0 20px 20px 0}
+.perf::after{right:-15px;border-right:none;border-radius:20px 0 0 20px}
+.stub{padding:11px 24px 12px}
+.pt{width:100%;border-collapse:collapse}
+.pt th{font-size:10.5px;color:var(--sec);font-weight:600;text-align:center;padding:0 0 6px}
+.pt th:first-child,.pt td:first-child{text-align:left}
+.pt td{font-size:13px;font-weight:600;text-align:center;padding:6px 0;border-top:1px solid var(--hair)}
+.pt td.seat{font-size:15px;font-weight:700}
+.lay{display:flex;align-items:center;justify-content:center;margin:8px 0;break-after:avoid;page-break-after:avoid}
+.lay span{background:var(--grp);border-radius:999px;padding:6px 16px;font-size:12px;font-weight:600;color:var(--sec)}
+.lay b{color:var(--ink);font-weight:700}
+.tc{page-break-before:always}
+.tc h1{font-size:22px;font-weight:700;letter-spacing:-.3px}
+.tc .sub{font-size:11px;color:var(--sec);margin:6px 0 16px;line-height:1.5}
+.tc .cols{column-count:2;column-gap:30px}
+.tc .it{break-inside:avoid;margin-bottom:14px}
+.tc .it h3{font-size:12px;font-weight:700;margin-bottom:3px}
+.tc .it h3 em{font-style:normal;color:var(--gold-ink);margin-right:5px}
+.tc .it p{font-size:10px;color:#454d5a;line-height:1.55}
+'''
+
+
+def _flight_card(f: dict, multi: bool = False) -> str:
+    """One boarding-pass card: route + times on top, perforation, passenger table below."""
+    rows, show_cabin, show_checked, show_seat = [], False, False, False
+    for p in f.get("pax") or []:
+        _pt = p.get("pax_type", "")
+        c = _norm_bag(p.get("cabin_bag", ""), _pt)
+        k = _norm_bag(p.get("checked_bag", ""), _pt)
+        s = (p.get("seat") or "").strip()
+        # standing rule (unchanged): every fare includes a cabin piece, so a stated checked
+        # allowance with no cabin value shows 1Pcs rather than nothing.
+        if c == "N/A" and k != "N/A":
+            c = "1Pcs"
+        show_cabin |= c != "N/A"
+        show_checked |= k != "N/A"
+        show_seat |= bool(s)
+        rows.append((_title_name(p.get("name", "N/A")), c, k, s))
+    table = ""
+    if rows and (show_cabin or show_checked or show_seat):
+        th = "<th>Passenger</th>"
+        if show_cabin:   th += "<th>Cabin</th>"
+        if show_checked: th += "<th>Checked</th>"
+        if show_seat:    th += "<th>Seat</th>"
+        trs = ""
+        for n, c, k, s in rows:
+            trs += f"<tr><td>{n}</td>"
+            if show_cabin:   trs += f"<td>{c}</td>"
+            if show_checked: trs += f"<td>{k}</td>"
+            if show_seat:    trs += f'<td class="seat">{s or "&mdash;"}</td>'
+            trs += "</tr>"
+        table = f'<table class="pt"><tr>{th}</tr>{trs}</table>'
+
+    def sub(name, term):
+        s = name or ""
+        if term:
+            s = (s + " &middot; " if s else "") + f"Terminal {term}"
+        return s
+
+    dep_sub = sub(f.get("dep_airport"), f.get("terminal"))
+    arr_sub = sub(f.get("arr_airport"), f.get("arr_terminal"))
+    dep_ap = f'<div class="ap">{dep_sub}</div>' if dep_sub else ""
+    arr_ap = f'<div class="ap">{arr_sub}</div>' if arr_sub else ""
+    chip = f'<span class="chip">PNR {f["pnr"]}</span>' if (multi and f.get("pnr")) else ""
+    duration = _dur(f.get("duration", ""))
+    tail = _na(f.get("cabin", "N/A")) + (f" &middot; {duration}" if duration else "")
+    return f"""
+<div class="card">
+  <div class="route">
+    <div class="carrier"><div class="a"><b>{_na(f.get("flight_no", "N/A"))}</b>Operated by {_na(f.get("airline", "N/A"))}</div><div class="du">{chip}{tail}</div></div>
+    <div class="leg">
+      <div class="end"><div class="code">{f.get("dep_iata", "???")}</div><div class="time">{f.get("dep_time", "")}</div>
+        <div class="date">{f.get("dep_date", "")}</div><div class="city">{f.get("dep_city", "")}</div>{dep_ap}</div>
+      <div class="mid"><i></i><span>&#9992;</span><i></i></div>
+      <div class="end r"><div class="code">{f.get("arr_iata", "???")}</div><div class="time">{f.get("arr_time", "")}</div>
+        <div class="date">{f.get("arr_date", "")}</div><div class="city">{f.get("arr_city", "")}</div>{arr_ap}</div>
+    </div>
+  </div>
+  <div class="perf"></div>
+  <div class="stub">{table}</div>
+</div>"""
+
+
 def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
+    # `layout` is accepted for backward compatibility and ignored: pagination is now handled by
+    # the browser (cards never split, banners stay with their card, T&C starts a fresh page).
     pnr          = data.get("pnr", "N/A")
     # Split-carrier bookings carry one airline reference per airline; both must
     # reach the traveller (see booking_refs). A single-reference booking gives a
@@ -483,49 +464,13 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
     passengers   = data.get("passengers", [])
     seg_groups   = data.get("segments", [])
 
-    logo_b64 = _logo_b64(project_dir)
-    if logo_b64:
-        logo_html = (
-            f'<img class="logo-img" src="data:image/png;base64,{logo_b64}" '
-            f'alt="Pivot Travel Management">'
-        )
-        footer_logo_html = (
-            f'<img class="footer-logo-img" src="data:image/png;base64,{logo_b64}" '
-            f'alt="Pivot Travel Management">'
-        )
-    else:
-        logo_html = (
-            '<div class="logo-fallback">'
-            '<span class="logo-text-main"><b>Pivot</b> Travel Management</span>'
-            '</div>'
-        )
-        footer_logo_html = '<span style="font-family:Inter,sans-serif;font-size:13px;font-weight:700;color:#fff;">Pivot Travel Management</span>'
-
-    # Reference cells. They used to sit in a capsule BELOW the header; since
-    # 2026-09-09 they live inside it, beside the airline reference, and the
-    # capsule is gone (approved — the page also gets shorter for it).
-    # Each cell is a tight label-over-value stack; the ROW then aligns those
-    # stacks on their LAST baseline, so every value sits on the reference's
-    # baseline while its label stays close above it. (A shared label row would
-    # align the values too, but strand each label at the top of a 34px row.)
     _cells = []
     if booking_ref:
-        _cells.append(("Agency Ref.", booking_ref))
+        _cells.append(("Agency ref.", booking_ref))
     if crs_ref and crs_ref.upper() != pnr.upper():
-        _cells.append(("CRS Ref.", crs_ref))
-    _cells.append(("Booked On", booked_on))
+        _cells.append(("CRS ref.", crs_ref))
+    _cells.append(("Booked on", booked_on))
     _cells.append(("Journey", journey_type.title()))
-
-    hdr_cells = "".join(
-        f'<div class="hdr-cell"><div class="hdr-lbl">{lbl}</div>'
-        f'<div class="hdr-val">{val}</div></div>' for lbl, val in _cells)
-
-    # One cell per reference value, each taking an equal share of the rail.
-    rail_cells = "".join(
-        f'<div class="rail-cell"><div class="hdr-lbl">{lbl}</div>'
-        f'<div class="hdr-val">{val}</div></div>' for lbl, val in _cells)
-
-    pax_html  = "\n".join(_pax_card(p) for p in passengers) if passengers else _pax_card({"name": "N/A"})
 
     # Symmetric airport details: an airport that appears as a DEPARTURE anywhere in
     # the itinerary (with its name / terminal) is the same physical airport when it
@@ -602,898 +547,89 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
                           "checked_bag": p.get("checked_bag", ""),
                           "seat": p.get("seat", "")} for p in passengers]
 
-    segs_html = ""
-    for grp in seg_groups:
-        flights  = grp.get("flights", [])
-        layovers = grp.get("layovers", [])
-        # Show the leg's own reference on the banner only when the booking has
-        # more than one — that is the leg a traveller checks in with.
-        _seg_ref = (flights[0].get("pnr") or "") if (flights and len(refs) > 1) else ""
-        segs_html += _segment_header(grp.get("type", "ONE-WAY"), flights, _seg_ref)
-        for fi, flight in enumerate(flights):
-            segs_html += _flight_card(flight, standalone=(fi > 0))
-            if fi < len(layovers):
-                segs_html += _layover_bar(layovers[fi])
 
-    footer_line  = f'PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; {pnr_display} &nbsp;|&nbsp; {COMPANY_WEBSITE.upper()}'
-    # Legal identifiers on their own second line (conventional place for them).
-    # VAT is appended ONLY when COMPANY_VAT is set — see the note by that constant.
-    _reg = f'CR {COMPANY_CR}'
-    if COMPANY_VAT:
-        _reg += f' &nbsp;&middot;&nbsp; VAT {COMPANY_VAT}'
-    footer_html  = (f'<div class="footer">'
-                    f'<span class="footer-line">{footer_line}</span>'
-                    f'<span class="footer-reg">{_reg}</span>'
-                    f'</div>')
-    terms_html   = _terms_block()
-
-    # Document state drives the label's wording and tint only — there is no
-    # status pill any more (see _DOC_STATE).
+    # ---- masthead ----
     _st = _DOC_STATE.get((data.get("doc_status") or "confirmed").lower(), _DOC_STATE["confirmed"])
-    # Revision number. Shown only from the SECOND copy onward: "Revision 1" on a
-    # first issue tells the reader nothing, while "Revision 2" beside an older
-    # print-out settles which one to travel on. main.next_revision supplies it;
-    # a manual render passes nothing and prints nothing.
+    # Revision number: shown only from the SECOND copy onward ("Revision 1" tells the reader
+    # nothing; "Revision 2" beside an older print-out settles which one to travel on).
     try:
         _rev = int(data.get("revision") or 0)
     except (TypeError, ValueError):
         _rev = 0
-    _rev_stamp = f" &nbsp;&middot;&nbsp; Revision {_rev}" if _rev > 1 else ""
-    header_html = f"""
-  <div class="header">
-    <div class="hdr-top">
-      {logo_html}
-      <div class="hdr-id">
-        <div class="hdr-name"><b>Pivot</b> Travel Management</div>
-        <div class="hdr-meta">
-          <div class="hdr-state" style="color:{_st['fg']};">{_st['label']}</div>
-          <div class="hdr-issued">Issued {_issued_stamp()}{_rev_stamp}</div>
-          <div class="hdr-contact-line">{COMPANY_HOTLINE} &nbsp;&middot;&nbsp; {HEADER_EMAIL}</div>
-        </div>
-      </div>
-    </div>
-    <div class="hdr-rail">
-      <div class="rail-pnr">
-        <div class="hdr-lbl hdr-lbl-pnr">{pnr_label}</div>
-        <div class="pnr-value">{pnr_display}</div>
-      </div>
-      {rail_cells}
-    </div>
-  </div>"""
+    _rev_stamp = f" &middot; Revision {_rev}" if _rev > 1 else ""
+    logo_b64 = _logo_b64(project_dir)
+    tile = (f'<div class="tile"><img src="data:image/png;base64,{logo_b64}" alt="Pivot Travel Management"></div>'
+            if logo_b64 else "")
+    multi = len(refs) > 1
+    pnr_label_s = "PNR references" if multi else "PNR reference"
+    pnr_px = 54 if len(pnr_display) <= 7 else (46 if len(pnr_display) <= 9 else 38)
+    facts = "".join(
+        f'<div class="fact"><div class="k">{lbl}</div><div class="v">{val}</div></div>' for lbl, val in _cells)
 
-    content_html = f"""
-  <div class="content">
-    <div class="section">
-      <div class="section-hdr">
-        <div class="section-icon"></div>
-        <div class="section-title">Passenger Information</div>
-        <div class="section-rule"></div>
-      </div>
-      {pax_html}
-    </div>
-    <div class="section">
-      <div class="section-hdr">
-        <div class="section-icon"></div>
-        <div class="section-title">Flight Itinerary</div>
-        <div class="section-rule"></div>
-      </div>
-      {segs_html}
-    </div>
-  </div>"""
+    # ---- travellers ----
+    if not passengers:
+        passengers = [{"name": "N/A"}]
+    pax_rows = "".join(
+        f'<div class="row"><div class="name">{_title_name(p.get("name", "N/A"))}</div>'
+        f'<div class="tk"><div class="k">Ticket no.</div><div class="v">{_na(p.get("ticket_no", "N/A"))}</div></div></div>'
+        for p in passengers)
 
-    if layout == "A":
-        # Itinerary fits one page → page 1 = itinerary + footer; page 2 = T&C + footer.
-        body_html = f"""
-  <div class="sheet sheet-itin">
-    {header_html}{content_html}{footer_html}
-  </div>
-  <div class="sheet sheet-tc">
-    {terms_html}
-    {footer_html}
-  </div>"""
-    elif layout == "measure":
-        # Measurement pass — itinerary + its footer only, natural height.
-        body_html = f"""
-  <div class="page-measure">
-    {header_html}{content_html}{footer_html}
-  </div>"""
-    else:
-        # layout "B" — itinerary spills: no page-1 footer; cards flow, then T&C,
-        # then a single footer pinned to the bottom of the last page.
-        footer_abs = footer_html.replace('class="footer"', 'class="footer footer-abs"')
-        body_html = f"""
-  <div class="page-flow">
-    {header_html}{content_html}
-    {terms_html}
-    {footer_abs}
-  </div>"""
+    # ---- journeys ----
+    segs_html = ""
+    for grp in seg_groups:
+        flights  = grp.get("flights", [])
+        layovers = grp.get("layovers", [])
+        if not flights:
+            continue
+        _ty = str(grp.get("type", ""))
+        _title = _sentence(_ty) if _ty.lower() in ("outbound", "inbound") else "Flight"
+        _frm = flights[0].get("dep_city", flights[0].get("dep_iata", ""))
+        _to  = flights[-1].get("arr_city", flights[-1].get("arr_iata", ""))
+        segs_html += (f'<div class="seg"><div class="seg-h"><div><span class="t">{_title}</span>'
+                      f'<span class="r">{_frm} to {_to}</span></div>'
+                      f'<div class="d">{_weekday_date(flights[0].get("dep_date", ""))}</div></div>')
+        for fi, flight in enumerate(flights):
+            segs_html += _flight_card(flight, multi)
+            if fi < len(layovers):
+                lay = layovers[fi]
+                segs_html += (f'<div class="lay"><span>Layover in <b>{lay.get("airport", "")}</b>'
+                              f' &middot; {_dur(lay.get("duration", ""))}</span></div>')
+        segs_html += "</div>"
 
+    font_css = _font_face_css()
+    font_link = "" if font_css else (
+        '<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..800&display=swap" rel="stylesheet">')
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <title>Booking Confirmation — {pnr_display}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<style>
-*, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
-/* Full-bleed first page (navy header touches the top edge); every following
-   page gets a top margin so flowing flight cards never butt against the edge. */
-@page {{ size: A4; margin: 12mm 0 0 0; }}
-@page :first {{ margin: 0; }}
-body {{
-  font-family: 'Inter', Helvetica, Arial, sans-serif;
-  background: #fff;     /* white so no grey shows through page-edge gaps / margins (we render with screen media) */
-  color: #1a2332;
-  font-size: 13px;
-  -webkit-print-color-adjust: exact;
-  print-color-adjust: exact;
-}}
-/* ── NO box-shadow ANYWHERE below (2026-07-30) ─────────────────────────────
-   PDF has no box-shadow primitive: Chromium rasterises every CSS shadow into
-   an image + soft mask inside a transparency group. Apple's PDFKit (iOS Quick
-   Look / Files, macOS Preview) mis-renders those masks — it drops the alpha
-   falloff and paints the shadow's BOUNDING BOX as a flat tinted rectangle, so
-   each shadowed element showed a hard-edged grey "backdrop" (and the gold
-   .plane-icon shadow became a cream square). Measured on a real render:
-   dropping the shadows removed 6 /SMask, 5 /Transparency groups and 20 /Image
-   objects per page. The cards already carry 1px borders + radii, so shape is
-   unaffected. Do NOT reintroduce box-shadow on print/PDF elements.
-   NOTE: an `@media print` box-shadow override does NOT work here —
-   build_pdf() calls page.emulate_media(media="screen"), so print rules never
-   apply. Suppression has to live in the normal cascade, as it now does.       */
-.page {{
-  width: 210mm;
-  min-height: 297mm;
-  margin: 0 auto;
-  background: #fff;
-  display: flex;
-  flex-direction: column;
-}}
-
-/* ── Header — Model B: centred wordmark, hairline, doc-label + PNR ── */
-.header {{
-  /* 2026-09-09 (approved): shorter than the Model B header it replaces — the
-     centred logo/wordmark lockup went inline, the strapline dropped into a
-     service strip, and the reference capsule that used to sit below the header
-     moved inside it. Net saving is roughly 70px of page.
-
-     Both text blocks are GRIDS aligned on the baseline, not stacks aligned on
-     their boxes: with a 34px reference sitting beside 10px cells, box alignment
-     leaves visibly different gaps under each (they are not on the same line
-     even though they look like they should be). Grid baseline alignment puts
-     every label on one line and every value on one baseline, whatever their
-     sizes. */
-  background: linear-gradient(150deg, #323234 0%, #1e1e20 50%, #0e0e0f 100%);
-  border-bottom: 2px solid #c9a84c;
-}}
-.hdr-top {{
-  display: flex;
-  align-items: flex-start;
-  gap: 13px;
-  padding: 14px 30px 12px;
-}}
-.logo-img {{
-  height: 34px;
-  width: auto;
-  object-fit: contain;
-  display: block;
-  flex-shrink: 0;
-}}
-/* Row 1: wordmark | document state.   Row 2: address | issue stamp. */
-.hdr-id {{
-  flex: 1;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: baseline;
-  column-gap: 24px;
-  row-gap: 7px;
-}}
-/* Wordmark: "Pivot" bold against the rest regular, so the name carries and the
-   descriptor recedes (approved 2026-09-09). */
-.hdr-name {{
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 24px;
-  font-weight: 400;
-  letter-spacing: 0.04em;
-  color: #f0ead8;
-  line-height: 1;
-}}
-.hdr-name b {{ font-weight: 700; }}
-.hdr-state {{
-  /* Never wrap: a two-line state label pushes the address/issue row out of
-     alignment with the wordmark ("Revised Itinerary · Rescheduled" is the
-     longest it gets, and it fits). */
-  white-space: nowrap;
-  font-size: 8px;
-  font-weight: 600;
-  letter-spacing: 3px;
-  text-transform: uppercase;
-  text-align: right;
-  line-height: 1;
-}}
-/* The address and the issue stamp are one tier: same size, tracking and
-   colour, sharing a baseline, so the two read as a single line across the
-   header rather than two unrelated scraps of small print. */
-.hdr-addr, .hdr-issued {{
-  font-size: 7px;
-  font-weight: 400;
-  letter-spacing: 0.55px;
-  color: rgba(255,255,255,0.40);
-  line-height: 1;
-  white-space: nowrap;
-}}
-.hdr-issued {{ text-align: right; }}
-.logo-fallback {{ display: flex; align-items: center; }}
-.logo-text-main {{
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 24px;
-  font-weight: 400;
-  letter-spacing: 0.04em;
-  color: #f0ead8;
-}}
-.logo-text-main b {{ font-weight: 700; }}
-
-/* Service strip. Sits BETWEEN the brand block and the reference row and does
-   the dividing itself, which retired the separate gold hairline — one band
-   rather than a rule plus a bar. The strapline lives here because a service
-   promise is marketing, and marketing does not belong in the identity block of
-   an operational document. */
-.hdr-service {{
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 6px 30px 7px;
-  background: rgba(255,255,255,0.035);
-  border-top: 1px solid rgba(201,168,76,0.30);
-  border-bottom: 1px solid rgba(201,168,76,0.30);
-}}
-.hdr-strap, .hdr-contact {{
-  font-size: 6.5px;
-  font-weight: 500;
-  letter-spacing: 2.2px;
-  line-height: 1;
-}}
-.hdr-strap  {{
-  color: rgba(255,255,255,0.30);
-  text-transform: uppercase;
-}}
-.hdr-contact {{
-  color: rgba(224,198,117,0.92);
-  white-space: nowrap;
-  font-variant-numeric: lining-nums;
-  font-feature-settings: "lnum" 1;
-}}
-
-/* Reference row. `last baseline` is the point: each cell is a tight
-   label-over-value stack, and aligning the stacks on their LAST baseline puts
-   every value on the 34px reference's baseline while its label stays close
-   above it. Aligning the boxes instead (flex-end) leaves visibly unequal gaps
-   under the reference and the cells, which is what "not lined up" looked like. */
-.hdr-row {{
-  display: flex;
-  justify-content: space-between;
-  align-items: last baseline;
-  gap: 24px;
-  padding: 13px 30px 14px;
-}}
-.hdr-refs {{
-  display: flex;
-  align-items: last baseline;
-}}
-.hdr-cell {{
-  border-left: 1px solid rgba(255,255,255,0.09);
-  padding-left: 16px;
-  margin-left: 16px;
-  text-align: left;
-}}
-.hdr-lbl {{
-  font-size: 6.5px;
-  font-weight: 600;
-  letter-spacing: 1.8px;
-  text-transform: uppercase;
-  color: rgba(255,255,255,0.34);
-  line-height: 1;
-  margin-bottom: 7px;
-}}
-/* The reference's own label is gold: same tier, higher rank. */
-.hdr-lbl-pnr {{ color: rgba(201,168,76,0.72); }}
-.hdr-val {{
-  font-size: 10px;
-  font-weight: 500;
-  color: #f0ead8;
-  line-height: 1;
-  font-variant-numeric: lining-nums;
-  font-feature-settings: "lnum" 1;
-}}
-.pnr-value {{
-  font-family: 'Cormorant Garamond', serif;
-  font-style: normal;
-  font-size: 34px;
-  font-weight: 700;
-  color: #ffffff;
-  letter-spacing: 1.5px;
-  line-height: 1;
-  font-variant-numeric: lining-nums;
-  font-feature-settings: "lnum" 1;
-}}
-
-/* ── Content ── */
-.content {{
-  padding: 10px 28px 6px;
-  background: #fff;
-}}
-.section {{ margin-bottom: 10px; }}
-.section-hdr {{
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-}}
-.section-icon {{
-  width: 7px;
-  height: 7px;
-  background: #c9a84c;
-  border-radius: 50%;
-  flex-shrink: 0;
-}}
-.section-title {{
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 2.5px;
-  color: #c9a84c;
-  text-transform: uppercase;
-}}
-.section-rule {{
-  flex: 1;
-  height: 1px;
-  background: #e2e5ea;
-}}
-
-/* ── Passenger card ── */
-.pax-card {{
-  display: flex;
-  gap: 12px;
-  border: 1px solid #ececec;
-  border-radius: 18px;
-  padding: 16px 20px 14px;
-  background: #ffffff;
-  margin-bottom: 8px;
-  flex-wrap: wrap;
-  align-items: center;
-  position: relative;
-  overflow: hidden;
-  page-break-inside: avoid;
-}}
-.pax-card::before {{
-  content: '';
-  position: absolute;
-  top: 0; left: 0;
-  width: 100%; height: 3px;
-  background: linear-gradient(90deg, #c9a84c, #e4c97a 50%, #c9a84c);
-}}
-.pax-col {{
-  flex: 1;
-  min-width: 90px;
-  padding: 8px 10px;
-  text-align: center;
-  background: #f7f7f7;
-  border-radius: 14px;
-}}
-.pax-name-col {{ flex: 1.4; background: transparent; }}
-.pax-lbl {{
-  font-size: 7px;
-  font-weight: 600;
-  letter-spacing: 1.5px;
-  color: #c9a84c;
-  text-transform: uppercase;
-  margin-bottom: 5px;
-}}
-.pax-name, .pax-val {{
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 18px;
-  font-weight: 700;
-  color: #111111;
-  letter-spacing: 0.5px;
-  line-height: 1.2;
-  font-variant-numeric: lining-nums;
-  font-feature-settings: "lnum" 1;
-}}
-.pax-val {{ font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600; }}
-/* Long passenger names wrap cleanly within the column instead of overflowing. */
-.pax-name {{
-  overflow-wrap: break-word;
-  word-break: break-word;
-}}
-
-/* ── Segment header ── */
-.seg-header {{
-  background: linear-gradient(150deg, #323234 0%, #1e1e20 60%, #0e0e0f 100%);
-  padding: 10px 24px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-radius: 40px;
-  margin-top: 16px;
-  margin-bottom: 10px;
-  page-break-inside: avoid;
-  page-break-after: avoid;
-  break-after: avoid;
-}}
-.seg-route {{
-  font-size: 9px;
-  font-weight: 700;
-  color: #ffffff;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-}}
-.seg-date {{
-  font-size: 8.5px;
-  font-weight: 500;
-  color: #e8e2d2;
-  letter-spacing: 0.5px;
-}}
-/* Right-hand group on the banner. Only rendered on split-carrier bookings —
-   see _segment_header — so single-reference documents keep the locked markup. */
-.seg-meta {{
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}}
-.seg-pnr {{
-  font-size: 7.5px;
-  font-weight: 700;
-  letter-spacing: 1.6px;
-  color: #e0c675;
-  text-transform: uppercase;
-  border: 1px solid rgba(201,168,76,0.45);
-  border-radius: 20px;
-  padding: 2px 9px;
-  white-space: nowrap;
-}}
-
-/* ── Flight card ── */
-.flight-card {{
-  border: 1px solid #ececec;
-  border-radius: 22px;
-  background: #ffffff;
-  padding: 16px 22px 14px;
-  margin-bottom: 8px;
-  page-break-inside: avoid;
-}}
-.flight-card.standalone {{
-  border-radius: 22px;
-}}
-.route-row {{
-  display: flex;
-  align-items: center;
-  margin-bottom: 6px;
-}}
-.ap-block {{
-  display: flex;
-  flex-direction: column;
-  width: 160px;
-}}
-.ap-right {{
-  align-items: flex-end;
-  text-align: right;
-}}
-.iata {{
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 42px;
-  font-weight: 700;
-  color: #111111;
-  letter-spacing: -1.5px;
-  line-height: 1;
-  margin-bottom: 1px;
-}}
-.ap-city {{
-  font-size: 11px;
-  font-weight: 700;
-  color: #1a1a1a;
-  margin-bottom: 1px;
-}}
-.ap-detail {{
-  font-size: 8.5px;
-  color: #8a9bb0;
-  line-height: 1.15;
-  margin-bottom: 1px;
-}}
-.flight-time {{
-  font-size: 20px;
-  font-weight: 700;
-  color: #111111;
-  letter-spacing: 0.5px;
-  margin-bottom: 1px;
-}}
-.flight-date {{
-  font-size: 9px;
-  color: #c9a84c;
-  font-weight: 500;
-}}
-
-/* ── Connector — flight info lifted above a plane-badge line ── */
-.connector {{
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 0 12px;
-  margin-top: 8px;
-}}
-.conn-info {{ text-align: center; }}
-.conn-flight-no {{
-  font-size: 10px;
-  font-weight: 700;
-  color: #c9a84c;
-  letter-spacing: 0.6px;
-  line-height: 1.1;
-}}
-.conn-airline {{
-  font-size: 8px;
-  color: #999999;
-  font-weight: 400;
-  line-height: 1;
-  margin-top: 1px;
-}}
-.conn-line-wrap {{
-  width: 100%;
-  display: flex;
-  align-items: center;
-}}
-.conn-dot {{
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #c9a84c;
-  flex-shrink: 0;
-}}
-.conn-line {{
-  flex: 1;
-  position: relative;
-  height: 1.5px;
-  background: linear-gradient(90deg, rgba(201,168,76,0) 0%, #c9a84c 15%, #c9a84c 85%, rgba(201,168,76,0) 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}}
-.plane-icon {{
-  width: 22px;
-  height: 22px;
-  background: #ffffff;
-  border: 1.5px solid #c9a84c;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  color: #c9a84c;
-}}
-
-/* ── Meta row -> rounded chips ── */
-.meta-row {{
-  display: flex;
-  justify-content: space-between;
-  align-items: stretch;
-  gap: 10px;
-  margin-top: 14px;
-  width: 100%;
-}}
-.meta-item {{
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 3px;
-  flex: 1;
-  background: #f7f7f7;
-  border-radius: 14px;
-  padding: 8px 12px;
-}}
-.meta-lbl {{
-  font-size: 7px;
-  font-weight: 600;
-  letter-spacing: 1.5px;
-  color: #c9a84c;
-  text-transform: uppercase;
-}}
-.meta-val {{
-  font-size: 11px;
-  font-weight: 600;
-  color: #1a1a1a;
-}}
-
-/* ── Per-leg passenger baggage / seat (2026-07-30 approved) ──
-   One row per passenger INSIDE the flight card, so per-segment extra baggage
-   or a per-leg seat shows on the leg it applies to. Columns are omitted by
-   _flight_card() when no passenger on the leg has that value. Uses the same
-   #f7f7f7 chip surface + gold micro-label idiom as .meta-item, so it reads as
-   part of the card rather than a new component. */
-.leg-pax {{
-  margin-top: 8px;
-  background: #f7f7f7;
-  border-radius: 14px;
-  padding: 8px 14px;
-  page-break-inside: avoid;
-}}
-.lp-row {{
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 3px 0;
-}}
-.lp-row + .lp-row {{
-  border-top: 1px solid #ececec;
-}}
-.lp-cell {{
-  flex: 1;
-  text-align: center;
-  font-size: 10px;
-  font-weight: 600;
-  color: #1a1a1a;
-}}
-.lp-cell.lp-name {{
-  flex: 2.4;
-  text-align: left;
-}}
-.lp-head .lp-cell {{
-  font-size: 7px;
-  font-weight: 600;
-  letter-spacing: 1.5px;
-  color: #c9a84c;
-  text-transform: uppercase;
-}}
-
-/* ── Layover — detached, centred transit badge ── */
-.layover-bar {{
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  margin: 6px 6px;
-  padding: 0;
-  background: transparent;
-  page-break-inside: avoid;
-  break-after: avoid;
-  page-break-after: avoid;
-}}
-.lay-line {{
-  flex: 1;
-  height: 0;
-  border-top: 1px dashed rgba(201,168,76,0.55);
-}}
-.lay-badge {{
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: #fbf8ef;
-  color: #0b1724;
-  border: 1px solid #c9a84c;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 1.5px;
-  padding: 6px 16px;
-  border-radius: 16px;
-  text-transform: uppercase;
-  white-space: nowrap;
-}}
-.lay-icon {{
-  color: #c9a84c;
-  font-size: 11px;
-  line-height: 1;
-}}
-
-/* ── Footer ── */
-.footer {{
-  flex-shrink: 0;            /* never compress; sits at the bottom of the (last) page */
-  page-break-inside: avoid;
-  break-inside: avoid;
-  display: flex;
-  flex-direction: column;    /* tag line, then the CR/VAT registration line */
-  gap: 3px;
-  align-items: center;       /* vertical middle of the footer band */
-  justify-content: center;   /* horizontal centre */
-  min-height: 13mm;          /* defined footer section */
-  padding: 0 28px;
-  text-align: center;
-  background: linear-gradient(150deg, #323234 0%, #1e1e20 55%, #0e0e0f 100%);
-  border-top: 2px solid #c9a84c;
-}}
-.footer-line {{
-  font-size: 8px;
-  font-weight: 600;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: rgba(255,255,255,0.35);
-}}
-/* Legal identifiers (CR / VAT) — quieter than the tag line above it. */
-.footer-reg {{
-  font-size: 7px;
-  font-weight: 500;
-  letter-spacing: 1.4px;
-  text-transform: uppercase;
-  color: rgba(255,255,255,0.32);   /* legal identifier: quieter than the tag line, but must stay legible in print */
-}}
-
-/* ── Page sheets (layout wrappers) ── */
-.sheet {{
-  width: 210mm;
-  min-height: 297mm;
-  margin: 0 auto;
-  background: #fff;
-  display: flex;
-  flex-direction: column;
-}}
-.sheet-itin .content {{ flex: 1 0 auto; }}   /* push the page-1 footer to the bottom */
-.sheet-tc {{
-  min-height: 285mm;                         /* page 2 printable = 297mm - 12mm top margin */
-  justify-content: space-between;            /* T&C at top, footer at the bottom */
-  page-break-before: always;
-  break-before: page;
-}}
-.page-flow {{
-  position: relative;          /* anchor for the absolutely-pinned footer */
-  width: 210mm;
-  min-height: 297mm;
-  margin: 0 auto;
-  background: #fff;
-  display: flex;
-  flex-direction: column;
-}}
-/* Layout-B footer: out of flow, pinned to the bottom edge of the (grown) sheet so
-   it sits at the bottom of the LAST page without fighting the T&C break rules. */
-.footer-abs {{
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-}}
-.page-measure {{ width: 210mm; margin: 0 auto; background: #fff; }}
-
-/* ── Terms & Conditions (static, ~half page) ── */
-.tc {{
-  padding: 16px 28px 8px;
-  page-break-inside: avoid;
-  break-inside: avoid;
-}}
-.tc-title {{
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 17px;
-  font-weight: 700;
-  color: #0b1724;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-}}
-.tc-issued {{
-  font-size: 8px;
-  color: #6b7a8d;
-  line-height: 1.45;
-  margin-top: 4px;
-}}
-.tc-rule {{
-  height: 2px;
-  background: linear-gradient(90deg, #c9a84c 0%, rgba(201,168,76,0) 100%);
-  margin: 8px 0 10px;
-}}
-.tc-cols {{
-  column-count: 2;
-  column-gap: 22px;
-}}
-.tc-item {{
-  break-inside: avoid;
-  margin-bottom: 7px;
-  font-size: 7.4px;
-  line-height: 1.45;
-  color: #46525f;
-  text-align: justify;
-}}
-.tc-n {{
-  display: block;
-  font-size: 8px;
-  font-weight: 700;
-  color: #0b1724;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  margin-bottom: 2px;
-}}
-.tc-acc {{ color: #c9a84c; }}
-.tc-close {{
-  margin-top: 8px;
-  padding-top: 6px;
-  border-top: 1px solid #e7e9ee;
-  font-size: 7px;
-  font-style: italic;
-  color: #6b7a8d;
-  text-align: center;
-}}
-
-/* Kept only for someone printing the raw HTML from a browser. It is DEAD for our
-   own output: build_pdf() renders with emulate_media("screen"), so print rules
-   never apply. The old `box-shadow: none` line lived here and therefore never
-   ran — which is why a 40px page shadow shipped in every PDF. Shadows are now
-   removed in the normal cascade instead (see the note above .page). */
-@media print {{
-  body {{ background: #fff; }}
-}}
-
-/* ── Header, redesigned 2026-10-12 (asked and confirmed twice per §5) ────────
-   Two bands where there were three. The old reference row left a DEAD GAP
-   through its middle: the reference sat left, the four cells huddled right as a
-   fixed-width group, and the space between them varied with the reference's
-   length - enormous at a 6-character PNR, small at 13. It could not be designed
-   out while the cells were a group, so each cell now takes an EQUAL SHARE of
-   the width and the rail spans the page. Verified at both lengths; the header is
-   110px either way (it was 120px).
-
-   Also at the owner's call: the registered address is gone from the header and
-   the wordmark takes the space it freed (24px -> 30px); the service strip with
-   the strapline is gone entirely. The hotline and cs@ had been riding on the
-   strapline row, so they become a third line in the right-hand stack - a
-   SEPARATE line, because appending them to the issue stamp made one nowrap line
-   that ran off the page and clipped both the state label and the email. */
-.hdr-service {{ display: none; }}
-.hdr-top {{
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 16px 30px 14px;
-}}
-.logo-img {{ height: 40px; }}
-.hdr-id {{
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-}}
-.hdr-name {{ font-size: 30px; }}
-.hdr-meta {{
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-  text-align: right;
-}}
-.hdr-issued {{ font-size: 7.5px; }}
-.hdr-contact-line {{
-  font-size: 7.5px;
-  font-weight: 500;
-  letter-spacing: 1.4px;
-  color: rgba(224,198,117,0.90);
-  line-height: 1;
-  white-space: nowrap;
-  font-variant-numeric: lining-nums;
-  font-feature-settings: "lnum" 1;
-}}
-/* `last baseline`: each cell is a tight label-over-value stack, and aligning the
-   stacks on their LAST baseline puts every value on the 34px reference's
-   baseline while its label stays close above it. */
-.hdr-rail {{
-  display: flex;
-  align-items: last baseline;
-  padding: 13px 30px 14px;
-  border-top: 1px solid rgba(201,168,76,0.30);
-}}
-.rail-pnr {{ flex: 0 0 auto; padding-right: 26px; }}
-.rail-cell {{
-  flex: 1 1 0;
-  min-width: 0;
-  border-left: 1px solid rgba(255,255,255,0.10);
-  padding-left: 14px;
-}}
-
-</style>
+{font_link}<style>{font_css}{_CSS}</style>
 </head>
 <body>
-{body_html}
-</body>
-</html>"""
+<div class="top"><div class="brand">{tile}<div class="wordmark"><b>Pivot</b> Travel Management</div></div>
+  <div class="doc"><div class="doc-state" style="color:{_st['ink']};">{_st['label']}</div>
+  <div class="doc-meta">Issued {_issued_stamp()}{_rev_stamp}</div>
+  <div class="doc-meta">{COMPANY_HOTLINE} &middot; {HEADER_EMAIL}</div></div></div>
+<div class="hero"><div class="eyebrow">{pnr_label_s}</div><div class="pnr" style="font-size:{pnr_px}px">{pnr_display}</div>
+  <div class="facts">{facts}</div></div>
+<div class="sec-t">Travellers</div><div class="group">{pax_rows}</div>
+{segs_html}
+{_terms_html()}
+</body></html>"""
 
 
-# ── PDF Builder ───────────────────────────────────────────────────────────────
+def _footer_template(pnr_display: str) -> str:
+    """Chromium footer (repeats on every page, carries 'Page n of N'). The Inter latin subset is
+    inlined so the footer matches the page. Reference + website only — CR/VAT are not printed."""
+    return (f'<style>{_font_face_css(("latin",))}</style>'
+            f'<div style="width:100%;padding:0 14mm;font-family:Inter,Helvetica,Arial,sans-serif;font-size:8.5px;'
+            f'color:#5b6470;display:flex;justify-content:space-between;align-items:flex-end;'
+            f'-webkit-print-color-adjust:exact;">'
+            f'<div>PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; {pnr_display} &nbsp;|&nbsp; {COMPANY_WEBSITE.upper()}</div>'
+            f'<div>Page <span class="pageNumber"></span> of <span class="totalPages"></span></div></div>')
+
+
 def build_pdf(booking_data: dict, out_dir: str, project_dir: str = None) -> str:
     from playwright.sync_api import sync_playwright
 
@@ -1506,91 +642,31 @@ def build_pdf(booking_data: dict, out_dir: str, project_dir: str = None) -> str:
     _safe = lambda v: "".join(c for c in str(v) if c.isalnum() or c in "_-")
     _stem = "-".join(_safe(r) for r in booking_refs(booking_data) if _safe(r)) or _safe(pnr) or "UNKNOWN"
     pdf_path = out_dir / f"{_stem}.pdf"
+    pnr_display = " / ".join(booking_refs(booking_data) or [pnr])
 
-    # No explicit margin → the CSS @page rules apply (page 1 full-bleed,
-    # pages 2+ get a 12mm top margin).
-    pdf_opts = dict(format="A4", print_background=True)
+    f = tempfile.NamedTemporaryFile(suffix=".html", delete=False, mode="w", encoding="utf-8")
+    f.write(build_html(booking_data, project_dir=project_dir))
+    f.close()
+    try:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch()
+            page = browser.new_page()
+            page.emulate_media(media="screen")
+            page.goto(f"file://{f.name}", wait_until="networkidle")
+            page.pdf(path=str(pdf_path), format="A4", print_background=True,
+                     display_header_footer=True, header_template="<span></span>",
+                     footer_template=_footer_template(pnr_display),
+                     margin={"top": "12mm", "bottom": "18mm", "left": "14mm", "right": "14mm"})
+            page.close()
+            browser.close()
+    finally:
+        os.unlink(f.name)
 
-    def _count(p) -> int:
-        try:
-            import pdfplumber
-            with pdfplumber.open(str(p)) as _pdf:
-                return len(_pdf.pages)
-        except Exception:
-            return 1
-
-    def _write(html: str) -> str:
-        f = tempfile.NamedTemporaryFile(suffix=".html", delete=False, mode="w", encoding="utf-8")
-        f.write(html)
-        f.close()
-        return f.name
-
-    with sync_playwright() as pw:
-        browser = pw.chromium.launch()
-        page    = browser.new_page()
-        page.emulate_media(media="screen")
-
-        # ── Pass 1: measure the itinerary (incl. its footer) to choose a layout ──
-        #   itinerary fits 1 page  → layout "A": page1 = itinerary + footer,
-        #                                         page2 = Terms & Conditions + footer.
-        #   itinerary spills        → layout "B": no page-1 footer; cards flow on,
-        #                                         then T&C, then ONE footer pinned
-        #                                         to the bottom of the last page.
-        m_html = _write(build_html(booking_data, project_dir=project_dir, layout="measure"))
-        m_pdf  = str(out_dir / f".{_stem}_measure.pdf")
-        page.goto(f"file://{m_html}", wait_until="networkidle")
-        page.pdf(path=m_pdf, **pdf_opts)
-        os.unlink(m_html)
-        itin_pages = _count(m_pdf)
-        try:
-            os.unlink(m_pdf)
-        except OSError:
-            pass
-        layout = "A" if itin_pages == 1 else "B"
-
-        # ── Pass 2: final render ──
-        f_html = _write(build_html(booking_data, project_dir=project_dir, layout=layout))
-        page.goto(f"file://{f_html}", wait_until="networkidle")
-        page.pdf(path=str(pdf_path), **pdf_opts)
-
-        # Layout B: cards flow on, then the T&C block. The footer is absolutely
-        # positioned (out of flow) so it never adds a page. Count the content
-        # pages, then grow the sheet to exactly that many pages (minus 6mm safety)
-        # so the absolute footer lands at the bottom of the LAST page.
-        if layout == "B":
-            n = _count(pdf_path)
-            # Page 1 is full height (297mm); pages 2+ lose 12mm to the top margin
-            # (285mm printable), so the bottom of page n sits exactly here:
-            full = 297 + (n - 1) * 285
-
-            def _grow(mm) -> int:
-                page.evaluate(
-                    "(mm) => { const e = document.querySelector('.page-flow');"
-                    " if (e) e.style.minHeight = mm + 'mm'; }",
-                    mm,
-                )
-                page.pdf(path=str(pdf_path), **pdf_opts)
-                return _count(pdf_path)
-
-            # Grow to the EXACT bottom of the last page so the footer is flush
-            # with the paper edge. A fixed safety subtraction used to be applied
-            # unconditionally, which left that much white below the footer on
-            # every layout-B document. Sub-pixel rounding can still tip the sheet
-            # onto one page too many, so shrink only as far as it actually takes,
-            # and only when it actually happened.
-            for slack in (0, 1, 2, 4, 6):
-                if _grow(full - slack) == n:
-                    break
-
-        os.unlink(f_html)
-        page.close()
-        browser.close()
-
-    print(f"✓ PDF saved ({layout}): {pdf_path}")
+    print(f"✓ PDF saved: {pdf_path}")
     return str(pdf_path)
 
 
-# ── CLI ───────────────────────────────────────────────────────────────────────
+# ── CLI ─────────────────────────────────────────────────
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
