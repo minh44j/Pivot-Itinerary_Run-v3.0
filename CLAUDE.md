@@ -148,30 +148,31 @@ flight-no / airport / time; non-Confirmed status).
 
 ## 8. What has been polished (recent history)
 
-- **2026-10-31 (later) — manual itinerary form (Google Form → response Sheet → runner → PDF), so a person can issue
-  a rare partner ticket without Claude (`manual_sheet.py`, `manual_form/`):**
-  Owner: "our ticketing executive could do that without need of me or Claude." Design constraints, all
-  deliberate: (1) the repo is PUBLIC and GitHub `workflow_dispatch` inputs are visible in run logs, so passenger
-  names and tickets can never be typed into GitHub — they live in a Workspace Form/Sheet and the runner PULLS
-  them, exactly as it pulls Gmail; (2) the PDF is e-mailed to **the submitter** (cc cs@), never to a client, so a
-  person always checks it first; (3) the same `_finalize` → `qc_check` → revision → `build_pdf` →
-  Air-Suvidha path as every portal, so nothing about the document can differ; (4) §7 holds — nothing is guessed:
-  `manual_sheet.parse_row` REFUSES an unreadable date (a locale-ambiguous `03/04/2026` is refused, not
-  interpreted), a bad time/IATA/ticket/seat, an arrival before departure, or a seat for a passenger that does not
-  exist, and the submitter gets "Nothing was built — N things to fix" in plain words. Names are entered as
-  title / given name(s) / surname, which settles the surname-first ambiguity (the form builds `Mr. Given Surname`).
-  `Booked on` is optional and prints N/A when empty. Sheets returns dates/times as numbers with
-  `UNFORMATTED_VALUE` — serial dates and time fractions are decoded (`to_date`/`to_time`).
-  **Safety of the rollout:** the Sheets scope is requested with its OWN credential only when `MANUAL_SHEET_ID` is
-  set (`main._sheets_service`), so a scope not yet approved in Domain-wide delegation cannot break the Gmail/Drive
-  run (adding it to `SCOPES` would have failed every poll); the whole step is wrapped; the log prints counts only.
-  A row is picked up while its `Runner status` cell is empty and is marked `PROCESSING` BEFORE building (a crash
-  cannot duplicate a PDF). One-time setup is `manual_form/create_manual_form.gs` (Apps Script) + one DWD scope +
-  two secrets; see `manual_form/README.md`. Split-carrier: a flight's optional "Airline reference" makes every
-  other flight inherit the booking PNR so both references print. Tested end to end against fake Sheets/Drive/Gmail
-  clients (one row built → To submitter, Cc cs@, PDF attached; one rejected → fix-list e-mail; one already DONE →
-  skipped). 325 tests pass (`tests/test_manual_sheet.py`, including a check that every title the runner reads
-  exists in the Apps Script).
+- **2026-10-31 (later) — manual itinerary SHEET (type a ticket into a Google Sheet → BUILD NOW → PDF), so a person can
+  issue a rare partner ticket without Claude (`manual_sheet.py`, `tools/build_manual_sheet.py`, `manual_form/`):**
+  Owner: "our ticketing executive could do that without need of me or Claude" — then, when a Google Form
+  needed a script run by hand: "I think you can do it by yourself… make it easy." A Form cannot be created from
+  here (no Forms access), but a Google SHEET can, so the entry point is one sheet, built and uploaded through
+  the Drive connector (owner `cs@`, the very mailbox the runner impersonates, so it needs no sharing). Design
+  constraints, all deliberate: (1) the repo is PUBLIC and `workflow_dispatch` inputs show in run logs, so
+  passenger names/tickets are never typed into GitHub — they live in the Workspace sheet and the runner PULLS them,
+  as it pulls Gmail; (2) the PDF goes to **the person who typed it** (cell B9, **Pivot domains only** — it holds
+  passenger data), cc cs@, never to a client; (3) the same `_finalize` → `qc_check` → revision → `build_pdf` →
+  Air-Suvidha path as every portal; (4) §7 holds — `manual_sheet.parse_row` REFUSES an unreadable date (a
+  locale-ambiguous `03/04/2026` is refused, not interpreted), a bad time/IATA/ticket/seat, an arrival before
+  departure, or a seat for a passenger that does not exist. Names are typed as title / given name(s) / surname
+  (settles the surname-first ambiguity). **Layout is one source of truth:** the constants in `manual_sheet.py`
+  generate the workbook (`tools/build_manual_sheet.py`) AND drive the runner's reads, so they cannot drift.
+  **Flow:** choose BUILD NOW (B28) → the runner CLAIMS it first (clears B28, B29 "Building…") so a crash cannot
+  duplicate a PDF → on success e-mails the PDF, wipes the inputs (`CLEAR_RANGES`, keeping B9) and writes DONE; on a
+  problem it LEAVES the typing in place, writes the plain-language list into B29, e-mails it too, and the person
+  fixes in place and chooses BUILD NOW again. A History tab records each attempt. Sheets returns dates/times as
+  numbers with `UNFORMATTED_VALUE`; serial dates and time fractions are decoded. **Rollout safety:** the Sheets
+  scope uses its OWN credential, built only when `MANUAL_SHEET_ID` is set (`main._sheets_service`) — adding it
+  to `SCOPES` would have failed every poll until Domain-wide delegation approved it; the step is wrapped and the
+  log prints counts only. Remaining owner steps: add the DWD scope, add the GitHub secret, share the sheet with the
+  executives (`manual_form/README.md`). Tested end to end with fake Sheets/Drive/Gmail clients (good / outside
+  e-mail / bad time / no trigger / empty sheet). 335 tests pass.
 
 - **2026-10-31 — the three internal e-mails redesigned around "what do I do next?" (new `email_templates.py`):**
   Owner: "make it more useable and easy to understand", for the alert e-mail and for the e-mail that arrives

@@ -127,14 +127,79 @@ def test_date_shapes_and_ambiguous_text_is_refused(raw, expected):
     assert (d.isoformat() if d else None) == expected
 
 
-def test_every_question_title_the_runner_reads_exists_in_the_apps_script():
-    """manual_sheet.py reads the sheet BY TITLE; if create_manual_form.gs renames one, rows stop parsing."""
-    gs = (ROOT / "manual_form" / "create_manual_form.gs").read_text(encoding="utf-8")
-    for f in M.BOOKING_FIELDS:
-        assert f"'{f}'" in gs, f
-    for f in M.PAX_FIELDS:
-        assert f"' - {f}'" in gs, f
-    for f in M.FLIGHT_FIELDS:
-        assert f"P + '{f}'" in gs, f
-    assert "P + 'Seat, passenger '" in gs
-    assert f"var MAX_PASSENGERS = {M.MAX_PASSENGERS};" in gs and f"var MAX_FLIGHTS = {M.MAX_FLIGHTS};" in gs
+# ---- the sheet layout (one source of truth shared with tools/build_manual_sheet.py) ---------------------
+def _grid(passengers=None, flights=None, **top):
+    """A grid shaped like the 'New booking' tab, filled through the layout constants."""
+    g = [[""] * 22 for _ in range(30)]
+
+    def put(cell, v):
+        r, c = cell
+        g[r - 1][M.col_index(c)] = v
+    put(M.EMAIL_CELL, top.pop("email", "exec@pivottmc.com"))
+    put(M.BOOKING_CELLS["PNR"], top.pop("pnr", "9yp3rj"))
+    put(M.BOOKING_CELLS["Booked on"], top.pop("booked", 46300))
+    put(M.TRIGGER_CELL, top.pop("trigger", "BUILD NOW"))
+    for n, p in enumerate(passengers or [("Mr", "Johnson", "Mavilayil Samuel", "0652400504044")], 1):
+        for (field, col), v in zip(M.PAX_COLS.items(), p):
+            put((M.PAX_FIRST_ROW + n - 1, col), v)
+    default = {"Flight number": "sv774", "Operated by (airline)": "Saudia", "From (airport code)": "ruh", "From city": "Riyadh",
+               "To (airport code)": "cok", "To city": "Cochin", "Departure date": D1, "Departure time": 0.4826,
+               "Arrival date": D1, "Arrival time": "18:50", "Cabin class": "Economy", "Checked baggage": "2 pieces"}
+    for n, fl in enumerate(flights or [default], 1):
+        for field, v in fl.items():
+            put((M.FLIGHT_FIRST_ROW + n - 1, M.FLIGHT_COLS[field]), v)
+    assert not top, f"unused cells {top}"
+    return g
+
+
+def test_the_layout_constants_are_consistent():
+    cols = list(M.FLIGHT_COLS.values()) + list(M.SEAT_COLS)
+    assert len(set(cols)) == len(cols) == 21 and set(M.FLIGHT_COLS) == set(M.FLIGHT_FIELDS)
+    assert M.col_index("A") == 0 and M.col_index("V") == 21 and M.col_index("AA") == 26
+    assert M.FLIGHT_FIRST_ROW + M.MAX_FLIGHTS - 1 < M.TRIGGER_CELL[0] and M.PAX_FIRST_ROW + M.MAX_PASSENGERS - 1 < M.FLIGHT_FIRST_ROW
+    protected = {M.EMAIL_CELL[0], M.TRIGGER_CELL[0], M.STATUS_CELL[0]}
+    for rng in M.CLEAR_RANGES:                    # a wipe must never touch the e-mail, trigger or status cells
+        lo, hi = (int("".join(ch for ch in part if ch.isdigit())) for part in rng.split(":"))
+        assert not protected & set(range(lo, hi + 1)), rng
+
+
+def test_a_filled_sheet_becomes_the_same_booking_as_a_form_row():
+    h, r = M.grid_to_form(_grid())
+    d, problems, meta = M.parse_row(h, r)
+    assert problems == [] and E.qc_check(d) is None
+    assert d["pnr"] == "9YP3RJ" and meta["email"] == "exec@pivottmc.com"
+    assert d["segments"][0]["flights"][0]["dep_time"] == "11:35"
+
+
+def test_build_is_only_requested_by_the_exact_trigger_text():
+    assert M.build_requested(_grid()) is True
+    assert M.build_requested(_grid(trigger="")) is False
+    assert M.build_requested(_grid(trigger="build now")) is True        # case does not matter
+    assert M.build_requested(_grid(trigger="BUILD LATER")) is False
+    assert M.build_requested([]) is False
+
+
+def test_an_empty_sheet_is_detected_even_with_the_trigger_chosen():
+    g = _grid(passengers=[("", "", "", "")], flights=[{}], pnr="", booked="")
+    assert M.sheet_is_empty(g) is True and M.sheet_is_empty(_grid()) is False
+
+
+def test_a_short_grid_from_the_api_is_read_without_error():
+    """Sheets trims trailing empty cells/rows; the reader must not index past them."""
+    g = [r for r in _grid()][:9]
+    g[8] = g[8][:2]
+    h, r = M.grid_to_form(g)
+    assert len(h) == len(r)
+
+
+@pytest.mark.parametrize("email,fragment", [("", "type your own Pivot e-mail"), ("not-an-email", "type your own Pivot e-mail"),
+                                            ("someone@gmail.com", "must be a Pivot address")])
+def test_the_pdf_is_never_sent_outside_pivot(email, fragment):
+    d, problems, _ = M.parse_row(*M.grid_to_form(_grid(email=email)))
+    assert d is None and any(fragment in p for p in problems), problems
+
+
+@pytest.mark.parametrize("email", ["exec@pivottmc.com", "Exec@PivotTMC.com", "old@pivot-travels.com"])
+def test_pivot_addresses_are_accepted(email):
+    d, problems, _ = M.parse_row(*M.grid_to_form(_grid(email=email)))
+    assert problems == []

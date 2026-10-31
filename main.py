@@ -791,7 +791,7 @@ def build_revised_itinerary(gmail, alert):
 
 # ── main ───────────────────────────────────────────────────────────────────
 
-# ── manual itinerary form (Google Form -> response sheet -> PDF) ─────────────────
+# ── manual itinerary sheet (a person types a ticket into a Google Sheet -> PDF) ──────────
 # See manual_form/README.md. The sheet is read with its OWN credential (spreadsheets scope) built only when
 # MANUAL_SHEET_ID is set, so a scope that has not been approved yet can never break the Gmail/Drive run.
 def _sheets_service():
@@ -799,94 +799,93 @@ def _sheets_service():
     return build("sheets", "v4", credentials=creds, cache_discovery=False)
 
 
-def _a1_col(i):
-    """0-based column index -> A1 letters (0 -> A, 26 -> AA)."""
-    s = ""
-    i += 1
-    while i:
-        i, r = divmod(i - 1, 26)
-        s = chr(65 + r) + s
-    return s
+def _a1(cell):
+    """(row, col) -> 'B28'."""
+    return f"{cell[1]}{cell[0]}"
 
 
-def process_manual_sheet(drive, send_gmail, sender, revision_log, limit=10):
-    """Build every NEW row of the manual-form response sheet. Returns COUNTS only (public-safe).
-
-    A row is NEW when its 'Runner status' cell is empty. The status is written BEFORE building
-    ('PROCESSING'), so a crash can never produce a duplicate PDF; the row is then marked DONE or ERROR.
-    A rejected row (bad PNR, missing time, ...) e-mails the submitter a plain list of what to fix."""
+def process_manual_sheet(drive, send_gmail, sender, revision_log):
+    """Build the booking typed into the sheet when its BUILD NOW cell is chosen. Returns COUNTS only
+    (public-safe). The request is CLAIMED first (BUILD NOW cleared, status 'Building'), so a crash can never
+    produce a duplicate PDF; on success the inputs are wiped for the next booking, on a problem they are
+    LEFT in place so the person fixes them where they are and chooses BUILD NOW again."""
     sid = _env("MANUAL_SHEET_ID")
     out = {"built": 0, "rejected": 0, "errors": 0}
     sheets = _sheets_service()
-    meta = sheets.spreadsheets().get(spreadsheetId=sid, fields="sheets.properties.title").execute(num_retries=API_RETRIES)
-    tab = _env("MANUAL_SHEET_TAB") or meta["sheets"][0]["properties"]["title"]
-    values = sheets.spreadsheets().values().get(
-        spreadsheetId=sid, range=f"'{tab}'", valueRenderOption="UNFORMATTED_VALUE").execute(num_retries=API_RETRIES).get("values", [])
-    if len(values) < 2:
+    tab = manual_sheet.SHEET_TAB
+    vals = sheets.spreadsheets().values()
+    grid = vals.get(spreadsheetId=sid, range=f"'{tab}'!{manual_sheet.GRID_RANGE}",
+                    valueRenderOption="UNFORMATTED_VALUE").execute(num_retries=API_RETRIES).get("values", [])
+    if not manual_sheet.build_requested(grid):
         return out
-    headers = values[0]
-    if manual_sheet.STATUS_HEADER in headers:
-        sc = headers.index(manual_sheet.STATUS_HEADER)
-    else:
-        sc = len(headers)
-        sheets.spreadsheets().values().update(
-            spreadsheetId=sid, range=f"'{tab}'!{_a1_col(sc)}1", valueInputOption="RAW",
-            body={"values": [[manual_sheet.STATUS_HEADER]]}).execute(num_retries=API_RETRIES)
 
-    def put(rownum, text):
-        sheets.spreadsheets().values().update(
-            spreadsheetId=sid, range=f"'{tab}'!{_a1_col(sc)}{rownum}", valueInputOption="RAW",
-            body={"values": [[text]]}).execute(num_retries=API_RETRIES)
+    def put(cell, text, sheet_tab=tab):
+        vals.update(spreadsheetId=sid, range=f"'{sheet_tab}'!{_a1(cell)}", valueInputOption="RAW",
+                    body={"values": [[text]]}).execute(num_retries=API_RETRIES)
 
-    form_url = _env("MANUAL_FORM_URL")
-    cs = _env("IMPERSONATE_USER") or sender
-    for idx in range(1, len(values)):
-        row = values[idx]
-        rownum = idx + 1
-        if (len(row) > sc and str(row[sc]).strip()) or not any(str(c).strip() for c in row):
-            continue
-        if out["built"] + out["rejected"] + out["errors"] >= limit:
-            break
-        put(rownum, "PROCESSING")
+    def log(pnr, result, to):
         try:
-            data, problems, info = manual_sheet.parse_row(headers, row)
-            to = info.get("email") or _env("NOTIFY_TO") or sender
-            if problems:
+            vals.append(spreadsheetId=sid, range=f"'{manual_sheet.HISTORY_TAB}'!A:D", valueInputOption="RAW",
+                        insertDataOption="INSERT_ROWS",
+                        body={"values": [[datetime.now().strftime("%Y-%m-%d %H:%M"), pnr or "", result, to or ""]]}
+                        ).execute(num_retries=API_RETRIES)
+        except Exception:
+            pass                                    # the history is a convenience; never block a build on it
+
+    put(manual_sheet.TRIGGER_CELL, "")              # claim the request first
+    put(manual_sheet.STATUS_CELL, "Building… (about a minute)")
+    sheet_url = f"https://docs.google.com/spreadsheets/d/{sid}/edit"
+    try:
+        if manual_sheet.sheet_is_empty(grid):
+            put(manual_sheet.STATUS_CELL, "NOT BUILT — the sheet is empty. Type the ticket, then choose BUILD NOW.")
+            out["rejected"] += 1
+            return out
+        headers, row = manual_sheet.grid_to_form(grid)
+        data, problems, info = manual_sheet.parse_row(headers, row)
+        to = info.get("email") or ""
+        if problems:
+            put(manual_sheet.STATUS_CELL, "NOT BUILT — fix these, then choose BUILD NOW again:\n" + "\n".join(f"• {pr}" for pr in problems))
+            if to and to.lower().rsplit("@", 1)[-1] in manual_sheet.ALLOWED_RECIPIENT_DOMAINS:
                 m = EmailMessage()
                 m["Subject"] = email_templates.manual_problem_subject(info)
                 m["From"] = sender
                 m["To"] = to
-                m.set_content(email_templates.manual_problem_text(problems, info, form_url))
+                m.set_content(email_templates.manual_problem_text(problems, info, sheet_url))
                 logo = _email_logo_bytes()
-                m.add_alternative(email_templates.manual_problem_html(problems, info, form_url, logo_cid=("pivotlogo" if logo else None)),
+                m.add_alternative(email_templates.manual_problem_html(problems, info, sheet_url, logo_cid=("pivotlogo" if logo else None)),
                                   subtype="html")
                 if logo:
                     m.get_payload()[-1].add_related(logo, "image", "png", cid="<pivotlogo>", disposition="inline")
                 send_gmail.users().messages().send(
                     userId="me", body={"raw": base64.urlsafe_b64encode(m.as_bytes()).decode("ascii")}).execute(num_retries=API_RETRIES)
-                put(rownum, f"REJECTED: {len(problems)} thing(s) to fix - e-mailed to the submitter")
-                out["rejected"] += 1
-                continue
-            date_sub = datetime.now().strftime("%Y-%m-%d")
-            data["revision"] = next_revision(revision_log, data)
-            pdf_path = build_pdf(data, os.path.join(OUT_DIR, date_sub), project_dir=PROJECT_DIR)
-            if extractors.india_arrival(data):
-                _append_air_suvidha(pdf_path)
-            link = upload_to_drive(drive, pdf_path, date_sub)
-            email_pdf(send_gmail, sender, pdf_path, data, source_ref=f"manual form, row {rownum}",
-                      to=to, cc=(cs if cs and cs.lower() != to.lower() else None))
-            put(rownum, f"DONE {datetime.now().strftime('%d %b %H:%M')}")
-            out["built"] += 1
-            try:
-                notify_pivot_os(data, link, "itinerary.created", f"manual-row-{rownum}")
-            except Exception:
-                pass
-        except Exception as e:
-            out["errors"] += 1
-            try:
-                put(rownum, f"ERROR: {type(e).__name__} - not built, tell the admin")
-            except Exception:
-                pass
+            log(info.get("pnr"), f"NOT BUILT ({len(problems)} to fix)", to)
+            out["rejected"] += 1
+            return out
+        date_sub = datetime.now().strftime("%Y-%m-%d")
+        data["revision"] = next_revision(revision_log, data)
+        pdf_path = build_pdf(data, os.path.join(OUT_DIR, date_sub), project_dir=PROJECT_DIR)
+        if extractors.india_arrival(data):
+            _append_air_suvidha(pdf_path)
+        link = upload_to_drive(drive, pdf_path, date_sub)
+        cs = _env("IMPERSONATE_USER") or sender
+        email_pdf(send_gmail, sender, pdf_path, data, source_ref="manual sheet", to=to,
+                  cc=(cs if cs and cs.lower() != to.lower() else None))
+        vals.batchClear(spreadsheetId=sid, body={"ranges": [f"'{tab}'!{r}" for r in manual_sheet.CLEAR_RANGES]}
+                        ).execute(num_retries=API_RETRIES)
+        put(manual_sheet.STATUS_CELL, f"DONE {datetime.now().strftime('%d %b %H:%M')} — the PDF was e-mailed to {to}. "
+                                      "The sheet is clear for the next booking. Check the PDF against the ticket before forwarding it.")
+        log(info.get("pnr"), "DONE", to)
+        out["built"] += 1
+        try:
+            notify_pivot_os(data, link, "itinerary.created", "manual-sheet")
+        except Exception:
+            pass
+    except Exception as e:
+        out["errors"] += 1
+        try:
+            put(manual_sheet.STATUS_CELL, f"ERROR ({type(e).__name__}) — nothing was sent. Your typing is still here; tell the admin.")
+        except Exception:
+            pass
     return out
 
 
@@ -1051,9 +1050,9 @@ def main():
         print(json.dumps({"disruption_watch_error": str(e)[:120]}))
 
     # ── manual itinerary form ────────────────────────────────────────────────
-    # An executive types a ticket that no portal e-mail covers into the Google Form; the runner reads the
-    # response sheet (like it reads the inbox), builds the SAME PDF through the SAME QC gate, and e-mails it
-    # to the person who submitted — never to the client. INERT until MANUAL_SHEET_ID is set. PII stays in
+    # A person types a ticket that no portal e-mail covers into the "Manual itinerary" Google Sheet and chooses
+    # BUILD NOW; the runner reads the sheet (like it reads the inbox), builds the SAME PDF through the SAME QC
+    # gate, and e-mails it to that person — never to the client. INERT until MANUAL_SHEET_ID is set. PII stays in
     # the Workspace sheet and the e-mail: the log below carries COUNTS only. Fully wrapped: a failure here
     # must never break the inbox run.
     manual = {"built": 0, "rejected": 0, "errors": 0}

@@ -463,35 +463,35 @@ def disruption_text(enriched):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# 4. MANUAL FORM — the submission could not be built; tell the submitter exactly what to fix
+# 4. MANUAL SHEET — the booking could not be built; tell the person exactly what to fix
 # ═════════════════════════════════════════════════════════════════════════════
 def manual_problem_subject(meta):
     pnr = (meta.get("pnr") or "").strip()
     return f"Manual itinerary — needs fixing{(' (' + pnr + ')') if pnr else ''}"
 
 
-def manual_problem_html(problems, meta, form_url="", logo_cid=None):
+def manual_problem_html(problems, meta, sheet_url="", logo_cid=None):
     items = "".join(
         f'<tr><td style="padding:9px 0;border-top:1px solid {HAIR};font-family:{SANS};font-size:14px;color:{INK};line-height:1.5;">'
         f'<b style="color:{RED};">&bull;</b>&nbsp; {esc(pr)}</td></tr>' for pr in problems)
     sub = (f"Submitted {esc(meta.get('submitted'), '')}" + (f" &middot; PNR {esc(meta.get('pnr'))}" if meta.get("pnr") else "")).strip()
     inner = (f'<tr><td style="padding:22px 26px 6px;font-family:{SANS};"><div style="font-size:22px;font-weight:700;letter-spacing:-.4px;color:{INK};">'
              f'Nothing was built &mdash; {len(problems)} thing{"s" if len(problems) != 1 else ""} to fix</div>'
-             f'<div style="font-size:13.5px;color:{SLATE};margin-top:5px;line-height:1.55;">Your manual itinerary form could not be turned into a PDF. '
+             f'<div style="font-size:13.5px;color:{SLATE};margin-top:5px;line-height:1.55;">Your manual itinerary sheet could not be turned into a PDF. '
              f'Nothing was sent to anyone. {sub}</div></td></tr>'
              f'<tr><td style="padding:10px 26px 4px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">{items}</table></td></tr>'
              f'<tr><td style="padding:16px 26px 24px;font-family:{SANS};font-size:13px;color:{SLATE};line-height:1.6;">'
-             f'<b style="color:{INK};">What to do:</b> submit the form again with these corrected. The earlier submission is ignored.'
-             f'<div style="margin-top:14px;">{_button(form_url, "Open the form")}</div></td></tr>')
+             f'<b style="color:{INK};">What to do:</b> your typing is still in the sheet. Fix these, then choose <b>BUILD NOW</b> again.'
+             f'<div style="margin-top:14px;">{_button(sheet_url, "Open the sheet")}</div></td></tr>')
     return _shell(inner, logo_cid, "Manual itinerary — needs fixing", preheader=f"{len(problems)} thing(s) to fix before the itinerary can be built.")
 
 
-def manual_problem_text(problems, meta, form_url=""):
+def manual_problem_text(problems, meta, sheet_url=""):
     L = [f"MANUAL ITINERARY — NOTHING WAS BUILT ({len(problems)} thing(s) to fix)", "",
          f"Submitted {meta.get('submitted') or ''}  PNR {meta.get('pnr') or 'N/A'}", ""]
     L += [f"  • {pr}" for pr in problems]
-    L += ["", "Submit the form again with these corrected. The earlier submission is ignored."]
-    if form_url:
-        L.append(f"Form: {form_url}")
+    L += ["", "Your typing is still in the sheet. Fix these, then choose BUILD NOW again."]
+    if sheet_url:
+        L.append(f"Sheet: {sheet_url}")
     L += ["", "(Automated — PIVOT AUTOMATED ITINERARY)"]
     return "\n".join(L)

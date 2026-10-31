@@ -1,19 +1,23 @@
 """
-Manual itinerary entry — turns ONE row of the "Manual itinerary" Google Form's response sheet into the
-same booking dict the portal extractors produce, so the normal QC gate, revision counter, PDF generator
-and e-mail apply unchanged.
+Manual itinerary entry — a person types a ticket into the "Manual itinerary" Google Sheet; this module turns
+the sheet's cells into the same booking dict the portal extractors produce, so the normal QC gate, revision
+counter, PDF generator and e-mail apply unchanged.
 
-PURE: no Google imports and nothing printed, so the offline suite can import it and the public Action
-log can never carry a passenger name. main.py owns reading/writing the Sheet and sending the e-mail.
+PURE: no Google imports and nothing printed, so the offline suite can import it and the public Action log
+can never carry a passenger name. main.py owns reading/writing the Sheet and sending the e-mail.
 
-The question titles below are the CONTRACT with manual_form/create_manual_form.gs (a test asserts every
-title used here appears in that script). A title is "<Group> <n> - <Field>"; n is 1-based.
+ONE source of truth for the layout: tools/build_manual_sheet.py generates the workbook from the constants
+below, and the runner reads it with the same constants, so the sheet and the runner cannot drift apart.
+`parse_row` is the validator: it works on {question title -> value}, and `grid_to_form` maps the sheet's cells
+onto those titles.
 """
 import re
 from datetime import date, datetime, timedelta
 
 import extractors
 
+# The PDF carries passenger names and ticket numbers, so it may only be sent to a Pivot mailbox.
+ALLOWED_RECIPIENT_DOMAINS = ("pivottmc.com", "pivot-travels.com")
 MAX_PASSENGERS = 4
 MAX_FLIGHTS = 6
 
@@ -107,6 +111,12 @@ def parse_row(headers, row):
     get = lambda k: cells.get(k, "")
     problems = []
     meta = {"email": _s(get(EMAIL_HEADER)), "submitted": _s(get(TIMESTAMP_HEADER)), "pnr": ""}
+
+    to = meta["email"].lower()
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", to):
+        problems.append("Send the PDF to: type your own Pivot e-mail address (cell B9).")
+    elif to.rsplit("@", 1)[1] not in ALLOWED_RECIPIENT_DOMAINS:
+        problems.append("Send the PDF to: it must be a Pivot address (…@pivottmc.com) — it contains passenger data.")
 
     pnr = _s(get("PNR")).upper()
     meta["pnr"] = pnr
@@ -217,3 +227,76 @@ def parse_row(headers, row):
             problems.append(qc)
             data = None
     return data, problems, meta
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# THE SHEET LAYOUT (tab "New booking") — 1-based rows, column letters
+# ═════════════════════════════════════════════════════════════════════════════
+SHEET_TAB = "New booking"
+HISTORY_TAB = "History"
+HELP_TAB = "Help"
+GRID_RANGE = "A1:V30"
+
+BOOKING_CELLS = {"PNR": (5, "B"), "Agency reference": (6, "B"), "CRS reference": (7, "B"), "Booked on": (8, "B")}
+EMAIL_CELL = (9, "B")                    # "Send the PDF to" — the person who is building it
+PAX_FIRST_ROW = 13                       # rows 13..16 = passengers 1..4
+PAX_COLS = {"Title": "B", "Given name(s)": "C", "Surname": "D", "Ticket number": "E"}
+FLIGHT_FIRST_ROW = 20                    # rows 20..25 = flights 1..6
+FLIGHT_COLS = {"Flight number": "B", "Operated by (airline)": "C", "From (airport code)": "D", "From city": "E",
+               "To (airport code)": "F", "To city": "G", "Departure date": "H", "Departure time": "I",
+               "Arrival date": "J", "Arrival time": "K", "Cabin class": "L", "Departure terminal": "M",
+               "Arrival terminal": "N", "Duration": "O", "Cabin baggage": "P", "Checked baggage": "Q",
+               "Airline reference": "R"}
+SEAT_COLS = ("S", "T", "U", "V")         # seat for passenger 1..4
+TRIGGER_CELL = (28, "B")
+TRIGGER_TEXT = "BUILD NOW"
+STATUS_CELL = (29, "B")
+CLEAR_RANGES = ("B5:B8", "B13:E16", "B20:V25")      # inputs wiped after a successful build ("Send to" is kept)
+TITLES = ("Mr", "Mrs", "Ms", "Miss", "Mstr", "Dr")
+CABINS = ("Economy", "Premium Economy", "Business", "First")
+
+
+def col_index(letter):
+    """'A' -> 0, 'V' -> 21."""
+    n = 0
+    for ch in letter.upper():
+        n = n * 26 + (ord(ch) - 64)
+    return n - 1
+
+
+def _cell(grid, row, col):
+    r = row - 1
+    if r >= len(grid):
+        return ""
+    line = grid[r]
+    c = col_index(col)
+    return line[c] if c < len(line) else ""
+
+
+def build_requested(grid):
+    """True when the person has chosen BUILD NOW."""
+    return _s(_cell(grid, *TRIGGER_CELL)).upper() == TRIGGER_TEXT
+
+
+def grid_to_form(grid):
+    """Sheet cells -> (headers, row) in the {title: value} shape parse_row validates."""
+    cells = {EMAIL_HEADER: _cell(grid, *EMAIL_CELL)}
+    for title, (r, c) in BOOKING_CELLS.items():
+        cells[title] = _cell(grid, r, c)
+    for n in range(1, MAX_PASSENGERS + 1):
+        for field, c in PAX_COLS.items():
+            cells[pax_title(n, field)] = _cell(grid, PAX_FIRST_ROW + n - 1, c)
+    for n in range(1, MAX_FLIGHTS + 1):
+        r = FLIGHT_FIRST_ROW + n - 1
+        for field, c in FLIGHT_COLS.items():
+            cells[flight_title(n, field)] = _cell(grid, r, c)
+        for k, c in enumerate(SEAT_COLS, 1):
+            cells[flight_title(n, SEAT_FIELD.format(k=k))] = _cell(grid, r, c)
+    headers = list(cells)
+    return headers, [cells[h] for h in headers]
+
+
+def sheet_is_empty(grid):
+    """Nothing typed in any input cell (so a stray BUILD NOW on a blank sheet is answered, not built)."""
+    h, row = grid_to_form(grid)
+    return not any(_s(v) for k, v in zip(h, row) if k != EMAIL_HEADER)
