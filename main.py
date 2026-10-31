@@ -42,6 +42,7 @@ from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 import extractors
 from generate_itinerary_v3 import build_pdf, booking_refs, COMPANY_WEBSITE
 import email_templates
+import manual_sheet
 
 SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
@@ -408,12 +409,14 @@ def upload_to_drive(drive, pdf_path, date_sub):
 # message is ever touched, replied to, forwarded, or deleted). It additionally
 # holds gmail.send for exactly ONE purpose — emailing the finished PDF back to
 # itself so the confirmation "arrives in gmail inbox" alongside the source email.
-def email_pdf(send_gmail, sender, pdf_path, data, source_ref=""):
-    to = _env("NOTIFY_TO") or sender                       # default recipient = sender
+def email_pdf(send_gmail, sender, pdf_path, data, source_ref="", to=None, cc=None):
+    to = to or _env("NOTIFY_TO") or sender                 # default recipient = sender (manual form: the submitter)
     m = EmailMessage()
     m["Subject"] = email_templates.confirmation_subject(data)
     m["From"] = sender                                     # SENDER_USER or cs@
     m["To"] = to
+    if cc:
+        m["Cc"] = cc
     m.set_content(email_templates.confirmation_text(data, source_ref))     # text/plain fallback
     logo = _email_logo_bytes()
     m.add_alternative(email_templates.confirmation_html(data, source_ref, logo_cid=("pivotlogo" if logo else None)),
@@ -787,6 +790,106 @@ def build_revised_itinerary(gmail, alert):
 
 
 # ── main ───────────────────────────────────────────────────────────────────
+
+# ── manual itinerary form (Google Form -> response sheet -> PDF) ─────────────────
+# See manual_form/README.md. The sheet is read with its OWN credential (spreadsheets scope) built only when
+# MANUAL_SHEET_ID is set, so a scope that has not been approved yet can never break the Gmail/Drive run.
+def _sheets_service():
+    creds = _creds_for(_env("IMPERSONATE_USER"), ["https://www.googleapis.com/auth/spreadsheets"])
+    return build("sheets", "v4", credentials=creds, cache_discovery=False)
+
+
+def _a1_col(i):
+    """0-based column index -> A1 letters (0 -> A, 26 -> AA)."""
+    s = ""
+    i += 1
+    while i:
+        i, r = divmod(i - 1, 26)
+        s = chr(65 + r) + s
+    return s
+
+
+def process_manual_sheet(drive, send_gmail, sender, revision_log, limit=10):
+    """Build every NEW row of the manual-form response sheet. Returns COUNTS only (public-safe).
+
+    A row is NEW when its 'Runner status' cell is empty. The status is written BEFORE building
+    ('PROCESSING'), so a crash can never produce a duplicate PDF; the row is then marked DONE or ERROR.
+    A rejected row (bad PNR, missing time, ...) e-mails the submitter a plain list of what to fix."""
+    sid = _env("MANUAL_SHEET_ID")
+    out = {"built": 0, "rejected": 0, "errors": 0}
+    sheets = _sheets_service()
+    meta = sheets.spreadsheets().get(spreadsheetId=sid, fields="sheets.properties.title").execute(num_retries=API_RETRIES)
+    tab = _env("MANUAL_SHEET_TAB") or meta["sheets"][0]["properties"]["title"]
+    values = sheets.spreadsheets().values().get(
+        spreadsheetId=sid, range=f"'{tab}'", valueRenderOption="UNFORMATTED_VALUE").execute(num_retries=API_RETRIES).get("values", [])
+    if len(values) < 2:
+        return out
+    headers = values[0]
+    if manual_sheet.STATUS_HEADER in headers:
+        sc = headers.index(manual_sheet.STATUS_HEADER)
+    else:
+        sc = len(headers)
+        sheets.spreadsheets().values().update(
+            spreadsheetId=sid, range=f"'{tab}'!{_a1_col(sc)}1", valueInputOption="RAW",
+            body={"values": [[manual_sheet.STATUS_HEADER]]}).execute(num_retries=API_RETRIES)
+
+    def put(rownum, text):
+        sheets.spreadsheets().values().update(
+            spreadsheetId=sid, range=f"'{tab}'!{_a1_col(sc)}{rownum}", valueInputOption="RAW",
+            body={"values": [[text]]}).execute(num_retries=API_RETRIES)
+
+    form_url = _env("MANUAL_FORM_URL")
+    cs = _env("IMPERSONATE_USER") or sender
+    for idx in range(1, len(values)):
+        row = values[idx]
+        rownum = idx + 1
+        if (len(row) > sc and str(row[sc]).strip()) or not any(str(c).strip() for c in row):
+            continue
+        if out["built"] + out["rejected"] + out["errors"] >= limit:
+            break
+        put(rownum, "PROCESSING")
+        try:
+            data, problems, info = manual_sheet.parse_row(headers, row)
+            to = info.get("email") or _env("NOTIFY_TO") or sender
+            if problems:
+                m = EmailMessage()
+                m["Subject"] = email_templates.manual_problem_subject(info)
+                m["From"] = sender
+                m["To"] = to
+                m.set_content(email_templates.manual_problem_text(problems, info, form_url))
+                logo = _email_logo_bytes()
+                m.add_alternative(email_templates.manual_problem_html(problems, info, form_url, logo_cid=("pivotlogo" if logo else None)),
+                                  subtype="html")
+                if logo:
+                    m.get_payload()[-1].add_related(logo, "image", "png", cid="<pivotlogo>", disposition="inline")
+                send_gmail.users().messages().send(
+                    userId="me", body={"raw": base64.urlsafe_b64encode(m.as_bytes()).decode("ascii")}).execute(num_retries=API_RETRIES)
+                put(rownum, f"REJECTED: {len(problems)} thing(s) to fix - e-mailed to the submitter")
+                out["rejected"] += 1
+                continue
+            date_sub = datetime.now().strftime("%Y-%m-%d")
+            data["revision"] = next_revision(revision_log, data)
+            pdf_path = build_pdf(data, os.path.join(OUT_DIR, date_sub), project_dir=PROJECT_DIR)
+            if extractors.india_arrival(data):
+                _append_air_suvidha(pdf_path)
+            link = upload_to_drive(drive, pdf_path, date_sub)
+            email_pdf(send_gmail, sender, pdf_path, data, source_ref=f"manual form, row {rownum}",
+                      to=to, cc=(cs if cs and cs.lower() != to.lower() else None))
+            put(rownum, f"DONE {datetime.now().strftime('%d %b %H:%M')}")
+            out["built"] += 1
+            try:
+                notify_pivot_os(data, link, "itinerary.created", f"manual-row-{rownum}")
+            except Exception:
+                pass
+        except Exception as e:
+            out["errors"] += 1
+            try:
+                put(rownum, f"ERROR: {type(e).__name__} - not built, tell the admin")
+            except Exception:
+                pass
+    return out
+
+
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     gmail, drive = _services()
@@ -946,6 +1049,22 @@ def main():
             disruption_alerts = len(new_alerts)
     except Exception as e:
         print(json.dumps({"disruption_watch_error": str(e)[:120]}))
+
+    # ── manual itinerary form ────────────────────────────────────────────────
+    # An executive types a ticket that no portal e-mail covers into the Google Form; the runner reads the
+    # response sheet (like it reads the inbox), builds the SAME PDF through the SAME QC gate, and e-mails it
+    # to the person who submitted — never to the client. INERT until MANUAL_SHEET_ID is set. PII stays in
+    # the Workspace sheet and the e-mail: the log below carries COUNTS only. Fully wrapped: a failure here
+    # must never break the inbox run.
+    manual = {"built": 0, "rejected": 0, "errors": 0}
+    try:
+        if _env("MANUAL_SHEET_ID"):
+            manual = process_manual_sheet(drive, send_gmail, sender, revision_log)
+            save_revision_log(revision_log)
+    except Exception as e:
+        manual = {"built": 0, "rejected": 0, "errors": 1}
+        print(json.dumps({"manual_form_error": type(e).__name__}))
+
     # PUBLIC-SAFE LOG: print COUNTS only — never PNRs, passenger names, Drive
     # links, message ids, subjects, or tracebacks (Action logs are world-readable
     # on a public repo). Per-portal tallies + generic flag reasons are enough to
@@ -962,6 +1081,7 @@ def main():
         "disruption_alerts": disruption_alerts,
         "revised_drafts": revised_drafts,
         "pivot_os_sync": pivot_os,
+        "manual_form": manual,
     }
     print(json.dumps(summary, indent=2))
 
