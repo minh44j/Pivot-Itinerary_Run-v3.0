@@ -14,7 +14,7 @@ type the ticket ─▶ choose BUILD NOW ─▶ runner (every poll, a few minutes
 
 Open **Pivot — Manual itinerary** → tab **New booking** (bookmark it). Fill the cream cells from the ticket:
 
-1. **The booking:** PNR, and **your e-mail** (B9 — where the PDF goes; must be a Pivot address). Agency/CRS ref
+1. **The booking:** PNR, and **the e-mail** (B9 — where the PDF goes; pre-filled with the shared `cs@pivottmc.com` mailbox the executives use; must be a Pivot address). Agency/CRS ref
    and *Booked on* only if the ticket shows them — otherwise leave empty (the PDF then says N/A).
 2. **Passengers** (up to 4): title (dropdown), given name(s), surname, ticket number (digits).
 3. **Flights** (up to 6, in travel order; a connection is its own flight): flight number `SV 774`, airline,

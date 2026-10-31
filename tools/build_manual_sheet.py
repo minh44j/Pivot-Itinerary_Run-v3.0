@@ -99,6 +99,7 @@ def build(path):
     r, c = M.EMAIL_CELL
     label(ws, f"A{r}", "Send the PDF to (your e-mail)", True)
     inp(ws, f"{c}{r}")
+    ws[f"{c}{r}"] = "cs@pivottmc.com"   # the executives share the cs@ mailbox; change only to send elsewhere
     ws.row_dimensions[r].height = 24
     ws.merge_cells(f"B{r}:D{r}")
     for col in "CD":
