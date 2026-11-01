@@ -1062,7 +1062,19 @@ def main():
             save_revision_log(revision_log)
     except Exception as e:
         manual = {"built": 0, "rejected": 0, "errors": 1}
-        print(json.dumps({"manual_form_error": type(e).__name__}))
+        # Class + HTTP status + Google's error reason/message only: a Google API error body names
+        # the project / API / scope, never sheet cells, so this is safe in a public log.
+        _info = {"manual_form_error": type(e).__name__}
+        _resp = getattr(e, "resp", None)
+        if _resp is not None:
+            _info["http_status"] = getattr(_resp, "status", None)
+        try:
+            _err = json.loads(e.content.decode("utf-8")).get("error", {})
+            _info["reason"] = (_err.get("status") or "")[:40]
+            _info["message"] = (_err.get("message") or "")[:200]
+        except Exception:
+            pass
+        print(json.dumps(_info))
 
     # PUBLIC-SAFE LOG: print COUNTS only — never PNRs, passenger names, Drive
     # links, message ids, subjects, or tracebacks (Action logs are world-readable
