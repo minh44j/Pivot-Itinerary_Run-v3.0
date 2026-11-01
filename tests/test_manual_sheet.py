@@ -203,3 +203,44 @@ def test_the_pdf_is_never_sent_outside_pivot(email, fragment):
 def test_pivot_addresses_are_accepted(email):
     d, problems, _ = M.parse_row(*M.grid_to_form(_grid(email=email)))
     assert problems == []
+
+
+# ── Google Form responses ─────────────────────────────────────────────────────
+def test_form_pending_picks_only_unbuilt_rows():
+    H = ["Timestamp", "Email Address", "PNR"]
+    vals = [H, ["t1", "a@pivottmc.com", "AAA111"], ["t2", "b@pivottmc.com", "BBB222", "DONE x"], [], ["t3", "c@pivottmc.com", "CCC333"]]
+    headers, col, rows = M.form_pending(vals)
+    assert col == 3                                   # no status column yet -> created right after the last header
+    assert [n for n, _ in rows] == [2, 3, 5] or [n for n, _ in rows] == [2, 5]
+
+
+def test_form_pending_respects_status_column_and_blank_rows():
+    H = ["Timestamp", "PNR", "Runner status"]
+    vals = [H, ["t1", "AAA111", ""], ["t2", "BBB222", "DONE 01 Nov"], ["t3", "CCC333", "NOT BUILT — x"], ["", "", ""]]
+    headers, col, rows = M.form_pending(vals)
+    assert col == 2 and [n for n, _ in rows] == [2]   # done / refused / empty rows are never rebuilt
+
+
+def test_form_pending_empty_tab():
+    assert M.form_pending([]) == ([], 0, [])
+    assert M.form_pending([["Timestamp", "PNR"]])[2] == []
+
+
+def test_gs_ticket_rule_keeps_the_value_text():
+    gs = (ROOT / "manual_form" / "create_manual_form.gs").read_text(encoding="utf-8")
+    assert "[0-9]{3}-[0-9]{7,11}" in gs               # a dash keeps Sheets from storing a number (leading zero loss)
+    assert "setDestination(FormApp.DestinationType.SPREADSHEET, SHEET_ID)" in gs
+    assert "var SHEET_ID = '1lx6ewkSI98GBUmrWBMUDed7UkfaLtIQrNCwANOz8CsY'" in gs
+    assert f"var RESPONSES_TAB = '{M.FORM_TAB}'" in gs
+
+
+def test_gs_titles_match_the_runner_contract():
+    gs = (ROOT / "manual_form" / "create_manual_form.gs").read_text(encoding="utf-8")
+    for f in M.BOOKING_FIELDS:
+        assert f"'{f}'" in gs, f
+    for f in M.PAX_FIELDS:
+        assert f"' - {f}'" in gs, f
+    for f in M.FLIGHT_FIELDS:
+        assert f"P + '{f}'" in gs, f
+    assert "P + 'Seat, passenger '" in gs
+    assert f"var MAX_PASSENGERS = {M.MAX_PASSENGERS};" in gs and f"var MAX_FLIGHTS = {M.MAX_FLIGHTS};" in gs

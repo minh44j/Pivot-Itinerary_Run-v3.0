@@ -37,6 +37,7 @@ from google.auth import iam
 from google.auth.transport.requests import Request
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 
 import extractors
@@ -889,6 +890,110 @@ def process_manual_sheet(drive, send_gmail, sender, revision_log):
     return out
 
 
+def _col_letter(i):
+    """0-based column index -> A, B, ... Z, AA ..."""
+    s = ""
+    i += 1
+    while i:
+        i, r = divmod(i - 1, 26)
+        s = chr(65 + r) + s
+    return s
+
+
+def _send_manual_problems(send_gmail, sender, problems, info, url, via_form):
+    """E-mail the plain-language fix list — only to a Pivot address (the list can echo typed values)."""
+    to = info.get("email") or ""
+    if not (to and to.lower().rsplit("@", 1)[-1] in manual_sheet.ALLOWED_RECIPIENT_DOMAINS):
+        return
+    m = EmailMessage()
+    m["Subject"] = email_templates.manual_problem_subject(info)
+    m["From"] = sender
+    m["To"] = to
+    m.set_content(email_templates.manual_problem_text(problems, info, url, via_form=via_form))
+    logo = _email_logo_bytes()
+    m.add_alternative(email_templates.manual_problem_html(problems, info, url, logo_cid=("pivotlogo" if logo else None),
+                                                          via_form=via_form), subtype="html")
+    if logo:
+        m.get_payload()[-1].add_related(logo, "image", "png", cid="<pivotlogo>", disposition="inline")
+    send_gmail.users().messages().send(
+        userId="me", body={"raw": base64.urlsafe_b64encode(m.as_bytes()).decode("ascii")}).execute(num_retries=API_RETRIES)
+
+
+def process_manual_form(drive, send_gmail, sender, revision_log, max_rows=5):
+    """Build every new Google-Form submission (the 'Form responses' tab of the manual sheet). COUNTS only.
+    A row is CLAIMED (status 'Building') before anything is built, so a crash cannot duplicate a PDF; the final
+    status (DONE / NOT BUILT: ...) is written back to the row. A rejected row is final — the person submits the
+    form again. Returns zeros when the Form has not been created yet (no such tab)."""
+    sid = _env("MANUAL_SHEET_ID")
+    out = {"built": 0, "rejected": 0, "errors": 0}
+    sheets = _sheets_service()
+    vals = sheets.spreadsheets().values()
+    tab = manual_sheet.FORM_TAB
+    try:
+        values = vals.get(spreadsheetId=sid, range=f"'{tab}'!A1:ZZ2000", valueRenderOption="UNFORMATTED_VALUE"
+                          ).execute(num_retries=API_RETRIES).get("values", [])
+    except HttpError as e:
+        if getattr(e.resp, "status", None) == 400:      # "Unable to parse range": the tab does not exist yet
+            return out
+        raise
+    headers, status_col, pending = manual_sheet.form_pending(values)
+    if not pending:
+        return out
+    col = _col_letter(status_col)
+    if status_col >= len(headers):                       # first ever run: create the status column header
+        vals.update(spreadsheetId=sid, range=f"'{tab}'!{col}1", valueInputOption="RAW",
+                    body={"values": [[manual_sheet.STATUS_HEADER]]}).execute(num_retries=API_RETRIES)
+
+    def put(rownum, text):
+        vals.update(spreadsheetId=sid, range=f"'{tab}'!{col}{rownum}", valueInputOption="RAW",
+                    body={"values": [[text]]}).execute(num_retries=API_RETRIES)
+
+    def log(pnr, result, to):
+        try:
+            vals.append(spreadsheetId=sid, range=f"'{manual_sheet.HISTORY_TAB}'!A:D", valueInputOption="RAW",
+                        insertDataOption="INSERT_ROWS",
+                        body={"values": [[datetime.now().strftime("%Y-%m-%d %H:%M"), pnr or "", result, to or ""]]}
+                        ).execute(num_retries=API_RETRIES)
+        except Exception:
+            pass
+
+    form_url = _env("MANUAL_FORM_URL")
+    for rownum, row in pending[:max_rows]:
+        try:
+            put(rownum, "Building…")                     # claim first
+            data, problems, info = manual_sheet.parse_row(headers, row)
+            to = info.get("email") or ""
+            if problems:
+                put(rownum, "NOT BUILT — " + " | ".join(problems))
+                _send_manual_problems(send_gmail, sender, problems, info, form_url, via_form=True)
+                log(info.get("pnr"), f"NOT BUILT ({len(problems)} to fix)", to)
+                out["rejected"] += 1
+                continue
+            date_sub = datetime.now().strftime("%Y-%m-%d")
+            data["revision"] = next_revision(revision_log, data)
+            pdf_path = build_pdf(data, os.path.join(OUT_DIR, date_sub), project_dir=PROJECT_DIR)
+            if extractors.india_arrival(data):
+                _append_air_suvidha(pdf_path)
+            link = upload_to_drive(drive, pdf_path, date_sub)
+            cs = _env("IMPERSONATE_USER") or sender
+            email_pdf(send_gmail, sender, pdf_path, data, source_ref="manual form", to=to,
+                      cc=(cs if cs and cs.lower() != to.lower() else None))
+            put(rownum, f"DONE {datetime.now().strftime('%d %b %H:%M')} — PDF e-mailed to {to}")
+            log(info.get("pnr"), "DONE", to)
+            out["built"] += 1
+            try:
+                notify_pivot_os(data, link, "itinerary.created", "manual-form")
+            except Exception:
+                pass
+        except Exception as e:
+            out["errors"] += 1
+            try:
+                put(rownum, f"ERROR ({type(e).__name__}) — nothing was sent; submit the form again or tell the admin.")
+            except Exception:
+                pass
+    return out
+
+
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     gmail, drive = _services()
@@ -1060,6 +1165,9 @@ def main():
         if _env("MANUAL_SHEET_ID"):
             manual = process_manual_sheet(drive, send_gmail, sender, revision_log)
             save_revision_log(revision_log)
+            _f = process_manual_form(drive, send_gmail, sender, revision_log)
+            save_revision_log(revision_log)
+            manual = {k: manual[k] + _f[k] for k in manual}
     except Exception as e:
         manual = {"built": 0, "rejected": 0, "errors": 1}
         # Class + HTTP status + Google's error reason/message only: a Google API error body names

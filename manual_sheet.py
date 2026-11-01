@@ -114,7 +114,7 @@ def parse_row(headers, row):
 
     to = meta["email"].lower()
     if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", to):
-        problems.append("Send the PDF to: type your own Pivot e-mail address (cell B9).")
+        problems.append("Send the PDF to: type your own Pivot e-mail address (sheet cell B9; the form fills this in for you).")
     elif to.rsplit("@", 1)[1] not in ALLOWED_RECIPIENT_DOMAINS:
         problems.append("Send the PDF to: it must be a Pivot address (…@pivottmc.com) — it contains passenger data.")
 
@@ -232,6 +232,7 @@ def parse_row(headers, row):
 # ═════════════════════════════════════════════════════════════════════════════
 # THE SHEET LAYOUT (tab "New booking") — 1-based rows, column letters
 # ═════════════════════════════════════════════════════════════════════════════
+FORM_TAB = "Form responses"            # where the Google Form writes its answers (same workbook)
 SHEET_TAB = "New booking"
 HISTORY_TAB = "History"
 HELP_TAB = "Help"
@@ -300,3 +301,21 @@ def sheet_is_empty(grid):
     """Nothing typed in any input cell (so a stray BUILD NOW on a blank sheet is answered, not built)."""
     h, row = grid_to_form(grid)
     return not any(_s(v) for k, v in zip(h, row) if k != EMAIL_HEADER)
+
+
+def form_pending(values):
+    """Form-response rows still to build. `values` is the whole 'Form responses' tab (row 1 = question titles).
+    Returns (headers, status_col, [(sheet_row_number, row), ...]); status_col is the 0-based index of the 'Runner
+    status' column (len(headers) when it does not exist yet — the runner then creates it). A row is pending when
+    it has an answer and its status is empty."""
+    if not values:
+        return [], 0, []
+    headers = [_s(h) for h in values[0]]
+    status_col = headers.index(STATUS_HEADER) if STATUS_HEADER in headers else len(headers)
+    out = []
+    for i, row in enumerate(values[1:], start=2):
+        has_answer = any(_s(v) for k, v in enumerate(row) if k != status_col)
+        status = _s(row[status_col]) if status_col < len(row) else ""
+        if has_answer and not status:
+            out.append((i, row))
+    return headers, status_col, out

@@ -174,6 +174,20 @@ flight-no / airport / time; non-Confirmed status).
   executives (`manual_form/README.md`). Tested end to end with fake Sheets/Drive/Gmail clients (good / outside
   e-mail / bad time / no trigger / empty sheet). 335 tests pass.
 
+- **2026-11-01 — Google FORM added as the main manual entry (executive fills the form → PDF in the inbox):**
+  Owner: "executive open the form, fill it, click submit, and the itinerary arrives in the inbox." The sheet
+  (§8 2026-10-31 later) stays as a fallback tab. A Form cannot be created from here (no Forms access; Drive refuses
+  to create an Apps Script project), so `manual_form/create_manual_form.gs` is pasted into script.google.com once
+  and Run as cs@. It points the Form's destination at the EXISTING manual sheet (so no new secret) and renames the
+  new tab **Form responses**. `main.process_manual_form` reads that tab each poll (`manual_sheet.form_pending`: rows
+  with an answer and an empty **Runner status**), CLAIMS each row (`Building…`), then writes `DONE …` or
+  `NOT BUILT — reasons`; the same `parse_row` → QC → PDF → e-mail path; PDF to the form's collected e-mail (Pivot
+  domains only), cc cs@. **Ticket numbers are asked as `070-6021922265` on purpose:** a purely numeric answer is
+  stored by Sheets as a NUMBER and loses a leading zero (a silently WRONG ticket); the dash keeps it text.
+  Missing tab → counts stay zero. Live check showed first the Sheets API had to be enabled in the Cloud project
+  (`manual_form_error` now logs HTTP status + Google's reason, no sheet data). 340 tests pass; tested end to end with
+  fake Sheets/Gmail (good / already done / outside e-mail / bad time / no responses). The first live submit is the real test.
+
 - **2026-10-31 — the three internal e-mails redesigned around "what do I do next?" (new `email_templates.py`):**
   Owner: "make it more useable and easy to understand", for the alert e-mail and for the e-mail that arrives
   with each itinerary. Before: the confirmation was a monospace data readout, the manual-review digest showed

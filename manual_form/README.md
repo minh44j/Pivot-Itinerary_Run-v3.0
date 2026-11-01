@@ -1,61 +1,43 @@
-# Manual itinerary sheet
+# Manual itinerary — Google Form
 
-For the rare ticket that no portal e-mail covers (a partner, or an airline issued by hand). A ticketing
-executive types it into **one Google Sheet** and chooses **BUILD NOW**; the cloud runner builds the **same**
-PDF through the **same** QC gate and e-mails it to **that person** (cc cs@). Nothing goes to a client.
+For the rare ticket no portal e-mail covers. An executive opens the **Form**, fills it from the ticket and
+submits; within a few minutes the finished PDF is in **their inbox** (cc cs@). Nothing goes to a client.
 
 ```
-type the ticket ─▶ choose BUILD NOW ─▶ runner (every poll, a few minutes) ─▶ PDF e-mailed to YOU (cc cs@)
-        ▲                                         │                         sheet says DONE and clears itself
-        └──── fix it in place ◀── "NOT BUILT: …" ◀┘  (and an e-mail listing exactly what to fix)
+open the Form ─▶ fill ─▶ Submit ─▶ runner (every poll, a few minutes) ─▶ PDF e-mailed to YOU (cc cs@)
+                                         └─ something wrong? an e-mail lists exactly what to fix; submit the form again
 ```
 
-## For the executive (half a page)
+## For the executive
+1. Open the form link (bookmark it). It knows who you are — the PDF comes to your own e-mail.
+2. **Booking:** PNR (required); agency/CRS reference and *Booked on* only if the ticket shows them.
+3. **Passengers** (up to 4, one page each — answer *Add another passenger?*): title, given name(s), surname,
+   ticket number typed as `070-6021922265` (3 digits, a dash, the rest — the dash keeps Google from dropping a leading 0).
+4. **Flights** (up to 6, travel order; a connection is its own flight — answer *Add another flight?*): flight number
+   `SV 774`, airline, airport codes **and cities**, departure/arrival date and **local** 24-hour time (`18:05`), cabin.
+   Optional: terminals, duration, baggage as printed, a seat box per passenger. Two airlines on one ticket? Put the
+   second airline's own reference in **Airline reference** on that flight.
+5. Submit. Check the PDF against the ticket, then forward it.
 
-Open **Pivot — Manual itinerary** → tab **New booking** (bookmark it). Fill the cream cells from the ticket:
+Nothing is guessed: an unreadable date/time/code is refused with an e-mail saying what to fix (submit again). An
+empty *Booked on* prints N/A. The Form accepts people signed in to the Pivot Workspace only.
 
-1. **The booking:** PNR, and **the e-mail** (B9 — where the PDF goes; pre-filled with the shared `cs@pivottmc.com` mailbox the executives use; must be a Pivot address). Agency/CRS ref
-   and *Booked on* only if the ticket shows them — otherwise leave empty (the PDF then says N/A).
-2. **Passengers** (up to 4): title (dropdown), given name(s), surname, ticket number (digits).
-3. **Flights** (up to 6, in travel order; a connection is its own flight): flight number `SV 774`, airline,
-   airport codes **and cities**, departure/arrival date + **local** time (24-hour `18:05`), cabin (dropdown).
-   Optional: terminals, duration, baggage as printed, one seat box per passenger.
-4. Choose **BUILD NOW** in B28. Within a few minutes **What happened** (B29) says **DONE**, the PDF is in your
-   inbox, and the sheet clears for the next booking. Check the PDF against the ticket, then forward it.
+## One-time setup (owner, ~5 min)
+Already done: the Sheets permission (Domain-wide delegation), the Sheets API, and the GitHub secret `MANUAL_SHEET_ID`.
+1. Signed in as **cs@pivottmc.com**, open <https://script.google.com> → **New project**, paste all of
+   `manual_form/create_manual_form.gs`, **Save**.
+2. Choose `createManualItineraryForm` in the toolbar → **Run** → approve the permissions (Forms, Sheets).
+3. **Execution log** shows the **FORM** links. Give the first one to the executives.
+4. Optional: add the form link as GitHub secret `MANUAL_FORM_URL` so the "needs fixing" e-mail has an *Open the form* button.
 
-If something is wrong, **nothing is built**: B29 and an e-mail list each problem in plain words
-("Flight 2: missing arrival time"). Your typing stays — fix it and choose BUILD NOW again.
-
-The sheet holds **one booking at a time** — wait for DONE before typing the next. Do not rename tabs or move
-cells (the runner reads fixed positions). Type what is printed: nothing is guessed, an unreadable date/time is
-refused, and an empty *Booked on* prints N/A. Two airlines on one ticket? Put the second airline's own
-reference in **Airline ref.** on that flight; both references then print.
-
-## One-time setup for the owner
-
-The sheet already exists and is owned by cs@ (the mailbox the runner impersonates), so nothing needs sharing
-with the runner. What remains:
-
-1. **Workspace Admin → Security → API controls → Domain-wide delegation:** add the scope
-   `https://www.googleapis.com/auth/spreadsheets` to the **existing** service-account client id. (Kept separate
-   from the Gmail/Drive scopes on purpose: until it is approved only this feature is affected — the inbox run is not.)
-2. **GitHub → Settings → Secrets → Actions:** add **`MANUAL_SHEET_ID`** = the id of the sheet (the text between
-   `/d/` and `/edit` in its URL).
-3. **Share the sheet** with each executive (Editor).
-4. Do one test booking and watch B29 and the **History** tab.
-
-Until `MANUAL_SHEET_ID` is set the feature is completely inert.
+The Form writes its answers to a **Form responses** tab of the *Pivot — Manual itinerary* sheet — the runner reads that tab.
+(The older typed-in-the-sheet entry, the **New booking** tab with BUILD NOW, still works too.)
 
 ## How it behaves
-
-* **Claim first:** choosing BUILD NOW is cleared the moment the runner picks it up (B29 shows *Building…*), so a
-  crash can never produce a duplicate PDF; if it died mid-way B29 stays at *Building…* — choose BUILD NOW again.
-* **PDF goes only to a Pivot address** (`pivottmc.com` / `pivot-travels.com`) — it contains passenger data.
-* **Privacy:** passenger data lives only in the Workspace sheet and the e-mails. The public Action log prints
-  counts only (`"manual_form": {"built": 1, "rejected": 0, "errors": 0}`).
+* **Claim first:** each answer row gets `Building…` before anything is built, so a crash cannot e-mail a PDF twice;
+  the row then reads `DONE …` or `NOT BUILT — <reasons>` (column **Runner status**). A refused row is final — resubmit.
+* **PDF goes only to a Pivot address** (`pivottmc.com` / `pivot-travels.com`) — it holds passenger data.
+* **Privacy:** passenger data stays in Workspace (the sheet, e-mails). The public Action log prints counts only.
 * **Revision stamp:** building the same booking again prints *Revision 2*.
-* **History** tab: one line per attempt (time, PNR, result, recipient).
-* **Limits:** 4 passengers, 6 flights; baggage is per flight (same for everyone on it). A larger booking can be
-  entered as two bookings.
-* **Regenerating the sheet** (layout change): `python tools/build_manual_sheet.py out.xlsx` builds it from the
-  same constants the runner reads (`manual_sheet.py`), so they cannot drift.
+* **History** tab: one line per attempt. **Limits:** 4 passengers, 6 flights; baggage is per flight.
+* Changing a question title breaks the runner's reading: titles are a contract with `manual_sheet.py` (a test checks them).
