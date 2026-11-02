@@ -244,3 +244,12 @@ def test_gs_titles_match_the_runner_contract():
         assert f"P + '{f}'" in gs, f
     assert "P + 'Seat, passenger '" in gs
     assert f"var MAX_PASSENGERS = {M.MAX_PASSENGERS};" in gs and f"var MAX_FLIGHTS = {M.MAX_FLIGHTS};" in gs
+
+
+def test_header_match_ignores_case():
+    """Google writes the collected-address column as 'Email address'; matching it case-sensitively made every
+    form submission look like it had no e-mail (found on the first live submit)."""
+    headers, row = M.grid_to_form(_grid())
+    headers = ["email address" if h == M.EMAIL_HEADER else h for h in headers]
+    data, problems, info = M.parse_row(headers, row)
+    assert info["email"] == "exec@pivottmc.com" and not problems

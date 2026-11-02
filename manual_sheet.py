@@ -108,7 +108,8 @@ def parse_row(headers, row):
     cells = {}
     for i, h in enumerate(headers):
         cells[_s(h)] = row[i] if i < len(row) else ""
-    get = lambda k: cells.get(k, "")
+    lower = {k.lower(): v for k, v in cells.items()}    # Google writes "Email address", not "Email Address"
+    get = lambda k: cells[k] if k in cells else lower.get(k.lower(), "")
     problems = []
     meta = {"email": _s(get(EMAIL_HEADER)), "submitted": _s(get(TIMESTAMP_HEADER)), "pnr": ""}
 
