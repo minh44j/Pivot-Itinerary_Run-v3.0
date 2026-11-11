@@ -174,6 +174,14 @@ flight-no / airport / time; non-Confirmed status).
   executives (`manual_form/README.md`). Tested end to end with fake Sheets/Drive/Gmail clients (good / outside
   e-mail / bad time / no trigger / empty sheet). 335 tests pass.
 
+- **2026-11-11 — Air Suvidha guide tweaked to match the itinerary (approved, mockup shown first):**
+  The guide was already in the new design but kept three leftovers. Gold gradient bars on the intro and step cards are
+  gone (plain hairline cards, as on the itinerary); section headings lose the gold dot + rule and become plain bold 18px;
+  the **Government of India strip** is no longer a grey slab with a gold date — it is a white row between hairlines with
+  the date in ink, and the **2px gold line under the masthead** is a hairline; the footer is the itinerary's quiet one
+  (`PIVOT AUTOMATED ITINERARY | AIR SUVIDHA 2.0 | WWW.PIVOTTMC.COM`, no logo tile; help line kept). The QR caption is 10px and
+  list/step text 11px. Still ONE page, wording/QR/steps unchanged; `air_suvidha_guide.pdf` regenerated (§8 2026-10-11).
+
 - **2026-11-01 — Google FORM added as the main manual entry (executive fills the form → PDF in the inbox):**
   Owner: "executive open the form, fill it, click submit, and the itinerary arrives in the inbox." The sheet
   (§8 2026-10-31 later) stays as a fallback tab. A Form cannot be created from here (no Forms access; Drive refuses

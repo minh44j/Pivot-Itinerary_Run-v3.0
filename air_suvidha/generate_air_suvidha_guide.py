@@ -130,8 +130,8 @@ def govt_strip():
 
 
 def section_hdr(title):
-    return (f'<div class="sec-hdr"><span class="sec-dot"></span>'
-            f'<span class="sec-title">{title}</span><span class="sec-rule"></span></div>')
+    return (f'<div class="sec-hdr">'
+            f'<span class="sec-title">{title}</span></div>')
 
 
 # ── 1. What is it ────────────────────────────────────────────────────────────
@@ -219,13 +219,10 @@ def procedure():
 
 # ── Footer ───────────────────────────────────────────────────────────────────
 def footer_block():
-    logo = (f'<img class="footer-logo" src="data:image/png;base64,{LOGO_B64}" alt="Pivot">'
-            if LOGO_B64 else "")
     return f"""
   <div class="footer">
-    {logo}
     <div class="footer-text">
-      <div class="footer-line">PIVOT TRAVEL ADVISORY &nbsp;|&nbsp; AIR SUVIDHA 2.0 &nbsp;|&nbsp; {COMPANY_WEBSITE_UC}</div>
+      <div class="footer-line">PIVOT AUTOMATED ITINERARY &nbsp;|&nbsp; AIR SUVIDHA 2.0 &nbsp;|&nbsp; {COMPANY_WEBSITE_UC}</div>
     </div>
     <div class="footer-contact">
       <div class="fc-lbl">Need help?</div>
@@ -277,7 +274,7 @@ body {{ font-family: 'Inter', Helvetica, Arial, sans-serif; background: #fff; co
 .ic svg, .fact-ic svg, .card-ic svg, .step-ic svg, .tag-ic svg {{ display: block; }}
 
 /* ── Masthead — same language as the itinerary: light page, logo on a small dark tile ── */
-.header {{ background: #fff; border-bottom: 2px solid var(--gold); padding: 20px var(--pg) 16px; }}
+.header {{ background: #fff; border-bottom: 1px solid var(--bd); padding: 20px var(--pg) 16px; }}
 .brand-row {{ display: flex; flex-direction: row; align-items: center; gap: 12px; }}
 .logo-img {{ box-sizing: content-box; height: 26px; width: auto; padding: 8px; border-radius: 11px;
   background: linear-gradient(160deg, #323234, #0e0e0f); display: block; flex-shrink: 0; }}
@@ -291,33 +288,29 @@ body {{ font-family: 'Inter', Helvetica, Arial, sans-serif; background: #fff; co
 .doc-sub {{ font-size: 11.5px; color: var(--sec); margin-top: 7px; }}
 
 /* ── Government attribution ── */
-.govt-strip {{ display: flex; align-items: center; gap: 14px; padding: 9px var(--pg);
-  background: var(--chip); border-bottom: 1px solid var(--bd); }}
+.govt-strip {{ display: flex; align-items: center; gap: 14px; padding: 10px var(--pg);
+  background: #fff; border-bottom: 1px solid var(--bd); }}
 .govt-logos {{ display: flex; align-items: center; gap: 10px; flex-shrink: 0; }}
 .govt-logo {{ height: 26px; width: auto; object-fit: contain; }}
 .govt-text {{ display: flex; flex-direction: column; gap: 1px; flex: 1; }}
 .govt-1 {{ font-size: 11px; font-weight: 700; color: var(--ink); }}
 .govt-2 {{ font-size: 10px; color: var(--sec); }}
-.govt-date {{ font-size: 10px; font-weight: 600; color: var(--gold-ink); flex-shrink: 0; }}
+.govt-date {{ font-size: 10px; font-weight: 600; color: var(--ink); flex-shrink: 0; }}
 
 /* ── Content + sections ── */
 .content {{ padding: 18px var(--pg) 0; }}
 .section {{ margin-top: 20px; }}
 .section:first-child {{ margin-top: 4px; }}
 .sec-hdr {{ display: flex; align-items: center; gap: 10px; margin-bottom: 11px; }}
-.sec-dot {{ width: 7px; height: 7px; border-radius: 50%; background: var(--gold); flex-shrink: 0; }}
-.sec-title {{ font-size: 14px; font-weight: 700; letter-spacing: -0.2px; color: var(--ink); }}
-.sec-rule {{ flex: 1; height: 1px; background: var(--bd); }}
+.sec-title {{ font-size: 18px; font-weight: 700; letter-spacing: -0.2px; color: var(--ink); }}
 
 /* ── Intro ── */
 .intro {{ display: flex; gap: 24px; align-items: center; border: 1px solid var(--bd); border-radius: 18px;
   padding: 18px 22px; position: relative; overflow: hidden; }}
-.intro::before {{ content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-  background: linear-gradient(90deg, var(--gold), #e4c97a 50%, var(--gold)); }}
 .intro-main {{ flex: 1; min-width: 0; }}
 .intro-qr {{ display: flex; flex-direction: column; align-items: center; gap: 6px; flex-shrink: 0; }}
 .qr-img {{ width: 88px; height: 88px; border: 1px solid var(--bd); border-radius: 10px; padding: 5px; background: #fff; }}
-.qr-cap {{ font-size: 9.5px; font-weight: 600; color: var(--sec); }}
+.qr-cap {{ font-size: 10px; font-weight: 600; color: var(--sec); }}
 .intro-copy {{ font-size: 11.5px; line-height: 1.6; color: var(--body); }}
 .intro-copy strong {{ color: var(--ink); font-weight: 700; }}
 .portal {{ display: flex; align-items: baseline; gap: 10px; margin: 12px 0 0; }}
@@ -338,7 +331,7 @@ body {{ font-family: 'Inter', Helvetica, Arial, sans-serif; background: #fff; co
 .card-title {{ font-size: 13.5px; font-weight: 700; color: var(--ink); letter-spacing: -0.1px; }}
 .card-list {{ list-style: none; }}
 .card-list li {{ display: grid; grid-template-columns: 10px 1fr; gap: 8px; align-items: start;
-  font-size: 10.5px; color: var(--body); line-height: 1.4; margin-bottom: 6px; }}
+  font-size: 11px; color: var(--body); line-height: 1.4; margin-bottom: 6px; }}
 .card-list li:last-child {{ margin-bottom: 0; }}
 .card-list .dot {{ width: 5px; height: 5px; border-radius: 50%; background: var(--gold); margin-top: 5px; }}
 
@@ -346,8 +339,6 @@ body {{ font-family: 'Inter', Helvetica, Arial, sans-serif; background: #fff; co
 .step-grid {{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }}
 .step {{ border: 1px solid var(--bd); border-radius: 18px; padding: 16px; background: #fff;
   position: relative; overflow: hidden; }}
-.step::before {{ content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
-  background: linear-gradient(90deg, var(--gold), #e4c97a); }}
 .step-top {{ display: flex; align-items: center; justify-content: space-between; margin-bottom: 11px; }}
 .step-num {{ width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(150deg, #323234, #0e0e0f);
   color: var(--gold); font-size: 14px; font-weight: 700;
@@ -358,16 +349,14 @@ body {{ font-family: 'Inter', Helvetica, Arial, sans-serif; background: #fff; co
 .step-tag {{ display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600;
   color: var(--gold-ink); margin: 5px 0 8px; }}
 .tag-ic svg {{ width: 11px; height: 11px; }}
-.step-body {{ font-size: 10.5px; line-height: 1.5; color: var(--body); }}
+.step-body {{ font-size: 11px; line-height: 1.5; color: var(--body); }}
 .step-body strong {{ color: var(--ink); font-weight: 700; }}
 
 /* ── Footer — light, like the itinerary ── */
 .footer {{ background: #fff; border-top: 1px solid var(--bd); padding: 11px var(--pg);
   display: flex; align-items: center; gap: 14px; position: absolute; left: 0; right: 0; bottom: 0; }}
-.footer-logo {{ box-sizing: content-box; height: 16px; width: auto; padding: 5px; border-radius: 8px;
-  background: linear-gradient(160deg, #323234, #0e0e0f); flex-shrink: 0; }}
 .footer-text {{ flex: 1; }}
-.footer-line {{ font-size: 9px; letter-spacing: 1.4px; text-transform: uppercase; font-weight: 600; color: var(--sec); }}
+.footer-line {{ font-size: 8.5px; letter-spacing: .6px; text-transform: uppercase; font-weight: 600; color: var(--sec); }}
 .footer-contact {{ text-align: right; flex-shrink: 0; padding-left: 14px; border-left: 1px solid var(--bd); }}
 .fc-lbl {{ font-size: 9px; color: var(--sec); font-weight: 600; }}
 .fc-val {{ font-size: 10.5px; color: var(--ink); font-weight: 650; white-space: nowrap; margin-top: 1px; }}
