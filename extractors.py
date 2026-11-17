@@ -770,7 +770,7 @@ def extract_akbar(pdf_text, ctx=None):
     # such booking flagged "Passenger name missing". The ticket may now follow
     # immediately (\s* not \s+) and need not end the line. The captured class
     # excludes digits, so the name still stops cleanly where the number starts.
-    for nmo in re.finditer(r"(?m)\b((?:Mr|Mrs|Ms|Mstr|Master|Miss|Dr)\.?\s+[A-Z][A-Z .'\-]+?)(?=\s*\d{10,}|\s*$)", t):
+    for nmo in re.finditer(r"(?m)\b((?:Mr|Mrs|Ms|Mstr|Master|Miss|Dr)\.?\s+[A-Z][A-Z .'\-]+?)(?=\s*(?:\d{3}-)?\d{10,}|\s*$)", t):
         nm = re.sub(r"\s+", " ", nmo.group(1)).strip()
         if nm.upper() not in seen:
             seen.add(nm.upper())
@@ -787,13 +787,18 @@ def extract_akbar(pdf_text, ctx=None):
     # each bounded by the fare table / next segment that follows it.
     trav = "".join(m.group(0) for m in re.finditer(
         r"Traveler[\s\S]*?(?=Base\s*Fare|Airline\s*Ref|\Z)", t)) or t
+    # 2026-11-17 fix (Manila-Jeddah-Riyadh AS261880049): Akbar began printing the ticket number WITH the
+    # airline-code dash ("065-2400567808"). Both the name lookahead and this pattern only knew a bare run
+    # of 10+ digits, so the name was never terminated ("Passenger name missing") and, had it been, the
+    # ticket would have kept only the last 10 digits — a silently WRONG number. The dashed form is now
+    # accepted and kept verbatim; bare runs behave exactly as before.
     # A leading \b fails when the ticket is fused to the name ("DOE1234567890"),
     # because letter->digit is not a word boundary. Guard on "not a digit either
     # side" instead so both the fused and the spaced layouts are found. The rows
     # repeat once per leg, so the same ticket appears several times — dedupe
     # (order-preserving) or passenger 2 would inherit passenger 1's number.
     tickets = re.findall(r"EXKT\s*([0-9]{10,})", trav) \
-        or re.findall(r"(?<![0-9])(\d{10,})(?![0-9])", trav)
+        or re.findall(r"(?<![0-9])(\d{3}-\d{10}|\d{10,})(?![0-9])", trav)
     tickets = list(dict.fromkeys(tickets))
     d["passengers"] = [{"name": n, "ticket_no": tickets[i] if i < len(tickets) else "Not specified",
                         "cabin_bag": cabin, "checked_bag": checked, "seat": ""}

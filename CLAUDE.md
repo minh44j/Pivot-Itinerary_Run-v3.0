@@ -174,6 +174,13 @@ flight-no / airport / time; non-Confirmed status).
   executives (`manual_form/README.md`). Tested end to end with fake Sheets/Drive/Gmail clients (good / outside
   e-mail / bad time / no trigger / empty sheet). 335 tests pass.
 
+- **2026-11-17 — Akbar "Passenger name missing" on a dashed ticket number (MNL→JED→RUH, AS261880049):**
+  The alert said the name was missing; the real PDF (pulled from the cs@ mailbox by message id, §9) printed
+  `Mr. <NAME> 065-2400567808`. Akbar now writes the ticket WITH the airline-code dash. The name pattern ended only at
+  a bare 10+ digit run or end of line, so it never terminated; and the ticket pattern would have kept just the last
+  10 digits (`2400567808`) — a silently wrong number (§7). Both now accept `\d{3}-\d{10}` and keep it verbatim; bare runs
+  are unchanged. Zero-PII fixture `akbar_dashed_ticket.txt` + `test_akbar_dashed_ticket.py`; 344 tests pass.
+
 - **2026-11-11 — Air Suvidha guide tweaked to match the itinerary (approved, mockup shown first):**
   The guide was already in the new design but kept three leftovers. Gold gradient bars on the intro and step cards are
   gone (plain hairline cards, as on the itinerary); section headings lose the gold dot + rule and become plain bold 18px;
