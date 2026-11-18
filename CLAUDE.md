@@ -174,6 +174,14 @@ flight-no / airport / time; non-Confirmed status).
   executives (`manual_form/README.md`). Tested end to end with fake Sheets/Drive/Gmail clients (good / outside
   e-mail / bad time / no trigger / empty sheet). 335 tests pass.
 
+- **2026-11-18 — PDF file name is now `<PNR> - <Passenger Name>.pdf` (was `<PNR>.pdf`):**
+  Owner's request, so a PDF is recognisable in an inbox or Drive. `generate_itinerary_v3.pdf_stem()` builds it: every airline
+  reference (`B9PS6D-8XMVR7`) then the FIRST passenger, title dropped, Title Case, file-unsafe characters removed (Turkish
+  letters kept); more travellers add ` +N`; a missing name leaves the bare reference, i.e. the old name. The same name is
+  used for the e-mail attachment and the Drive upload (both take the file's basename); revised drafts become
+  `REVISED-<that name>.pdf`. `main._find_drive_pdf` now uses `name contains <PNR>`, so it finds both the new and the old
+  names. Not a layout change. `tests/test_pdf_filename.py`; 350 tests pass.
+
 - **2026-11-17 — Akbar "Passenger name missing" on a dashed ticket number (MNL→JED→RUH, AS261880049):**
   The alert said the name was missing; the real PDF (pulled from the cs@ mailbox by message id, §9) printed
   `Mr. <NAME> 065-2400567808`. Akbar now writes the ticket WITH the airline-code dash. The name pattern ended only at

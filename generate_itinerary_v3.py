@@ -630,6 +630,22 @@ def _footer_template(pnr_display: str) -> str:
             f'<div>Page <span class="pageNumber"></span> of <span class="totalPages"></span></div></div>')
 
 
+def pdf_stem(booking_data: dict) -> str:
+    """File name (no extension): '<PNR> - <Passenger Name>' (2026-11-18, owner's request), so the PDF in an inbox or
+    Drive is recognisable at a glance. Split-carrier bookings keep every airline reference ('B9PS6D-8XMVR7 - Name').
+    The FIRST passenger names the file; more travellers add ' +N'. Title (Mr./Mrs.) is dropped, characters a file name
+    should not carry are removed, and a missing name leaves just the reference — exactly the old name."""
+    _safe = lambda v: "".join(c for c in str(v) if c.isalnum() or c in "_-")
+    refs = "-".join(_safe(r) for r in booking_refs(booking_data) if _safe(r)) or _safe(booking_data.get("pnr", "")) or "UNKNOWN"
+    pax = [p for p in (booking_data.get("passengers") or []) if isinstance(p, dict)]
+    name = re.sub(r"^(?:Mr|Mrs|Ms|Mstr|Master|Miss|Dr)\.?\s+", "", str((pax[0].get("name") if pax else "") or "").strip(), flags=re.I)
+    name = "".join(c if (c.isalnum() or c in " .'-") else " " for c in name)
+    name = _title_name(re.sub(r"\s+", " ", name).strip())[:60].strip(" .-")
+    if not name or name.lower() in ("not specified", "n/a"):
+        return refs
+    return f"{refs} - {name}" + (f" +{len(pax) - 1}" if len(pax) > 1 else "")
+
+
 def build_pdf(booking_data: dict, out_dir: str, project_dir: str = None) -> str:
     from playwright.sync_api import sync_playwright
 
@@ -639,9 +655,7 @@ def build_pdf(booking_data: dict, out_dir: str, project_dir: str = None) -> str:
     # File name carries EVERY airline reference on the booking, so a split-carrier
     # round trip is findable by either one (B9PS6D-8XMVR7.pdf). Single-reference
     # bookings are named exactly as before.
-    _safe = lambda v: "".join(c for c in str(v) if c.isalnum() or c in "_-")
-    _stem = "-".join(_safe(r) for r in booking_refs(booking_data) if _safe(r)) or _safe(pnr) or "UNKNOWN"
-    pdf_path = out_dir / f"{_stem}.pdf"
+    pdf_path = out_dir / f"{pdf_stem(booking_data)}.pdf"
     pnr_display = " / ".join(booking_refs(booking_data) or [pnr])
 
     f = tempfile.NamedTemporaryFile(suffix=".html", delete=False, mode="w", encoding="utf-8")

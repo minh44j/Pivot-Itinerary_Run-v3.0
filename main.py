@@ -656,10 +656,13 @@ def _portal_for(msg):
 def _find_drive_pdf(drive, pnr):
     """Best-effort: the branded PDF is uploaded as '<PNR>.pdf'. Return its Drive
     webViewLink (newest match), or '' if not found."""
-    name = "".join(c for c in str(pnr) if c.isalnum() or c in "_-") + ".pdf"
+    # Files are named '<PNR> - <Passenger>.pdf' (2026-11-18); older ones are '<PNR>.pdf'. 'name contains' matches both.
+    ref = "".join(c for c in str(pnr) if c.isalnum() or c in "_-")
+    if not ref:
+        return ""
     try:
         files = drive.files().list(
-            q=f"name='{name}' and mimeType='application/pdf' and trashed=false",
+            q=f"name contains '{ref}' and mimeType='application/pdf' and trashed=false",
             fields="files(id,webViewLink,modifiedTime)", orderBy="modifiedTime desc",
             pageSize=5).execute(num_retries=API_RETRIES).get("files", [])
     except Exception:
@@ -775,7 +778,7 @@ def build_revised_itinerary(gmail, alert):
         booking["revision"] = next_revision(_rev_log, booking)
         save_revision_log(_rev_log)
         pdf_path = build_pdf(booking, out_dir, project_dir=PROJECT_DIR)
-        revised = os.path.join(out_dir, f"REVISED-{pnr}.pdf")
+        revised = os.path.join(out_dir, f"REVISED-{os.path.basename(pdf_path)}")
         os.replace(pdf_path, revised)
         if extractors.india_arrival(booking):
             _append_air_suvidha(revised)       # keep the guide on India arrivals
