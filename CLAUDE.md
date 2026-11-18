@@ -174,6 +174,24 @@ flight-no / airport / time; non-Confirmed status).
   executives (`manual_form/README.md`). Tested end to end with fake Sheets/Drive/Gmail clients (good / outside
   e-mail / bad time / no trigger / empty sheet). 335 tests pass.
 
+- **2026-11-18 (later) — PROMO PAGE before the Terms page, with a personal coupon per itinerary (approved: owner chose the design from
+  rendered candidates, confirmed the build twice, 2026-11-18):**
+  A full-bleed A4 page "Thanks for choosing Pivot as your travel partner" (photo cards: airport transfers / curated trips / premium
+  pilgrimage / visa assistance; **5% OFF\*** coupon; contacts; very small terms line). `promo_page.py` (pure) holds the offer
+  constants (`PROMO_PCT=5`, `PROMO_MIN_SAR=1000` "more than", `PROMO_MAX_SAR=200`, 90 days), the terms text and the page HTML;
+  `assets/promo/promo_bg.jpg` is the owner-supplied artwork with its text removed (headline, paragraph and contacts are LIVE
+  Inter text, headings regular weight). **Coupon code** `HDUR738HE` (4 letters, 3 digits, 2 letters; no I/O/L/0/1) =
+  HMAC-SHA256(secret, booking references), so it is stable per booking, re-computable by staff
+  (`PROMO_SECRET=… python tools/verify_coupon.py <PNR> [code]`) and unforgeable although the repo is public. **GitHub secret
+  `PROMO_SECRET`**: without it NO promo page is printed (an unverifiable code is worse than none) — this is also why manual
+  builds made outside CI have none. **Never on revised drafts** (`doc_status` ≠ confirmed). **Mechanics:** the main render holds an
+  invisible one-page *slot* before the Terms so "Page n of N" counts and numbers it correctly; the promo is rendered as its own
+  PDF (margin 0, no footer) and `pypdf` replaces the slot page. Any failure (slot not found, pypdf/render error) falls back to the
+  plain itinerary — **a promo can never stop a booking being issued**. The confirmation e-mail's "Worth a look" lists the code.
+  Page order: itinerary, promo, Terms, then the Air Suvidha guide when applicable. 361 tests pass; verified end to end (3 pages,
+  numbering 1/3 and 3/3; no secret → 2 pages; revised draft → 2 pages; forced splice failure → plain 2-page itinerary).
+  Owner's open choices: a 5% cap of SAR 200 only bites at SAR 4,000; the claim route is "call or write" (no booking link).
+
 - **2026-11-18 — PDF file name is now `<PNR> - <Passenger Name>.pdf` (was `<PNR>.pdf`):**
   Owner's request, so a PDF is recognisable in an inbox or Drive. `generate_itinerary_v3.pdf_stem()` builds it: every airline
   reference (`B9PS6D-8XMVR7`) then the FIRST passenger, title dropped, Title Case, file-unsafe characters removed (Turkish

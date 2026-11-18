@@ -13,6 +13,7 @@ Usage:
 """
 
 import json, sys, os, tempfile, base64, re
+import promo_page
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from datetime import datetime
@@ -377,6 +378,33 @@ body{font-family:'Inter',-apple-system,'Helvetica Neue',Arial,sans-serif;color:v
 '''
 
 
+# The promo page (promo_page.py) is rendered as its OWN one-page PDF and spliced in before the Terms page. This slot is a
+# placeholder page in the main render so that "Page n of N" counts and numbers it correctly; it is replaced afterwards.
+# The marker text is invisible and unique so the slot page can be found without guessing its index.
+_PROMO_MARK = "PIVOTPROMOSLOT7Q"
+_PROMO_SLOT = (f'<div style="page-break-before:always;break-after:page;height:1px;font-size:1px;color:#fff;'
+               f'line-height:1px;overflow:hidden">{_PROMO_MARK}</div>')
+
+
+def _promo_secret() -> str:
+    return os.environ.get("PROMO_SECRET", "")
+
+
+def _splice_promo(pdf_path: str, promo_pdf_path: str) -> None:
+    """Replace the slot page of `pdf_path` with the one page of `promo_pdf_path`. Raises when the slot is not found, so the
+    caller can fall back to a normal itinerary instead of shipping a blank page."""
+    from pypdf import PdfReader, PdfWriter
+    main, promo = PdfReader(pdf_path), PdfReader(promo_pdf_path)
+    hits = [i for i, pg in enumerate(main.pages) if _PROMO_MARK in (pg.extract_text() or "")]
+    if len(hits) != 1 or len(promo.pages) != 1:
+        raise RuntimeError(f"promo slot not found exactly once (hits={hits}, promo pages={len(promo.pages)})")
+    w = PdfWriter()
+    for i, pg in enumerate(main.pages):
+        w.add_page(promo.pages[0] if i == hits[0] else pg)
+    with open(pdf_path, "wb") as fh:
+        w.write(fh)
+
+
 def _flight_card(f: dict, multi: bool = False) -> str:
     """One boarding-pass card: route + times on top, perforation, passenger table below."""
     rows, show_cabin, show_checked, show_seat = [], False, False, False
@@ -438,7 +466,7 @@ def _flight_card(f: dict, multi: bool = False) -> str:
 </div>"""
 
 
-def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
+def build_html(data: dict, project_dir: str = None, layout: str = "B", promo_slot: bool = False) -> str:
     # `layout` is accepted for backward compatibility and ignored: pagination is now handled by
     # the browser (cards never split, banners stay with their card, T&C starts a fresh page).
     pnr          = data.get("pnr", "N/A")
@@ -615,6 +643,7 @@ def build_html(data: dict, project_dir: str = None, layout: str = "B") -> str:
   <div class="facts">{facts}</div></div>
 <div class="sec-t">Travellers</div><div class="group">{pax_rows}</div>
 {segs_html}
+{_PROMO_SLOT if promo_slot else ''}
 {_terms_html()}
 </body></html>"""
 
@@ -646,7 +675,24 @@ def pdf_stem(booking_data: dict) -> str:
     return f"{refs} - {name}" + (f" +{len(pax) - 1}" if len(pax) > 1 else "")
 
 
-def build_pdf(booking_data: dict, out_dir: str, project_dir: str = None) -> str:
+def build_pdf(booking_data: dict, out_dir: str, project_dir: str = None, promo_secret: str = None) -> str:
+    """Render the itinerary PDF. When a PROMO_SECRET exists (env, or `promo_secret`) and the document is a normal
+    confirmation, the personal-coupon promo page is spliced in before the Terms page; any problem doing that falls back
+    to the plain itinerary, so a promo can never stop a booking being issued."""
+    secret = _promo_secret() if promo_secret is None else promo_secret
+    refs = booking_refs(booking_data)
+    code = promo_page.coupon_code(refs, secret) if promo_page.promo_eligible(booking_data, secret) else ""
+    if code:
+        try:
+            booking_data["promo_code"] = code
+            return _render_pdf(booking_data, out_dir, project_dir, code)
+        except Exception as e:                       # never let an advert cost a client their itinerary
+            print(f"promo page skipped ({type(e).__name__}); rendering the plain itinerary")
+            booking_data.pop("promo_code", None)
+    return _render_pdf(booking_data, out_dir, project_dir, "")
+
+
+def _render_pdf(booking_data: dict, out_dir: str, project_dir: str, code: str) -> str:
     from playwright.sync_api import sync_playwright
 
     out_dir = Path(out_dir)
@@ -659,8 +705,9 @@ def build_pdf(booking_data: dict, out_dir: str, project_dir: str = None) -> str:
     pnr_display = " / ".join(booking_refs(booking_data) or [pnr])
 
     f = tempfile.NamedTemporaryFile(suffix=".html", delete=False, mode="w", encoding="utf-8")
-    f.write(build_html(booking_data, project_dir=project_dir))
+    f.write(build_html(booking_data, project_dir=project_dir, promo_slot=bool(code)))
     f.close()
+    promo_html_path = promo_pdf = None
     try:
         with sync_playwright() as pw:
             browser = pw.chromium.launch()
@@ -672,9 +719,27 @@ def build_pdf(booking_data: dict, out_dir: str, project_dir: str = None) -> str:
                      footer_template=_footer_template(pnr_display),
                      margin={"top": "12mm", "bottom": "18mm", "left": "14mm", "right": "14mm"})
             page.close()
+            if code:
+                pf = tempfile.NamedTemporaryFile(suffix=".html", delete=False, mode="w", encoding="utf-8")
+                pf.write(promo_page.promo_html(code, _font_face_css(("latin-ext", "latin")), _logo_b64(project_dir),
+                                               promo_page.background_b64(project_dir), COMPANY_HOTLINE,
+                                               COMPANY_EMAIL, COMPANY_WEBSITE))
+                pf.close()
+                promo_html_path, promo_pdf = pf.name, pf.name + ".pdf"
+                pp = browser.new_page()
+                pp.emulate_media(media="screen")
+                pp.goto(f"file://{promo_html_path}", wait_until="networkidle")
+                pp.pdf(path=promo_pdf, format="A4", print_background=True,
+                       margin={"top": "0", "bottom": "0", "left": "0", "right": "0"})
+                pp.close()
             browser.close()
+        if code:
+            _splice_promo(str(pdf_path), promo_pdf)
     finally:
         os.unlink(f.name)
+        for q in (promo_html_path, promo_pdf):
+            if q and os.path.exists(q):
+                os.unlink(q)
 
     print(f"✓ PDF saved: {pdf_path}")
     return str(pdf_path)

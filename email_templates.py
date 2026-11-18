@@ -164,6 +164,9 @@ def attention_points(data):
         out.append("India arrival — the Air Suvidha 2.0 health-declaration guide is the last page of the PDF.")
     if len(booking_refs(data)) > 1:
         out.append("Two airline references — each flight card shows the reference to check in with.")
+    if (data.get("promo_code") or "").strip():
+        out.append(f"Promo page included (the page before the Terms) with coupon {data['promo_code']}. "
+                   "Re-check any code a client quotes with tools/verify_coupon.py.")
     if not (data.get("booked_on") or "").strip():
         out.append("Booked-on date was not in the source, so the PDF shows N/A.")
     for p in data.get("passengers", []):

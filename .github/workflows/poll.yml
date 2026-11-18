@@ -90,6 +90,8 @@ jobs:
           # secret is what every scheduled run uses.
           SEARCH_WINDOW: ${{ github.event.inputs.search_window || secrets.SEARCH_WINDOW }}
           # Manual itinerary sheet (manual_form/README.md). INERT until MANUAL_SHEET_ID is set.
+          # Personal coupon on the promo page. Without this secret NO promo page is printed.
+          PROMO_SECRET: ${{ secrets.PROMO_SECRET }}
           MANUAL_SHEET_ID: ${{ secrets.MANUAL_SHEET_ID }}
           MANUAL_FORM_URL: ${{ secrets.MANUAL_FORM_URL }}
           PIVOT_OS_SYNC_URL: ${{ secrets.PIVOT_OS_SYNC_URL }}
