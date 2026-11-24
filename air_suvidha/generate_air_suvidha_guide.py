@@ -72,19 +72,16 @@ LOGO_B64  = _b64(_find("logo.png"))
 MOCA_B64  = _b64(_find("moca_logo.png"))     # optional — text fallback if absent
 MOHFW_B64 = _b64(_find("mohfw_logo.png"))    # optional — text fallback if absent
 
-# ── SVG icons (stroke = currentColor) ────────────────────────────────────────
-ICONS = {
-    "passport": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="2.5" width="14" height="19" rx="2"/><circle cx="12" cy="10" r="3"/><path d="M9 16h6M8 19h8"/></svg>',
-    "phone":    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6.5 3h3l1.5 4.5-2 1.7a12 12 0 0 0 5.8 5.8l1.7-2L21 14.5v3a2 2 0 0 1-2 2.2C10.6 19.2 4.8 13.4 4.3 5A2 2 0 0 1 6.5 3z"/></svg>',
-    "flight":   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M10.5 20.5 12 17l1.5 3.5M3 14.5 21 8l-1 2.2L3 16.7z" stroke-linejoin="round"/><path d="M9 11 4 9.3 5.6 7.7 11 9z"/></svg>',
-    "health":   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 3h6v4h4v6h-4v4H9v-4H5V7h4z"/></svg>',
-    "edit":     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 20h4L18.5 9.5a2 2 0 0 0-3-3L5 17z"/><path d="M14 6l3 3"/></svg>',
-    "download": '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3v12M7 11l5 5 5-5M4 20h16"/></svg>',
-    "show":     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.6"/></svg>',
-    "free":     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.5-1.2-1.7-2-3-2-1.7 0-3 1.1-3 2.5 0 3 6 1.5 6 4.5 0 1.4-1.3 2.5-3 2.5-1.3 0-2.5-.8-3-2"/><path d="M12 6v12"/></svg>',
-    "clock":    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>',
-    "person":   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7"/></svg>',
-}
+# ── Icons: Heroicons (embedded set, see /icons.py; outline, 1.5 stroke, currentColor) ────────────────
+# Mapped by the guide's own names so the rest of this file is unchanged. Replaced the hand-drawn SVGs on 2026-11-24.
+import sys as _sys
+_sys.path.insert(0, str(HERE.parent))
+import icons as _hero  # noqa: E402
+
+_HERO_NAME = {"passport": "identification", "phone": "phone", "flight": "paper-airplane", "health": "heart",
+              "edit": "pencil-square", "download": "arrow-down-tray", "show": "eye", "free": "gift",
+              "clock": "clock", "person": "user"}
+ICONS = {k: _hero.icon(v, size=24) for k, v in _HERO_NAME.items()}
 
 
 def icon(name, cls="ic"):
