@@ -174,6 +174,13 @@ flight-no / airport / time; non-Confirmed status).
   executives (`manual_form/README.md`). Tested end to end with fake Sheets/Drive/Gmail clients (good / outside
   e-mail / bad time / no trigger / empty sheet). 335 tests pass.
 
+- **2026-11-24 (later) — Heroicons now used: the Air Suvidha guide and the promo page swapped from hand-drawn SVGs (owner confirmed):**
+  Guide (`air_suvidha/generate_air_suvidha_guide.py`, imports `/icons.py`): passport→`identification`, phone→`phone`,
+  flight→`paper-airplane`, health→`heart`, edit→`pencil-square`, download→`arrow-down-tray`, show→`eye`, free→`gift`,
+  clock→`clock`, person→`user`; `air_suvidha_guide.pdf` regenerated (still one page; needs `qrcode[pil]` + Playwright to regenerate).
+  Promo page: `phone`, `envelope`, `chat-bubble-left-right` (Heroicons has no WhatsApp logo, so a chat bubble marks the WhatsApp
+  number), `map-pin`. The itinerary itself has no icons except the plane glyph on the flight card, left as is. 367 tests pass.
+
 - **2026-11-24 — Heroicons embedded as the system icon set (owner's request):**
   Heroicons v2.2.0 (MIT, Tailwind Labs): all 324 outline + 324 solid 24px icons in `assets/icons/heroicons.json` (276 KB), licence
   in `assets/icons/HEROICONS_LICENSE.txt` (MIT requires the notice to travel with them). `icons.py` (pure) gives

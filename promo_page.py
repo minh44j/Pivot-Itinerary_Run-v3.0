@@ -62,15 +62,17 @@ TERMS = (f"*Terms and conditions apply. The {PROMO_PCT}% discount applies only t
          "time, without prior notice, as the situation requires.")
 
 
-def _ic(path):
-    return ('<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#1d1d1f" stroke-width="1.8" '
-            f'stroke-linecap="round" stroke-linejoin="round">{path}</svg>')
+import icons as _hero   # Heroicons (embedded set); replaced the hand-drawn contact icons on 2026-11-24
 
 
-_PHONE = _ic('<path d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A16 16 0 013 6a2 2 0 012-2z"/>')
-_MAIL = _ic('<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3.5 7l8.5 6 8.5-6"/>')
-_WA = _ic('<path d="M3 21l1.6-4.6A9 9 0 1112 21a9 9 0 01-4.3-1.1z"/><path d="M9 8.5c0 3.5 3 6.5 6.5 6.5l1-1.5-2-1-1 .8a5 5 0 01-2.3-2.3l.8-1-1-2z"/>')
-_PIN = _ic('<path d="M12 21s-7-6.2-7-11a7 7 0 0114 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/>')
+def _ic(name):
+    return _hero.icon(name, size=22, color="#1d1d1f", stroke=1.6)
+
+
+_PHONE = _ic("phone")
+_MAIL = _ic("envelope")
+_WA = _ic("chat-bubble-left-right")      # Heroicons has no WhatsApp logo; a chat bubble marks the WhatsApp number
+_PIN = _ic("map-pin")
 
 
 def background_b64(project_dir=None) -> str:
