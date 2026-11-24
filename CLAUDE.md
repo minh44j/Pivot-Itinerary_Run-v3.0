@@ -174,6 +174,14 @@ flight-no / airport / time; non-Confirmed status).
   executives (`manual_form/README.md`). Tested end to end with fake Sheets/Drive/Gmail clients (good / outside
   e-mail / bad time / no trigger / empty sheet). 335 tests pass.
 
+- **2026-11-24 — Heroicons embedded as the system icon set (owner's request):**
+  Heroicons v2.2.0 (MIT, Tailwind Labs): all 324 outline + 324 solid 24px icons in `assets/icons/heroicons.json` (276 KB), licence
+  in `assets/icons/HEROICONS_LICENSE.txt` (MIT requires the notice to travel with them). `icons.py` (pure) gives
+  `icons.icon("phone", style="outline"|"solid", size=20, color="currentColor")` -> inline `<svg>`; unknown names raise, so a typo
+  fails a test, not a client's PDF. Inline, so a render needs no network. **Nothing existing was swapped yet:** the Air Suvidha
+  guide (10 hand-drawn icons) and the promo page (4 contact icons) still use their hand-drawn SVGs, and the itinerary's only
+  icon is the plane glyph; replacing them changes the look, so it waits for the owner's explicit OK (§5). 367 tests pass.
+
 - **2026-11-18 (later) — PROMO PAGE before the Terms page, with a personal coupon per itinerary (approved: owner chose the design from
   rendered candidates, confirmed the build twice, 2026-11-18):**
   A full-bleed A4 page "Thanks for choosing Pivot as your travel partner" (photo cards: airport transfers / curated trips / premium
